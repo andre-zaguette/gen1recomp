@@ -3,6 +3,10 @@
 data/generated/
 assets/generated/
 
+# Player-supplied ROM dumps (Gen1 and Gen2 dev workflows both drop them
+# here) -- never committable, and not covered by any other pattern here.
+/roms/
+
 # LÖVE packages
 *.love
 
