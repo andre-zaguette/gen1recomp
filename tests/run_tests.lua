@@ -3396,6 +3396,66 @@ runSuites(orderedGlob("tests/parity_*.lua", {
   "tests/parity_gbcfx.lua",
 }))
 
+-- ------------------------------------------------- Gen2 (Crystal) skeleton
+-- Hand-built New Bark Town-shaped data (not ROM-derived -- mirrors the
+-- shape RomExtractorGen2.lua produces, see docs/superpowers/plans/
+-- 2026-08-03-gen2-crystal-extraction-skeleton.md), proving MapLoader/Map
+-- consume Gen2 data with zero engine changes, without needing the real
+-- Crystal ROM.
+do
+  local function flatBlocks(width, height, blockId)
+    local blocks = {}
+    for i = 1, width * height do blocks[i] = blockId end
+    return blocks
+  end
+
+  local gen2Data = {
+    tilesets = {
+      TILESET_JOHTO = {
+        id = "TILESET_JOHTO",
+        image = "tests/fixture_data/assets/fix_out.png", -- reuse an existing fixture PNG; content doesn't matter for this structural check
+        imageWidth = 128, imageHeight = 128, tilesPerRow = 16,
+        blocks = { { 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5 } }, -- block 0: tile row 1 (the top cell's bottom-left tile) is 0 (walkable), tile row 3 (the bottom cell's bottom-left tile) is 5 (wall)
+        walkable = { 0 },
+        counterTiles = {}, grassTile = nil, doorTiles = {}, warpTiles = {},
+        animation = nil,
+      },
+    },
+    maps = {
+      NEW_BARK_TOWN = {
+        id = "NEW_BARK_TOWN", label = "NewBarkTown", index = 2000,
+        source = "fixture", tileset = "TILESET_JOHTO",
+        width = 10, height = 9,
+        blocks = flatBlocks(10, 9, 1), -- block index 1 doesn't exist in this 1-block tileset on purpose: never queried except at the one map block overwritten below
+        borderBlock = 0,
+        connections = {},
+        warps = { { x = 5, y = 5, destMap = "ROUTE_29", destWarp = 1 } },
+        signs = {},
+        objects = {},
+      },
+    },
+  }
+  -- overwrite the block at block-coords (bx=5, by=5) (flat index
+  -- by*width+bx+1 = 5*10+5+1 = 56) to block id 0, the walkable/wall split
+  -- block.  Map.lua's block->cell math (blockAt + tileAt: bx=floor(cx/2),
+  -- by=floor(cy/2), cellTile reads the bottom-left tile of the cell) puts
+  -- that block's four cells at cx in {10,11}, cy in {10,11}: cy=10 (the
+  -- block's top cell row) reads tile row 1 (all 0 = walkable), cy=11 (the
+  -- block's bottom cell row) reads tile row 3 (all 5 = wall) -- verified
+  -- by running this section in isolation and printing isWalkableCell for
+  -- all four cells before picking these coordinates.
+  gen2Data.maps.NEW_BARK_TOWN.blocks[5 * 10 + 5 + 1] = 0
+
+  local MapLoader = require("src.world.MapLoader")
+  local newBark = MapLoader.load(gen2Data, "NEW_BARK_TOWN")
+  eq(newBark.widthCells, 20, "New Bark Town fixture width in cells (10 blocks * 2)")
+  eq(newBark.heightCells, 18, "New Bark Town fixture height in cells (9 blocks * 2)")
+  check(newBark:isWalkableCell(10, 10), "New Bark Town fixture: block-0 top cell walkable")
+  check(not newBark:isWalkableCell(10, 11), "New Bark Town fixture: block-0 bottom cell blocked")
+  local w = newBark:warpAtCell(5, 5)
+  check(w ~= nil and w.def.destMap == "ROUTE_29", "New Bark Town fixture warp table intact")
+end
+
 -- ---------------------------------------------- the globbed tiers
 -- content_red (T3, the Red-pinned facts split out of this file),
 -- engine (T2, invariants over the fixture dataset) and modkit (T4, the
