@@ -1,0 +1,222 @@
+-- src/import/RomExtractorGen2.lua
+-- Gen2 (Crystal) runtime extractor, scoped to New Bark Town: map, the
+-- TILESET_JOHTO tileset, and the player (Chris) overworld sprite.
+-- Mirrors src/import/RomExtractor.lua's shape and helper usage; ported
+-- from tools/build_rom_data_gen2.py (Task 4) -- keep the two in sync if
+-- either changes. See docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
+
+local bit = require("bit")
+local ImageWriter = require("src.import.ImageWriter")
+local LuaWriter = require("src.import.LuaWriter")
+local Lz3 = require("src.import.Lz3")
+local Rom = require("src.import.Rom")
+
+local RomExtractorGen2 = {}
+RomExtractorGen2.__index = RomExtractorGen2
+
+local STAGE_COUNT = 3
+
+-- COLL_* -> CollisionPermissionTable base permission, ported verbatim from
+-- tools/extract_gen2/collision.py (Task 4 Step 1b) -- keep the two
+-- byte-for-byte identical. Source: pret/pokecrystal
+-- constants/collision_constants.asm + data/collision/collision_permissions.asm
+local LAND_TILE, WATER_TILE, WALL_TILE, TALK = 0x00, 0x01, 0x0F, 0x10
+local COLLISION_PERMISSION = {}
+for i = 0, 255 do COLLISION_PERMISSION[i] = LAND_TILE end
+local WALL = {
+  0x07, 0x0F, 0x27, 0x2F, 0x62, 0x6A,
+  0x80, 0x81, 0x82, 0x83, 0x84,
+  0x88, 0x89, 0x8A, 0x8B, 0x8C,
+  0xFF,
+}
+for i = 0x90, 0x9F do WALL[#WALL + 1] = i end
+local WALL_TALK = { 0x12, 0x15, 0x1A, 0x1D }
+local WATER = { 0x20, 0x21, 0x25, 0x26, 0x28, 0x29, 0x2D, 0x2E }
+for i = 0x30, 0x3F do WATER[#WATER + 1] = i end
+for i = 0xC0, 0xCF do WATER[#WATER + 1] = i end
+local WATER_TALK = { 0x22, 0x24, 0x2A, 0x2C }
+for _, i in ipairs(WALL) do COLLISION_PERMISSION[i] = WALL_TILE end
+for _, i in ipairs(WALL_TALK) do COLLISION_PERMISSION[i] = bit.bor(WALL_TILE, TALK) end
+for _, i in ipairs(WATER) do COLLISION_PERMISSION[i] = WATER_TILE end
+for _, i in ipairs(WATER_TALK) do COLLISION_PERMISSION[i] = bit.bor(WATER_TILE, TALK) end
+
+function RomExtractorGen2.new(romData, manifest, progress)
+  return setmetatable({
+    rom = Rom.new(romData),
+    manifest = manifest,
+    symbols = manifest.symbols,
+    progress = progress,
+    stage = 0,
+  }, RomExtractorGen2)
+end
+
+function RomExtractorGen2:symbol(name)
+  local location = self.symbols[name]
+  if not location then error("required symbol is missing: " .. tostring(name)) end
+  return { bank = location[1], address = location[2], name = name }
+end
+
+function RomExtractorGen2:beginStage(name)
+  self.stage = self.stage + 1
+  if self.progress then self.progress(self.stage - 1, STAGE_COUNT, name, 0, 1) end
+end
+
+function RomExtractorGen2:tick(name, current, total)
+  if self.progress then
+    self.progress(self.stage - 1 + current / total, STAGE_COUNT, name, current, total)
+  end
+end
+
+function RomExtractorGen2:write(name, value)
+  LuaWriter.write("data/generated/" .. name .. ".lua", value)
+end
+
+function RomExtractorGen2:save(image, relative)
+  ImageWriter.save(image, "assets/generated/" .. relative)
+end
+
+function RomExtractorGen2:extractSprite()
+  self:beginStage("Player sprite")
+  local symbol = self:symbol("ChrisSpriteGFX")
+  local raw = self.rom:bytes(symbol.bank, symbol.address, 16 * 96 / 4)
+  local image = ImageWriter.decode2bpp(raw, 16, 96, true)
+  self:save(image, "sprites/chris.png")
+  local out = {
+    SPRITE_CHRIS = {
+      id = "SPRITE_CHRIS", source = "ROM:ChrisSpriteGFX",
+      image = "assets/generated/sprites/chris.png",
+      frames = 96 / 16, walker = true,
+    },
+  }
+  self:write("sprites", out)
+  self:tick("Player sprite", 1, 1)
+  return out
+end
+
+function RomExtractorGen2:extractTileset()
+  self:beginStage("Johto tileset")
+  local gfx = self:symbol("TilesetJohtoGFX")
+  local meta = self:symbol("TilesetJohtoMeta")
+  local coll = self:symbol("TilesetJohtoColl")
+
+  local compressed = self.rom:bytes(gfx.bank, gfx.address, 0x4000)
+  local raw = Lz3.decompress(compressed)
+  local widthTiles = 16
+  local width = widthTiles * 8
+  local height = #raw / 16 / widthTiles * 8
+  local image = ImageWriter.decode2bpp(raw, width, height)
+  self:save(image, "tilesets/johto.png")
+
+  local blocksRaw = self.rom:bytes(meta.bank, meta.address, 2048)
+  local blocks = {}
+  for offset = 1, #blocksRaw, 16 do
+    local block = {}
+    for pos = offset, offset + 15 do block[#block + 1] = blocksRaw[pos] end
+    blocks[#blocks + 1] = block
+  end
+
+  local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
+  local walkableSet = {}
+  for blockIndex, block in ipairs(blocks) do
+    for cellIndex = 0, 3 do
+      local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
+      local permission = COLLISION_PERMISSION[collValue]
+      assert(permission, "unknown COLL_* value " .. tostring(collValue))
+      if bit.band(permission, 0x0F) == LAND_TILE then
+        local row = cellIndex < 2 and 1 or 3
+        local col = (cellIndex % 2) * 2
+        local tileId = block[row * 4 + col + 1]
+        walkableSet[tileId] = true
+      end
+    end
+  end
+  local walkable = {}
+  for tileId in pairs(walkableSet) do walkable[#walkable + 1] = tileId end
+  table.sort(walkable)
+
+  local out = {
+    TILESET_JOHTO = {
+      id = "TILESET_JOHTO", source = "ROM:TilesetJohtoGFX/Meta/Coll",
+      image = "assets/generated/tilesets/johto.png",
+      imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
+      blocks = blocks, walkable = walkable,
+      counterTiles = {}, grassTile = nil, doorTiles = {}, warpTiles = {},
+      animation = nil,
+    },
+  }
+  self:write("tilesets", out)
+  self:tick("Johto tileset", 1, 1)
+  return out
+end
+
+function RomExtractorGen2:extractMap()
+  self:beginStage("New Bark Town")
+  local header = self:symbol("NewBarkTown_MapAttributes")
+  local expected = self.manifest.newBarkTown
+
+  local border = self.rom:byte(header.bank, header.address)
+  local height = self.rom:byte(header.bank, header.address + 1)
+  local width = self.rom:byte(header.bank, header.address + 2)
+  assert(width == expected.width and height == expected.height,
+    "NewBarkTown ROM dimensions do not match manifest")
+  local blocksBank = self.rom:byte(header.bank, header.address + 3)
+  local blocksPtr = self.rom:word(header.bank, header.address + 4)
+  local eventsBank = self.rom:byte(header.bank, header.address + 6)
+  local eventsPtr = self.rom:word(header.bank, header.address + 9)
+
+  local blocks = self.rom:bytes(blocksBank, blocksPtr, width * height)
+
+  local addr = eventsPtr + 2 -- "db 0, 0 ; filler" MapEvents header
+
+  local warpCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1
+  local warps = {}
+  for _ = 1, warpCount do
+    local row = self.rom:bytes(eventsBank, addr, 5)
+    warps[#warps + 1] = {
+      y = row[1], x = row[2], destWarp = row[3],
+      destMapGroup = row[4], destMapNumber = row[5],
+    }
+    addr = addr + 5
+  end
+  assert(warpCount == expected.warpCount, "NewBarkTown warp count mismatch")
+
+  local coordCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + coordCount * 8
+  assert(coordCount == expected.coordEventCount, "NewBarkTown coord event count mismatch")
+
+  local bgCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + bgCount * 5
+  assert(bgCount == expected.bgEventCount, "NewBarkTown bg event count mismatch")
+
+  local objectCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + objectCount * 13
+  assert(objectCount == expected.objectCount, "NewBarkTown object count mismatch")
+
+  local out = {
+    NEW_BARK_TOWN = {
+      id = "NEW_BARK_TOWN", label = "NewBarkTown", index = 1,
+      source = ("ROM:%02X:%04X"):format(header.bank, header.address),
+      tileset = "TILESET_JOHTO",
+      width = width, height = height, blocks = blocks,
+      borderBlock = border, connections = {},
+      warps = warps, signs = {}, objects = {},
+    },
+  }
+  self:write("maps", out)
+  self:tick("New Bark Town", 1, 1)
+  return out
+end
+
+function RomExtractorGen2:run()
+  local results = {}
+  results.sprites = self:extractSprite()
+  results.tilesets = self:extractTileset()
+  results.maps = self:extractMap()
+  if self.progress then
+    self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
+  end
+  return results
+end
+
+return RomExtractorGen2
