@@ -25,6 +25,8 @@ GameVersion.VERSIONS = {
     manifest = "tools/rom_manifest.json",
     cachePrefix = "",       -- Red owns the cache root (backwards compatible)
     saveSuffix = "",        -- save.lua / save.lua.bak / save.lua.tmp
+    romSize = 1024 * 1024,
+    extractor = "gen1",
   },
   blue = {
     id = "blue",
@@ -35,6 +37,8 @@ GameVersion.VERSIONS = {
     manifest = "tools/rom_manifest_blue.json",
     cachePrefix = "blue/",  -- blue/data/generated, blue/assets/generated
     saveSuffix = "_blue",   -- save_blue.lua / .bak / .tmp
+    romSize = 1024 * 1024,
+    extractor = "gen1",
   },
   yellow = {
     id = "yellow",
@@ -45,11 +49,25 @@ GameVersion.VERSIONS = {
     manifest = "tools/rom_manifest_yellow.json",
     cachePrefix = "yellow/",  -- yellow/data/generated, yellow/assets/generated
     saveSuffix = "_yellow",   -- save_yellow.lua / .bak / .tmp
+    romSize = 1024 * 1024,
+    extractor = "gen1",
+  },
+  crystal = {
+    id = "crystal",
+    label = "Crystal",
+    displayName = "Pokemon Crystal",
+    launcherName = "Crystal (alpha)",
+    sha1 = "f2f52230b536214ef7c9924f483392993e226cfb",
+    manifest = "tools/rom_manifest_crystal.json",
+    cachePrefix = "crystal/",  -- crystal/data/generated, crystal/assets/generated
+    saveSuffix = "_crystal",   -- save_crystal.lua / .bak / .tmp
+    romSize = 2 * 1024 * 1024,
+    extractor = "gen2",
   },
 }
 
 -- Launcher column order.
-GameVersion.ORDER = { "red", "blue", "yellow" }
+GameVersion.ORDER = { "red", "blue", "yellow", "crystal" }
 
 GameVersion.current = "red"
 
