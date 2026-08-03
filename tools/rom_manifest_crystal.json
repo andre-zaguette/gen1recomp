@@ -1,0 +1,38 @@
+{
+  "newBarkTown": {
+    "bgEventCount": 4,
+    "coordEventCount": 2,
+    "height": 9,
+    "objectCount": 3,
+    "tileset": "TILESET_JOHTO",
+    "warpCount": 4,
+    "width": 10
+  },
+  "romSha1": "f2f52230b536214ef7c9924f483392993e226cfb",
+  "symbols": {
+    "ChrisSpriteGFX": [
+      48,
+      16384
+    ],
+    "NewBarkTown_MapAttributes": [
+      37,
+      19928
+    ],
+    "NewBarkTown_MapEvents": [
+      106,
+      17229
+    ],
+    "TilesetJohtoColl": [
+      6,
+      25614
+    ],
+    "TilesetJohtoGFX": [
+      6,
+      20486
+    ],
+    "TilesetJohtoMeta": [
+      6,
+      23566
+    ]
+  }
+}
