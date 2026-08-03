@@ -23,7 +23,7 @@
 
 These were confirmed by fetching real files from `https://github.com/pret/pokecrystal` (branch `master`) during planning. Re-fetch and re-confirm if pokecrystal's `master` has moved on since.
 
-**LZ3 compression** (`home/decompress.asm`, `Decompress::`): a command stream terminated by `$FF`. Each command byte: bits 5-7 = command id, bits 0-4 = `length - 1` (so stored length `n` means `n+1` actual bytes/repeats), *except* command 7 (`LZ_LONG`): the real command is bits 2-4 of that byte, and length is 10-bit (bits 0-1 of that byte as the high 2 bits, next byte as the low 8 bits), plus 1. Commands: `0`=LITERAL (copy n raw bytes), `1`=ITERATE (read 1 byte, repeat n times), `2`=ALTERNATE (read 2 bytes, alternate them for n bytes total), `3`=ZERO (write n zero bytes), `4`=REPEAT/`5`=FLIP/`6`=REVERSE (back-reference commands: read 1 more byte; if bit7 set, it's a 7-bit magnitude subtracted from the *current* output length; if bit7 clear, read one more byte and the 16-bit big-endian pair is added to the output length *at the start of the whole stream* — then copy `n` bytes forward (REPEAT), bit-flipped (FLIP), or backward (REVERSE) from that resolved source position).
+**LZ3 compression** (`home/decompress.asm`, `Decompress::`): a command stream terminated by `$FF`. Each command byte: bits 5-7 = command id, bits 0-4 = `length - 1` (so stored length `n` means `n+1` actual bytes/repeats), *except* command 7 (`LZ_LONG`): the real command is bits 2-4 of that byte, and length is 10-bit (bits 0-1 of that byte as the high 2 bits, next byte as the low 8 bits), plus 1. Commands: `0`=LITERAL (copy n raw bytes), `1`=ITERATE (read 1 byte, repeat n times), `2`=ALTERNATE (read 2 bytes, alternate them for n bytes total), `3`=ZERO (write n zero bytes), `4`=REPEAT/`5`=FLIP/`6`=REVERSE (back-reference commands: read 1 more byte; if bit7 set, the source position is `(current output length) - magnitude - 1` where `magnitude` is the low 7 bits (verified by hand-simulating the Z80 `.rewrite`/negative branch: `and %01111111 / cpl / add e / ld l,a / ld a,-1 / adc d / ld h,a` computes `HL = DE - magnitude - 1`, not `DE - magnitude` — a naive reading of "subtract the magnitude" misses the extra `-1` the `cpl`/`ld a,-1` idiom introduces); if bit7 clear, read one more byte and the 16-bit big-endian pair is added *unmodified* to the output length *at the start of the whole stream* — then copy `n` bytes forward (REPEAT), bit-flipped (FLIP), or backward (REVERSE) from that resolved source position).
 
 **Tileset struct** (`data/tilesets.asm`, `MACRO tileset`): 15 bytes — `dba` (bank + word pointer, 3 bytes each) for GFX, Meta (blockset), Coll (collision), then `dw` Anim, `dw` NULL (unused), `dw` PalMap. New Bark Town uses `TILESET_JOHTO`; its pieces are directly-addressable symbols: `TilesetJohtoGFX` (LZ3-compressed `.2bpp.lz`), `TilesetJohtoMeta` (`data/tilesets/johto_metatiles.bin`, 2048 bytes = 128 blocks × 16 bytes, 4×4 tile-id grid — byte-identical layout to Gen1's `.bst` blocksets), `TilesetJohtoColl` (`data/tilesets/johto_collision.asm`, 4 raw bytes per block — one `COLL_*` constant per quadrant/cell of the 4×4 block, *not* a flat walkable-id list like Gen1). Because the skeleton only ever needs the Johto tileset, the manifest embeds these specific symbol names directly — no need to parse/walk the `Tilesets::` table.
 
@@ -87,8 +87,8 @@ class Lz3Test(unittest.TestCase):
     def test_repeat_negative_offset(self):
         # 3 literal bytes "ABC", then REPEAT 3 bytes from offset -3
         # (back to the start of "ABC"): cmd=4<<5=0x80, length field=3-1=2 -> 0x82,
-        # offset byte with bit7 set, magnitude 3 -> 0x83
-        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x83, 0xFF])
+        # offset byte with bit7 set, magnitude 2 -> 0x82 (src = len(out)-magnitude-1 = 3-2-1 = 0)
+        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x82, 0xFF])
         self.assertEqual(lz3.decompress(data), b"ABCABC")
 
     def test_repeat_positive_offset(self):
@@ -100,8 +100,9 @@ class Lz3Test(unittest.TestCase):
 
     def test_flip_bit_reverses_each_byte(self):
         # 1 literal byte 0b10110000 (0xB0), then FLIP 1 byte from offset -1
-        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x81 (bit7 set, magnitude 1)
-        data = bytes([0x00, 0xB0, 0xA0, 0x81, 0xFF])
+        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x80 (bit7 set, magnitude 0;
+        # src = len(out)-magnitude-1 = 1-0-1 = 0, the literal byte just written)
+        data = bytes([0x00, 0xB0, 0xA0, 0x80, 0xFF])
         # 0xB0 = 0b10110000 -> bit-reversed = 0b00001101 = 0x0D
         self.assertEqual(lz3.decompress(data), bytes([0xB0, 0x0D]))
 
@@ -198,7 +199,7 @@ def decompress(data):
             offset_byte = read_byte()
             if offset_byte & 0x80:
                 magnitude = offset_byte & 0x7F
-                src = len(out) - magnitude
+                src = len(out) - magnitude - 1
             else:
                 lo = read_byte()
                 src = start_pos + ((offset_byte << 8) | lo)
@@ -292,7 +293,7 @@ eq(#zero, 4, "zero length")
 for i = 1, 4 do eq(zero[i], 0, "zero byte " .. i) end
 
 -- 3 literal bytes "ABC", then REPEAT 3 bytes from offset -3
-eqBytes(Lz3.decompress({ 0x02, 0x41, 0x42, 0x43, 0x82, 0x83, 0xFF }),
+eqBytes(Lz3.decompress({ 0x02, 0x41, 0x42, 0x43, 0x82, 0x82, 0xFF }),
   "ABCABC", "repeat negative offset")
 
 -- 3 literal bytes "XYZ", then REPEAT 3 bytes from positive offset 0x0000
@@ -300,7 +301,7 @@ eqBytes(Lz3.decompress({ 0x02, 0x58, 0x59, 0x5A, 0x82, 0x00, 0x00, 0xFF }),
   "XYZXYZ", "repeat positive offset")
 
 -- 1 literal byte 0xB0, then FLIP 1 byte from offset -1
-local flip = Lz3.decompress({ 0x00, 0xB0, 0xA0, 0x81, 0xFF })
+local flip = Lz3.decompress({ 0x00, 0xB0, 0xA0, 0x80, 0xFF })
 eqBytes(flip, string.char(0xB0, 0x0D), "flip")
 
 -- LZ_LONG: inner cmd=0 (LITERAL), 32 literal bytes
@@ -389,7 +390,7 @@ function Lz3.decompress(data)
       local src
       if bit.band(offsetByte, 0x80) ~= 0 then
         local magnitude = bit.band(offsetByte, 0x7F)
-        src = #out - magnitude
+        src = #out - magnitude - 1
       else
         local lo = readByte()
         src = startLen + bit.bor(bit.lshift(offsetByte, 8), lo)
@@ -413,7 +414,7 @@ end
 return Lz3
 ```
 
-Note: `src`/indices above are computed in 0-indexed terms then read via `out[src + i + 1]` (1-indexed table access) — `src` itself is a 0-indexed offset into the (conceptually 0-indexed) output stream, consistent with the Python version; `#out` in Lua already equals the 0-indexed "next write position," so `src = #out - magnitude` matches Python's `src = len(out) - magnitude` directly.
+Note: `src`/indices above are computed in 0-indexed terms then read via `out[src + i + 1]` (1-indexed table access) — `src` itself is a 0-indexed offset into the (conceptually 0-indexed) output stream, consistent with the Python version; `#out` in Lua already equals the 0-indexed "next write position," so `src = #out - magnitude - 1` matches Python's `src = len(out) - magnitude - 1` directly. The `- 1` matters: hand-simulating `decompress.asm`'s negative-offset branch (`and %01111111 / cpl / add e / ld l,a / ld a,-1 / adc d / ld h,a`) shows it computes `HL = DE - magnitude - 1`, not `DE - magnitude` — confirmed against real pret/pokecrystal source during Task 1's review.
 
 - [ ] **Step 4: Run test to verify it passes**
 
