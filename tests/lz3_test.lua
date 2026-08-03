@@ -48,6 +48,10 @@ eqBytes(Lz3.decompress({ 0x02, 0x58, 0x59, 0x5A, 0x82, 0x00, 0x00, 0xFF }),
 local flip = Lz3.decompress({ 0x00, 0xB0, 0xA0, 0x80, 0xFF })
 eqBytes(flip, string.char(0xB0, 0x0D), "flip")
 
+-- 3 literal bytes "ABC", then REVERSE 3 bytes from offset -1 (src=2, 'C'): reads backward C,B,A
+local reverse = Lz3.decompress({ 0x02, 0x41, 0x42, 0x43, 0xC2, 0x80, 0xFF })
+eqBytes(reverse, "ABCCBA", "reverse")
+
 -- LZ_LONG: inner cmd=0 (LITERAL), 32 literal bytes
 local longHeader = { 0xE0, 0x1F }
 for i = 0, 31 do longHeader[#longHeader + 1] = i end
