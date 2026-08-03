@@ -69,7 +69,7 @@ def decompress(data):
             offset_byte = read_byte()
             if offset_byte & 0x80:
                 magnitude = offset_byte & 0x7F
-                src = len(out) - magnitude
+                src = len(out) - magnitude - 1
             else:
                 lo = read_byte()
                 src = start_pos + ((offset_byte << 8) | lo)

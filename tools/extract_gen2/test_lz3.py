@@ -31,8 +31,8 @@ class Lz3Test(unittest.TestCase):
     def test_repeat_negative_offset(self):
         # 3 literal bytes "ABC", then REPEAT 3 bytes from offset -3
         # (back to the start of "ABC"): cmd=4<<5=0x80, length field=3-1=2 -> 0x82,
-        # offset byte with bit7 set, magnitude 3 -> 0x83
-        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x83, 0xFF])
+        # offset byte with bit7 set, magnitude 2 -> 0x82 (src = len(out)-magnitude-1 = 3-2-1 = 0)
+        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x82, 0xFF])
         self.assertEqual(lz3.decompress(data), b"ABCABC")
 
     def test_repeat_positive_offset(self):
@@ -44,8 +44,9 @@ class Lz3Test(unittest.TestCase):
 
     def test_flip_bit_reverses_each_byte(self):
         # 1 literal byte 0b10110000 (0xB0), then FLIP 1 byte from offset -1
-        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x81 (bit7 set, magnitude 1)
-        data = bytes([0x00, 0xB0, 0xA0, 0x81, 0xFF])
+        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x80 (bit7 set, magnitude 0;
+        # src = len(out)-magnitude-1 = 1-0-1 = 0, the literal byte just written)
+        data = bytes([0x00, 0xB0, 0xA0, 0x80, 0xFF])
         # 0xB0 = 0b10110000 -> bit-reversed = 0b00001101 = 0x0D
         self.assertEqual(lz3.decompress(data), bytes([0xB0, 0x0D]))
 
