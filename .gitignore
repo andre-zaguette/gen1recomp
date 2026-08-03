@@ -7,6 +7,11 @@ assets/generated/
 # here) -- never committable, and not covered by any other pattern here.
 /roms/
 
+# Generated from a user-provided Pokemon Crystal ROM by
+# tools/build_rom_data_gen2.py -- verification-only dev-path output, never
+# shipped (not data/generated/, which is the runtime-importer path).
+tools/gen2_dev_data/
+
 # LÖVE packages
 *.love
 
