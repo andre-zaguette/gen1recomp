@@ -751,7 +751,7 @@ def extract_tileset(rom, symbols, out_dir, out_assets):
     compressed = rom.bytes(gfx.bank, gfx.address, 0x4000)  # generous upper bound; LZ3 stops at $FF
     raw = lz3.decompress(compressed)
     width_tiles = 16  # gfx/tilesets/johto.png is a 16-tiles-wide sheet, like Gen1 tileset sheets
-    height = len(raw) * 8 // 16 // width_tiles * 8
+    height = len(raw) // 16 // width_tiles * 8
     width = width_tiles * 8
     _write_2bpp_png(raw, width, height, os.path.join(out_assets, "tilesets", "johto.png"))
 
