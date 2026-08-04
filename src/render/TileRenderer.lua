@@ -402,11 +402,16 @@ end
 -- the route's own default roof (Vermilion's) throughout.
 local gbcAtlasCache = {}
 
--- Cache suffix for a map's RED++ bake.  A dark cave folds FadePal2 into the
--- palette worldGroupColors hands the bake (#383), so the lit and dark bakes of
--- one map are different images and must not share a key.
+-- Cache suffix for a map's RED++ (or Crystal) bake.  A dark cave folds
+-- FadePal2 into the palette worldGroupColors hands the bake (#383), so the
+-- lit and dark bakes of one map are different images and must not share a
+-- key.  PaletteFX.packKey() adds Crystal's time-of-day bucket for the same
+-- reason: gbcPack() itself resolves a different palette per bucket, so a
+-- bucket crossing (PaletteFX.checkTimeOfDay) must land on a fresh cache key
+-- here too, or this atlas keeps serving the stale, previous-bucket image
+-- forever even though every other Crystal cache got busted.
 local function gbcKeyFor(mapId)
-  return "#gbc:" .. mapId .. PaletteFX.darkKey()
+  return "#gbc:" .. mapId .. PaletteFX.darkKey() .. PaletteFX.packKey()
 end
 
 local function getGbcAtlas(imagePath, tilesetId, mapId, perRow, data)

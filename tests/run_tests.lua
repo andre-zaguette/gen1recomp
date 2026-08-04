@@ -3524,7 +3524,7 @@ do
   GameVersion.set("crystal")
 
   local fakeTileGroups = { [0] = 2, [1] = 3 } -- tile 0 -> group 2, tile 1 -> group 3
-  local function flatColors(n)
+  local function flatColors()
     -- one distinguishable {r,g,b}x4 per group, group N's color 0 = {N,N,N}
     local out = {}
     for g = 0, 7 do out[g + 1] = { { g, g, g }, { g, g, g }, { g, g, g }, { g, g, g } } end
@@ -3620,6 +3620,146 @@ do
   check(result.tileGroups["0"] == nil,
     "extractPalettes: no leftover string key \"0\" survives normalization")
   check(written == result, "extractPalettes: normalized table is what gets written")
+end
+
+-- Regression test for Finding 1 of the final cross-cutting review: the
+-- baked-atlas cache (TileRenderer.lua's module-level gbcAtlasCache, keyed
+-- through the local gbcKeyFor(mapId)) had no time-of-day bucket in its key,
+-- so a real morn/day/nite crossing recolored the player sprite (whose own
+-- cache really does get busted by PaletteFX.checkTimeOfDay) but left
+-- terrain rendering the stale, previous-bucket atlas forever. The fix folds
+-- PaletteFX.packKey() (new: "" for every non-Crystal version, "#<bucket>"
+-- for Crystal) into gbcKeyFor. This proves it at the level that actually
+-- matters: two full TileRenderer.new() builds of the SAME map under two
+-- different resolved buckets must land on two DIFFERENT baked atlases, not
+-- share one -- exactly the failure mode a purely data-layer test (the fixture
+-- block above, which calls PaletteFX.gbcPack(bucket) directly and never
+-- touches TileRenderer) cannot catch.
+--
+-- love_stub.lua has no love.image at all (headless graphics is otherwise a
+-- no-op), so getGbcAtlas's real bake -- gated behind
+-- `if love.image and love.image.newImageData then ... end` -- is dead code
+-- under the normal test harness. This block installs a minimal, local-only
+-- fake of love.image / love.graphics.newImage / Assets.imageData (restored
+-- before the block ends) so that real bake path actually runs: a fake
+-- ImageData backed by a plain table (get/setPixel), and newImage returning
+-- the finished ImageData as-is (identity) so the test can read its baked
+-- pixels straight back out.
+do
+  local GameVersion = require("src.core.GameVersion")
+  local PaletteFX = require("src.render.PaletteFX")
+  local TileRenderer = require("src.render.TileRenderer")
+  local Assets = require("src.render.Assets")
+  GameVersion.set("crystal")
+
+  local FakeImageData = {}
+  FakeImageData.__index = FakeImageData
+  function FakeImageData:getDimensions() return self.w, self.h end
+  function FakeImageData:getPixel(x, y)
+    local p = self.pixels[y * self.w + x]
+    if not p then return 0, 0, 0, 0 end
+    return p[1], p[2], p[3], p[4]
+  end
+  function FakeImageData:setPixel(x, y, r, g, b, a)
+    self.pixels[y * self.w + x] = { r, g, b, a }
+  end
+
+  -- one 8x8 tile, fully opaque bright white -- recolorSample's r > 0.83 cutoff
+  -- always maps it to colors[1] of whichever group the tile resolves to, so
+  -- the baked pixel directly reveals which bucket's groupColors baked it
+  local function newSourceImageData()
+    local id = setmetatable({ w = 8, h = 8, pixels = {} }, FakeImageData)
+    for y = 0, 7 do
+      for x = 0, 7 do id:setPixel(x, y, 1, 1, 1, 1) end
+    end
+    return id
+  end
+
+  local savedLoveImage = love.image
+  local savedNewImage = love.graphics.newImage
+  local savedAssetsImageData = Assets.imageData
+  love.image = { newImageData = function(w, h)
+    -- getGbcAtlas calls this with (iw, ih) for the blank output canvas;
+    -- Assets.imageData calls it with a path string for the source read.
+    -- Only the blank-canvas shape is needed directly here since the source
+    -- read goes through the Assets.imageData stub below instead.
+    if type(w) == "number" then
+      return setmetatable({ w = w, h = h or w, pixels = {} }, FakeImageData)
+    end
+    return newSourceImageData()
+  end }
+  Assets.imageData = function(_) return newSourceImageData() end
+  love.graphics.newImage = function(id) return id end
+
+  -- group N's color 0 = {base+N, base+N, base+N}, base distinct per bucket
+  -- so a rebake under a different bucket is provably different pixel data,
+  -- not just a different cache key with coincidentally-equal contents
+  local function groupColorsWithBase(base)
+    local out = {}
+    for g = 0, 7 do
+      local v = base + g
+      out[g + 1] = { { v, v, v }, { v, v, v }, { v, v, v }, { v, v, v } }
+    end
+    return out
+  end
+  local fakePaletteData = {
+    tileGroups = { [0] = 2 }, -- the one tile in the fake source resolves to group 2
+    byTime = {
+      morn = { groupColors = groupColorsWithBase(10),
+               spriteColor = { { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 } } },
+      day  = { groupColors = groupColorsWithBase(20),
+               spriteColor = { { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 } } },
+      nite = { groupColors = groupColorsWithBase(30),
+               spriteColor = { { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 } } },
+    },
+  }
+  PaletteFX.setData({ palettes = fakePaletteData })
+
+  local map = { id = "GBC_ATLAS_TEST_MAP",
+                def = { width = 1, height = 1 },
+                tileset = { id = "TILESET_JOHTO", image = "fake_gbc_atlas_tileset.png",
+                            tilesPerRow = 1 } }
+  local data = { palettes = fakePaletteData }
+
+  local savedDate = os.date
+  os.date = function(fmt) return fmt == "*t" and { hour = 5 } or savedDate(fmt) end -- morn
+  local trMorn = TileRenderer.new(map, data)
+
+  os.date = function(fmt) return fmt == "*t" and { hour = 20 } or savedDate(fmt) end -- nite
+  -- Simulates the real crossing: PaletteFX.checkTimeOfDay() clears exactly
+  -- this cache (crystalPackCache/crystalPackBucket) before triggering the
+  -- reload that rebuilds TileRenderer -- without re-priming it here,
+  -- gbcPack()'s own cache (the hot-path fast return Finding 8 added) would
+  -- keep serving morn's already-cached pack for this nil-bucket call, since
+  -- nothing else would have told it a crossing happened.
+  PaletteFX.setData({ palettes = fakePaletteData })
+  local trNite = TileRenderer.new(map, data)
+  os.date = savedDate
+
+  check(trMorn.gbcAtlas and trNite.gbcAtlas,
+    "TileRenderer gbc atlas fixture: both builds actually took the baked-atlas path")
+  check(trMorn.gbcAtlasKey ~= trNite.gbcAtlasKey,
+    "TileRenderer gbc atlas fixture: morn and nite builds land on different cache keys")
+  check(trMorn.image ~= trNite.image,
+    "TileRenderer gbc atlas fixture: morn and nite builds produce distinct baked images, "
+    .. "not one atlas reused stale across a bucket crossing (Finding 1)")
+
+  -- group 2's color 0: morn base 10 -> v=12 -> 12/255; nite base 30 -> v=32 -> 32/255
+  -- (r/g/b are equal by construction, so checking r alone is sufficient; kept
+  -- as inline table indexing rather than named locals -- this file's main
+  -- chunk is already at LuaJIT's 200-local ceiling, see the font fixture
+  -- block's own comment on the same constraint)
+  eq(({ trMorn.image:getPixel(0, 0) })[1], 12 / 255,
+    "TileRenderer gbc atlas fixture: morn atlas baked morn's own group-2 color")
+  eq(({ trNite.image:getPixel(0, 0) })[1], 32 / 255,
+    "TileRenderer gbc atlas fixture: nite atlas baked nite's own group-2 color, "
+    .. "independent of morn's cached bake")
+
+  love.image = savedLoveImage
+  love.graphics.newImage = savedNewImage
+  Assets.imageData = savedAssetsImageData
+  PaletteFX.setData(nil)
+  GameVersion.set("red")
 end
 
 -- ---------------------------------------------- the globbed tiers
