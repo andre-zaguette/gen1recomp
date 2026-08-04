@@ -92,7 +92,18 @@ Confirmed-real, addressable symbols (from `pokecrystal.sym`):
 - **`WooperFrontpic`** — bank `$55`, addr `$7846`. LZ3-compressed (this
   Gen2 pipeline's existing `src/import/Lz3.lua` applies), decompresses to a
   7×7 tile grid (56×56px), 2bpp — confirmed via `_GetFrontpic`'s `c = 7*7`
-  call in the real engine code.
+  call in the real engine code. The compressed asset is Gen2's animated-pic
+  format (two blended frames); the intro only needs the static base frame
+  (see the animated-front-sprite non-goal above) — confirm during
+  implementation exactly how to decode just that frame without the
+  bitmask-blend machinery.
+- **`PokemonProfPic`** (Oak's trainer portrait) — bank `$56`, addr
+  `$415e`. Same LZ3-compressed 2bpp scheme as `WooperFrontpic`, but a
+  trainer pic, not a species pic — Gen2 trainer portraits aren't animated,
+  so this should be a plain static decode; confirm the exact tile-grid
+  dimensions against `engine/gfx/load_pics.asm`'s trainer-pic load call
+  during implementation (likely also 7×7/56×56, matching Gen1's own
+  trainer-pic convention, but verify rather than assume).
 - **`Cry_Wooper`** — bank `$3c`, addr `$6df6` (plus its three channel
   sub-tracks, `Cry_Wooper_Ch5`/`Ch6`/`Ch8`), a 3-channel chip-synth opcode
   program in the same format Gen1's existing cry system already consumes
@@ -107,13 +118,14 @@ New files:
 
 | New file | Mirrors | Responsibility |
 | --- | --- | --- |
-| `src/ui/CrystalIntro.lua` | `src/ui/OakSpeech.lua` | Crystal's own step-table intro sequence: Oak narration, gender choice, Wooper demo, naming, spawn. Reuses `TextBox`, `Menu`, and `NamingScreen` the same way `OakSpeech.lua` already does — no new UI primitives. |
+| `src/ui/CrystalIntro.lua` | `src/ui/OakSpeech.lua` | Crystal's own intro sequence: gender choice, Oak narration + portrait, Wooper demo, naming, spawn. Delegates to `OakSpeech`'s existing shared mechanics (text/pic/reveal/naming/shrink-outro handling) via Lua metatable inheritance (`setmetatable(CrystalIntro, {__index = OakSpeech})`) rather than duplicating them — `OakSpeech.lua` itself is not modified, so this carries zero regression risk to Gen1's intro. Only the parts that are genuinely different (the step list, the demo beat's text key, the gender step, no rival anything) are overridden. |
 | `tools/extract_gen2/text.py` or a `RomExtractorGen2:extractIntroText()` addition (exact split decided in planning) | `RomExtractor.lua`'s `decodeTextCommands` | Reads the ~8 named Oak/gender-prompt labels by symbol, decodes with the existing charmap, mirroring Gen1's byte-for-byte technique. |
 
 Existing files, additions:
 
-- `src/import/RomExtractorGen2.lua`: extend the existing sprite extraction to also pull Kris (same function, second symbol); a new small extraction for Wooper's static front pic (LZ3 decompress + 2bpp decode, reusing `Lz3.lua`/`ImageWriter.lua` exactly as the tileset extraction already does); a new small extraction for Wooper's cry (mirrors Gen1's cry-table read shape); the intro text labels above. `field.boot.screens.newGame` changes from `"NoOpScreen"` to `"CrystalIntro"`.
+- `src/import/RomExtractorGen2.lua`: extend the existing sprite extraction to also pull Kris (same function, second symbol); a new small extraction for Wooper's static front pic and Oak's trainer portrait (LZ3 decompress + 2bpp decode, reusing `Lz3.lua`/`ImageWriter.lua` exactly as the tileset extraction already does); a new small extraction for Wooper's cry (mirrors Gen1's cry-table read shape); the intro text labels above. `field.boot.screens.newGame` changes from `"NoOpScreen"` to `"CrystalIntro"`; `field.playerSprites` gains a second, gender-alternate entry pointing at Kris's sprite.
 - `tools/make_rom_manifest_crystal.py`: new required symbols for all of the above, following the exact pattern already established for map/tileset/sprite/font symbols.
+- `src/world/Player.lua`: `Player.new` gains an optional trailing `save` parameter (only one real call site today, `OverworldController.lua`); when present and `save.player.gender` is set to the alternate gender, sprite selection prefers the alternate `playerSprites` entry over the default one. Fully backward compatible — no existing call passes this parameter, and no existing save sets that field, so Gen1/Yellow/Red/Blue behavior is untouched.
 
 ### Data flow
 
@@ -180,11 +192,13 @@ crystal/assets/generated/{sprites/kris.png, pokemon/wooper_front.png}
 3. Pressing NEW GAME plays the real intro instead of skipping straight to
    New Bark Town.
 4. Choosing boy or girl changes the player's in-game sprite accordingly.
-5. The Wooper demo beat shows Wooper's sprite and plays its cry.
+5. Oak's portrait renders during the narration; the Wooper demo beat shows
+   Wooper's sprite and plays its cry.
 6. Naming the player works and the chosen name appears in-game afterward.
 7. `luajit tests/run_tests.lua` passes the new fixture-backed case with no
    ROM present.
-8. Zero regression to Gen1's existing `OakSpeech.lua` flow.
+8. Zero regression to Gen1's existing `OakSpeech.lua` flow (the file itself
+   is not modified).
 
 ## Follow-on work (explicitly out of scope here)
 
