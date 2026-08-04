@@ -31,7 +31,73 @@ REQUIRED_SYMBOLS = (
     "KrisSpriteGFX",
     "Font",
     "FontExtra",
+    "_OakText1",
+    "_OakText2",
+    "_OakText4",
+    "_OakText5",
+    "_OakText6",
+    "_OakText7",
+    "_AreYouABoyOrAreYouAGirlText",
 )
+
+# Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
+# overrides for a handful of charmap.asm tokens -- mirrors
+# tools/make_rom_manifest.py's charmap()/tools/extract/text.py's
+# EXPANSIONS for Gen1, trimmed to the tokens that actually exist in
+# Crystal's own constants/charmap.asm. <LINE>/<PARA>/<CONT>/<NEXT> become
+# the literal \n/\f/\v control chars src/render/TextBox.lua's markup
+# already expects (see its own doc comment), matching Gen1's generated
+# text.lua convention exactly (tests/fixture_data/text.lua uses raw \n
+# for line breaks, not a "{LINE}" tag). Tokens with no entry here fall
+# through to decodeTextCommands's generic "<TOKEN>" -> "{TOKEN}" bracket
+# conversion.
+TEXT_CHARMAP_EXPANSIONS = {
+    "#": "POKé",
+    "<PKMN>": "POKéMON",
+    "<PC>": "PC",
+    "<TM>": "TM",
+    "<TRAINER>": "TRAINER",
+    "<ROCKET>": "ROCKET",
+    "<……>": "……",
+    "<LV>": "{LV}",
+    "<PLAYER>": "{PLAYER}",
+    "<RIVAL>": "{RIVAL}",
+    "<TARGET>": "{TARGET}",
+    "<USER>": "{USER}",
+    "<ID>": "{ID}",
+    "<PARA>": "\f",
+    "<LINE>": "\n",
+    "<CONT>": "\v",
+    "<NEXT>": "\n",
+    "<DONE>": "",
+    "<PROMPT>": "",
+    "<NULL>": "",
+    "@": "",
+    "<DOT>": ".",
+}
+
+
+def text_charmap(pokecrystal):
+    """Full $00-$FF constants/charmap.asm entries, keyed by decimal code
+    string, for the runtime ROM text decoder. Decode direction (code ->
+    displayable string) -- unlike extract_gen2.font.parse_charmap's
+    render-direction ($60-$FF only) list used for Font.split. charmap.asm
+    repeats several codes for a later Japanese-text counterpart (e.g. $54
+    is both English "#" and "<POKEMON>"), so this keeps first-occurrence-
+    wins, same as Gen1's charmap()."""
+    out = {}
+    path = os.path.join(pokecrystal, "constants/charmap.asm")
+    for _, line in read_asm(path):
+        m = re.match(
+            r'charmap\s+"((?:[^"\\]|\\.)*)",\s*(\$[0-9a-fA-F]+)', line.strip())
+        if not m:
+            continue
+        value = int(m.group(2)[1:], 16)
+        if str(value) in out:
+            continue
+        seq = m.group(1).replace('\\"', '"')
+        out[str(value)] = TEXT_CHARMAP_EXPANSIONS.get(seq, seq)
+    return out
 
 
 def parse_new_bark_town(pokecrystal):
@@ -100,6 +166,7 @@ def main():
         "symbols": embed_symbols(symbols),
         "newBarkTown": parse_new_bark_town(pokecrystal),
         "fontCharmap": parse_charmap(pokecrystal),
+        "charmap": text_charmap(pokecrystal),
         "palettes": resolve_palettes(pokecrystal),
     }
     with open(args.out, "w", encoding="utf-8", newline="\n") as f:

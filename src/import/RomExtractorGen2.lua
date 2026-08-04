@@ -18,18 +18,19 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 4
+local STAGE_COUNT = 5
 
--- The other 12 modules Data:load()'s MODULES gate requires that this
+-- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (New Bark Town's map/tileset/player sprite/font
 -- only, see the spec's non-goals) never populates.  `field` gets real
--- boot content (extractField, below); the rest are bare empty tables --
--- confirmed by reading Data:seedDefaults, FieldDefaults.seed,
--- SsAnneLayout.apply and Font.load directly that every one of them
--- tolerates emptiness (Task 10 brief).  Not invented placeholder
--- content: an empty table is the honest "not extracted yet".
+-- boot content (extractField, below); `text` gets real boot content too
+-- (extractIntroText, above -- the intro's ~8 narration/prompt labels);
+-- the rest are bare empty tables -- confirmed by reading Data:seedDefaults,
+-- FieldDefaults.seed, SsAnneLayout.apply and Font.load directly that every
+-- one of them tolerates emptiness (Task 10 brief).  Not invented
+-- placeholder content: an empty table is the honest "not extracted yet".
 local STUB_MODULES = {
-  "constants", "text", "text_pointers", "trainer_headers",
+  "constants", "text_pointers", "trainer_headers",
   "pokemon", "moves", "items", "type_chart", "trainers", "encounters",
   "battle_anims",
 }
@@ -309,6 +310,75 @@ function RomExtractorGen2:extractPalettes()
   return out
 end
 
+-- Ported from src/import/RomExtractor.lua's textGlyph/decodeTextCommands
+-- (Task 10-era "parallel pipeline, not shared abstraction" precedent --
+-- see the walking skeleton's own spec for why this project doesn't
+-- factor Gen1/Gen2 text decoding through one shared function). Crystal's
+-- text opcode set is confirmed byte-identical to Gen1's (same TX_*
+-- values, no compression, verified during planning against
+-- home/text.asm's PrintText/PlaceNextChar), and reading a label's real
+-- string body directly (rather than through its OakTextN-style TX_FAR
+-- wrapper) never needs the TX_FAR opcode this port omits.
+local TEXT_GLYPH_OVERRIDES = {
+  [0x4B] = "{_CONT}", [0x4C] = "{SCROLL}",
+  [0x6D] = "{COLON}", [0xF0] = "¥",
+}
+
+function RomExtractorGen2:textGlyph(value)
+  if TEXT_GLYPH_OVERRIDES[value] then return TEXT_GLYPH_OVERRIDES[value] end
+  local glyph = self.manifest.charmap[tostring(value)]
+    or ("{BYTE:%02X}"):format(value)
+  if glyph:sub(1, 1) == "<" and glyph:sub(-1) == ">" then
+    return "{" .. glyph:sub(2, -2) .. "}"
+  end
+  return glyph
+end
+
+function RomExtractorGen2:decodeTextCommands(symbol)
+  local address = symbol.address
+  local out = {}
+  for _ = 1, 4096 do
+    local command = self.rom:byte(symbol.bank, address)
+    address = address + 1
+    if command == 0x50 then
+      return table.concat(out)
+    elseif command == 0 then
+      while true do
+        local value = self.rom:byte(symbol.bank, address)
+        address = address + 1
+        if value == 0x50 or value == 0x57 or value == 0x58 or value == 0x5F then
+          return table.concat(out)
+        end
+        out[#out + 1] = self:textGlyph(value)
+      end
+    else
+      error(("%s: unsupported text command $%02X, this port only reads " ..
+        "plain-body labels directly (no TX_FAR)"):format(symbol.name, command))
+    end
+  end
+  error(symbol.name .. ": text command stream is too long")
+end
+
+-- The intro's narration + gender-prompt text. Direct symbol reads (see
+-- decodeTextCommands's doc comment above) -- no pointer-table sweep, the
+-- same "read exactly what's needed, by name" pattern font/palette
+-- extraction already established for Gen2.
+local INTRO_TEXT_LABELS = {
+  "_OakText1", "_OakText2", "_OakText4", "_OakText5", "_OakText6",
+  "_OakText7", "_AreYouABoyOrAreYouAGirlText",
+}
+
+function RomExtractorGen2:extractIntroText()
+  self:beginStage("Intro text")
+  local out = {}
+  for index, label in ipairs(INTRO_TEXT_LABELS) do
+    out[label] = self:decodeTextCommands(self:symbol(label))
+    self:tick("Intro text", index, #INTRO_TEXT_LABELS)
+  end
+  self:write("text", out)
+  return out
+end
+
 -- field.boot spawns straight into New Bark Town instead of Gen1's
 -- REDS_HOUSE_2F / Oak-speech opening: this skeleton has no starter roster
 -- or dialogue text (spec non-goals), so NEW GAME has nowhere to run that
@@ -434,6 +504,7 @@ function RomExtractorGen2:run()
   results.maps = self:extractMap()
   results.font = self:extractFont()
   results.palettes = self:extractPalettes()
+  results.text = self:extractIntroText()
   results.field = self:extractField(results.maps.NEW_BARK_TOWN)
   self:extractStubs()
   if self.progress then
