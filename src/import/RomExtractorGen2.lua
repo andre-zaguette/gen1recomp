@@ -279,6 +279,16 @@ function RomExtractorGen2:extractField(newBarkTown)
     flyWarps = {},
     waterTilesets = {},
     ledges = {},
+    -- Player.new:46 reads field.playerSprites.walk unguarded (unlike
+    -- surf/bike/surfPikachu, each gated behind `data.sprites[id] and`) to
+    -- build the player's on-foot SpriteRenderer -- FieldDefaults.FIELD's
+    -- default there is Gen1's "SPRITE_RED", which extractSprite (above)
+    -- never writes into Crystal's sprites table (only "SPRITE_CHRIS" is),
+    -- so it resolved to a nil spriteDef and crashed
+    -- SpriteRenderer.new:85 on the very first setMap. surf/bike/fly stay
+    -- on the Gen1 defaults deliberately: this skeleton extracts no sprite
+    -- for them, so their guards correctly no-op instead of crashing.
+    playerSprites = { walk = "SPRITE_CHRIS" },
   }
   self:write("field", out)
   return out
