@@ -270,10 +270,27 @@ end
 -- ROM-byte read, unlike every other extractX here) -- nothing left to
 -- decode, just forward it into the generated cache under the same
 -- "palettes" name Data.lua already treats as optional for Gen1.
+--
+-- tileGroups crosses a JSON boundary (Python dict with int keys ->
+-- tools/rom_manifest_crystal.json -> JSON always stringifies object keys
+-- -> src/link/Json.lua does not convert them back), so
+-- self.manifest.palettes.tileGroups arrives keyed by STRING tile ids
+-- ("59" = 5, ...).  PaletteFX.worldGroupAt indexes it with a numeric tile
+-- id (groups[tileId]), which always misses against a string key, so every
+-- tile silently fell back to the group-7 TEXT default.  Re-key to numbers
+-- once here, at import time, rather than on every render-time lookup.
+-- byTime's groupColors/spriteColor are real 1-indexed Lua arrays (not
+-- JSON-object-keyed), so they do not have this problem and pass through
+-- untouched.
 function RomExtractorGen2:extractPalettes()
   local data = self.manifest.palettes
-  self:write("palettes", data)
-  return data
+  local tileGroups = {}
+  for tileId, group in pairs(data.tileGroups) do
+    tileGroups[tonumber(tileId)] = group
+  end
+  local out = { tileGroups = tileGroups, byTime = data.byTime }
+  self:write("palettes", out)
+  return out
 end
 
 -- field.boot spawns straight into New Bark Town instead of Gen1's

@@ -368,9 +368,20 @@ function PaletteFX.yellowPack()
   return yellowPack or nil
 end
 
+-- The Crystal half is also gated on gbcPack() actually resolving: an old
+-- Crystal cache built before this plan landed (or the dev-only Python
+-- extraction path, which produces no palettes at all) has Game.data.palettes
+-- absent, so gbcPack()'s Crystal branch returns nil.  Without this guard,
+-- true here regardless would still send SpriteRenderer/TileRenderer down
+-- the usesGbcPack() branch, which then gets nil back from spriteObp/
+-- worldGroupColors and falls back to the RAW, fully-opaque sprite sheet
+-- (an opaque box behind every character) instead of the DMG-shaded bake
+-- the final `else` branch would have produced -- worse than not having
+-- this whole feature at all.  gbcPack() does not call usesGbcPack(), so
+-- this cannot recurse.
 function PaletteFX.usesGbcPack(mode)
   mode = mode or PaletteFX.mode
-  return mode == "redpp" or GameVersion.isCrystal()
+  return mode == "redpp" or (GameVersion.isCrystal() and PaletteFX.gbcPack() ~= nil)
 end
 
 -- Yellow's authentic GBC look is CGBBasePalettes (per-map), not a boot-ROM
@@ -458,7 +469,22 @@ end
 
 -- Active named-palette table for COLORS: RED++ uses data/palettes_gbc.lua,
 -- everything else uses the ROM-imported data.palettes.
+--
+-- Crystal has no SGB-style named-palette system at all (no SuperPalettes,
+-- no per-species mon_palettes) -- every caller below (pal/monPal/
+-- monPalName, plus BattleState's blackImage/sgbBattlePals/colorMode)
+-- expects whatever this returns to carry `.palettes`/`.pokemon` fields.
+-- gbcPack() for Crystal instead returns the {world = {...}} per-tile shape
+-- (a different contract, consumed directly by hasWorldTileset/
+-- worldGroupAt/worldGroupColors/spriteObp, never through pack()), and
+-- Crystal's own data.palettes is {tileGroups, byTime} -- neither shape
+-- has `.palettes`/`.pokemon`, so returning either here would crash every
+-- caller.  Short-circuit to nil instead: every caller already treats a
+-- nil pack as "no named colorization available" and degrades safely
+-- (pal/monPal/monPalName return nil/MEWMON, BattleState leaves images
+-- unrecolored and disables its color-battle path).
 function PaletteFX.pack(data)
+  if GameVersion.isCrystal() then return nil end
   if PaletteFX.usesGbcPack() then
     local g = PaletteFX.gbcPack()
     if g then return g end
@@ -596,7 +622,12 @@ function PaletteFX.monPalName(data, species, transformed)
   end
   local p = PaletteFX.pack(data)
   if p and p.pokemon[species] then return p.pokemon[species] end
-  if data and data.palettes and data.palettes.pokemon[species] then
+  -- Crystal's data.palettes is {tileGroups, byTime} (Task 3's shape, no
+  -- `.pokemon` map at all), so this chain needs the same nil-check on
+  -- `.pokemon` itself that romNamedPal above already does for `.palettes` --
+  -- without it, `data.palettes.pokemon[species]` indexes a nil field.
+  if data and data.palettes and data.palettes.pokemon
+     and data.palettes.pokemon[species] then
     return data.palettes.pokemon[species]
   end
   return "MEWMON"
