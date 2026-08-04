@@ -51,6 +51,7 @@ function Game:load()
   Renderer:init()
 
   require("src.render.Font").load(Data)
+  require("src.render.PaletteFX").setData(Data)
   -- menu cursor/border/geometry constants; field.theme restyles them
   require("src.ui.Theme").load(Data)
   -- the engine's own text, after the merge so a translation mod's catalog

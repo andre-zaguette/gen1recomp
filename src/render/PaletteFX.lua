@@ -21,6 +21,33 @@ local shader -- false = unavailable (headless / no shader support)
 local gbcPack -- false = missing; nil = not loaded yet
 local yellowPack -- false = missing; nil = not loaded yet
 
+-- Crystal's real-color pack reads live, per-session ROM-extracted data
+-- (unlike RED++'s static committed pack below, which is fully self-
+-- contained), so it needs a reference to the current Game.data -- set
+-- once at boot (src/core/Game.lua, alongside Font.load(Data)).
+local activeData = false
+local crystalPackCache, crystalPackBucket
+
+function PaletteFX.setData(data)
+  activeData = data
+  crystalPackCache, crystalPackBucket = nil, nil
+end
+
+-- Crystal's own morn/day/nite boundaries (engine/rtc/rtc.asm,
+-- constants/misc_constants.asm: MORN_HOUR=4, DAY_HOUR=10, NITE_HOUR=18).
+-- hour is an optional 0-23 override (tests pass one directly, matching
+-- this project's existing os.time()-injection convention -- see
+-- src/mods/ModIndex.lua's `now = now or os.time()`); omitted, this reads
+-- the host's real-world clock, mirroring how a real GBC cartridge's RTC
+-- (battery-backed, free-running on real elapsed time) works, not a
+-- simulated or saved in-game clock.
+function PaletteFX.timeOfDay(hour)
+  hour = hour or os.date("*t").hour
+  if hour >= 4 and hour < 10 then return "morn" end
+  if hour >= 10 and hour < 18 then return "day" end
+  return "nite"
+end
+
 -- Cycle order matches OptionsMenu / hotkey 2.  The three real colorizations
 -- come first (OG RED/BLUE/YELLOW = GBC hardware, SGB = per-map Super Game Boy,
 -- ADVANCED = pokered-gbc per-tile), then the DMG-shade novelty modes.
@@ -285,8 +312,45 @@ function PaletteFX.whole(colors)
   return PaletteFX.zone(colors, 0, 0, 19, 17)
 end
 
--- Red++ / pokered-gbc SuperPalette pack (committed; optional if absent).
-function PaletteFX.gbcPack()
+-- Red++ / pokered-gbc SuperPalette pack (committed; optional if absent) --
+-- OR, for Crystal, the player's own ROM-extracted real color data,
+-- resolved to the current (or test-injected) time-of-day bucket.  Every
+-- consumer of this function (hasWorldTileset/worldGroupAt/
+-- worldGroupColors/spriteObp below) reads whatever shape it returns
+-- without caring which branch produced it -- Crystal's pack just needs
+-- the same {world = {tileGroups, groupColors, roofGroup, spriteAssignment,
+-- spritePalettes}} shape RED++'s does.
+--
+-- bucket is an optional override (tests pass one directly); omitted,
+-- reads PaletteFX.timeOfDay()'s real-clock bucket.  Cached per bucket so
+-- repeated calls within one frame (many tiles share this) don't rebuild
+-- the wrapper table -- setData/checkTimeOfDay clear the cache when it's
+-- actually stale.
+function PaletteFX.gbcPack(bucket)
+  if GameVersion.isCrystal() then
+    local paletteData = activeData and activeData.palettes
+    if not paletteData then return nil end
+    bucket = bucket or PaletteFX.timeOfDay()
+    if crystalPackCache and crystalPackBucket == bucket then
+      return crystalPackCache
+    end
+    local byTime = paletteData.byTime[bucket] or paletteData.byTime.day
+    crystalPackCache = { world = {
+      tileGroups = { TILESET_JOHTO = paletteData.tileGroups },
+      groupColors = { TILESET_JOHTO = byTime.groupColors },
+      -- Crystal has no Gen1-style route/town roof-recolor exception; an
+      -- empty (not nil) table makes worldGroupColors' `w.roofGroup[tileset]`
+      -- index resolve to nil safely instead of erroring on a missing table.
+      roofGroup = {},
+      -- Chris is the only overworld sprite this skeleton extracts, always
+      -- resolving to spritePalettes' one entry (see spriteObp's
+      -- ChrisSpriteGFX case, Step 5 below).
+      spriteAssignment = { [0] = 0 },
+      spritePalettes = { [0] = byTime.spriteColor },
+    } }
+    crystalPackBucket = bucket
+    return crystalPackCache
+  end
   if gbcPack == nil then
     local ok, pack = pcall(require, "data.palettes_gbc")
     gbcPack = ok and pack or false
@@ -306,7 +370,7 @@ end
 
 function PaletteFX.usesGbcPack(mode)
   mode = mode or PaletteFX.mode
-  return mode == "redpp"
+  return mode == "redpp" or GameVersion.isCrystal()
 end
 
 -- Yellow's authentic GBC look is CGBBasePalettes (per-map), not a boot-ROM
@@ -677,7 +741,8 @@ function PaletteFX.spriteObp(spriteDef, seed)
   -- SpriteSheetPointerTable, so their source has no bracketed index;
   -- they wear the player's OBP palette (spriteAssignment[0]).
   if not idx and (src:find("RedBikeSprite", 1, true)
-                  or src:find("SurfingPikachuSprite", 1, true)) then
+                  or src:find("SurfingPikachuSprite", 1, true)
+                  or src:find("ChrisSpriteGFX", 1, true)) then
     idx = 0
   end
   local group = idx and w.spriteAssignment[idx]

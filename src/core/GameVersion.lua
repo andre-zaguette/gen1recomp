@@ -88,6 +88,10 @@ function GameVersion.isYellow()
   return GameVersion.current == "yellow"
 end
 
+function GameVersion.isCrystal()
+  return GameVersion.current == "crystal"
+end
+
 -- Metadata for a version id, defaulting to the active one.
 function GameVersion.info(id)
   return GameVersion.VERSIONS[id or GameVersion.current]
