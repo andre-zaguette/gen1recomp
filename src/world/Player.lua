@@ -31,15 +31,24 @@ local TURN_FRAMES = 4
 -- overlay gets a longer window than a physical pad (#415).
 local TOUCH_TURN_FRAMES = 8
 
-function Player.new(data, cx, cy, facing)
+function Player.new(data, cx, cy, facing, save)
   local self = setmetatable({}, Player)
   self.stepFrames = FieldDefaults.world(data, "stepFrames") or STEP_FRAMES
   self.bikeStepFrames = FieldDefaults.world(data, "bikeStepFrames")
   self.turnFrames = FieldDefaults.world(data, "turnFrames") or TURN_FRAMES
   -- field.playerSprites: which sprite ids the player wears on foot, on the
   -- water and on the bicycle (LoadPlayerSpriteGraphics /
-  -- LoadSurfingPlayerSpriteGraphics, home/overworld.asm)
+  -- LoadSurfingPlayerSpriteGraphics, home/overworld.asm). walkAlt is a
+  -- second, gender-alternate walk sprite (Crystal's Kris, alongside the
+  -- default Chris) -- no Gen1 version has ever populated it, and no
+  -- existing save has save.player.gender set, so this is a pure addition:
+  -- every pre-existing call/save keeps resolving the same walkId it
+  -- always has.
   local walkId = FieldDefaults.fieldValue(data, "playerSprites", "walk")
+  if save and save.player and save.player.gender == "girl" then
+    local altId = FieldDefaults.fieldValue(data, "playerSprites", "walkAlt")
+    if altId and data.sprites[altId] then walkId = altId end
+  end
   local surfId = FieldDefaults.fieldValue(data, "playerSprites", "surf")
   local surfPikaId = FieldDefaults.fieldValue(data, "playerSprites", "surfPikachu")
   local bikeId = FieldDefaults.fieldValue(data, "playerSprites", "bike")

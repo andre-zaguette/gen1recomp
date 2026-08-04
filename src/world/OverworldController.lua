@@ -367,7 +367,7 @@ function OverworldState:setMap(mapId, x, y, facing, opts)
     self.player.moving = false
     self.player.targetX, self.player.targetY = nil, nil
   else
-    self.player = Player.new(Game.data, x, y, facing)
+    self.player = Player.new(Game.data, x, y, facing, Game.save)
   end
   -- boot only: the original persists the surf state.  wWalkBikeSurfState
   -- (ram/wram.asm) lives inside wMainDataStart..wMainDataEnd, which
