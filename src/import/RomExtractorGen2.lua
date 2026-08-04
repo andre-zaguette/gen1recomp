@@ -16,6 +16,20 @@ RomExtractorGen2.__index = RomExtractorGen2
 
 local STAGE_COUNT = 3
 
+-- The other 13 modules Data:load()'s MODULES gate requires that this
+-- skeleton's scope (New Bark Town's map/tileset/player sprite only, see
+-- the spec's non-goals) never populates.  `field` gets real boot content
+-- (extractField, below); the rest are bare empty tables -- confirmed by
+-- reading Data:seedDefaults, FieldDefaults.seed, SsAnneLayout.apply and
+-- Font.load directly that every one of them tolerates emptiness (Task 10
+-- brief).  Not invented placeholder content: an empty table is the honest
+-- "not extracted yet".
+local STUB_MODULES = {
+  "constants", "text", "text_pointers", "trainer_headers", "font",
+  "pokemon", "moves", "items", "type_chart", "trainers", "encounters",
+  "battle_anims",
+}
+
 -- COLL_* -> CollisionPermissionTable base permission, ported verbatim from
 -- tools/extract_gen2/collision.py (Task 4 Step 1b) -- keep the two
 -- byte-for-byte identical. Source: pret/pokecrystal
@@ -208,11 +222,81 @@ function RomExtractorGen2:extractMap()
   return out
 end
 
+-- field.boot spawns straight into New Bark Town instead of Gen1's
+-- REDS_HOUSE_2F / Oak-speech opening: this skeleton has no starter roster
+-- or dialogue text (spec non-goals), so NEW GAME has nowhere to run that
+-- scene and must land the player standing somewhere walkable instead.
+--
+-- The spawn tile is newBarkTown.warps[1]'s own (x, y) rather than a
+-- hand-picked literal: this sandbox has neither a love binary nor an
+-- already-generated crystal/data/generated/maps.lua to check a guessed
+-- coordinate against (Task 10 brief), but a warp tile is walkable by
+-- construction -- it is a door/edge tile the ROM's own MapEvents table
+-- names, and the player has to be able to walk onto it to trigger it, so
+-- COLLISION_PERMISSION never marks one a wall.  Deriving the coordinate
+-- from the map this extractor just decoded is verified against the real
+-- ROM on every import, which a hardcoded guess could not be here.
+function RomExtractorGen2:extractField(newBarkTown)
+  local spawn = assert(newBarkTown.warps[1],
+    "NewBarkTown has no warps to derive a walkable spawn tile from")
+  local out = {
+    boot = {
+      startMap = "NEW_BARK_TOWN", startX = spawn.x, startY = spawn.y,
+      startFacing = "down",
+      -- skip the Oak-speech-equivalent starter-selection screen (out of
+      -- scope, no species data extracted); splash/title stay on the
+      -- BOOT_DEFAULTS fallback (Game.lua's bootScreens(self).X or
+      -- <default> reads), confirmed to need no Crystal-specific data.
+      screens = { newGame = "NoOpScreen" },
+    },
+    -- These three data.field.* keys are read with no nil-guard on the
+    -- boot -> walk path (unlike everything FieldDefaults.FIELD already
+    -- covers, which is all defensively guarded) -- confirmed by reading
+    -- every data.field.<key> access site in src/world, src/render and
+    -- src/ui directly, not by inspection of this list alone:
+    --   * flyWarps: OverworldController.lua:341, `if
+    --     Game.data.field.flyWarps[mapId] then` inside setMap, which
+    --     runs on every map load including the very first one
+    --     (OverworldState:enter -> setMap(..., {via="boot"})) -- this is
+    --     the crash the human partner hit (self.stack traced through to
+    --     setMap/onNewGame).
+    --   * waterTilesets: OverworldController.lua:2263's
+    --     `ipairs(Game.data.field.waterTilesets)` inside
+    --     tilesetHasWater(), called from setMap's boot-only surf-state
+    --     restore (line ~397) on every fresh save (a new save's
+    --     save.player carries no `surfing` key yet) -- the very next
+    --     unguarded read after flyWarps in the same boot call.
+    --   * ledges: OverworldController.lua:1275's
+    --     `ipairs(Game.data.field.ledges)` inside checkLedgeHop(),
+    --     called from handleInput on the second press of any held
+    --     direction (once facing it and not already moving) -- hit by
+    --     the first deliberate step the player takes.
+    -- Empty tables are the correct "not extracted" value at each read
+    -- site (dictionary keyed by map id, and two flat lists respectively)
+    -- -- verified by reading each guarded sibling call site (e.g.
+    -- OverworldController.lua:3838's `(Game.data.field.flyWarps or
+    -- {})[out.id]`) that already treats absence the same way.
+    flyWarps = {},
+    waterTilesets = {},
+    ledges = {},
+  }
+  self:write("field", out)
+  return out
+end
+
+function RomExtractorGen2:extractStubs()
+  for _, name in ipairs(STUB_MODULES) do
+    self:write(name, {})
+  end
+end
+
 function RomExtractorGen2:run()
   local results = {}
   results.sprites = self:extractSprite()
   results.tilesets = self:extractTileset()
   results.maps = self:extractMap()
+  results.field = self:extractField(results.maps.NEW_BARK_TOWN)
+  self:extractStubs()
   if self.progress then
     self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
   end
