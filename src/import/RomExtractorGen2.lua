@@ -265,6 +265,17 @@ function RomExtractorGen2:extractFont()
   return data
 end
 
+-- Fully resolved by tools/extract_gen2/palettes.py at manifest-build time
+-- (see that file's docstring for why this is source-derived rather than a
+-- ROM-byte read, unlike every other extractX here) -- nothing left to
+-- decode, just forward it into the generated cache under the same
+-- "palettes" name Data.lua already treats as optional for Gen1.
+function RomExtractorGen2:extractPalettes()
+  local data = self.manifest.palettes
+  self:write("palettes", data)
+  return data
+end
+
 -- field.boot spawns straight into New Bark Town instead of Gen1's
 -- REDS_HOUSE_2F / Oak-speech opening: this skeleton has no starter roster
 -- or dialogue text (spec non-goals), so NEW GAME has nowhere to run that
@@ -389,6 +400,7 @@ function RomExtractorGen2:run()
   results.tilesets = self:extractTileset()
   results.maps = self:extractMap()
   results.font = self:extractFont()
+  results.palettes = self:extractPalettes()
   results.field = self:extractField(results.maps.NEW_BARK_TOWN)
   self:extractStubs()
   if self.progress then
