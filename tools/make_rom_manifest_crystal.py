@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract.util import parse_number, read_asm, split_args  # noqa: E402
 from rom_data import SymbolTable  # noqa: E402
 from extract_gen2.font import parse_charmap  # noqa: E402
+from extract_gen2.palettes import resolve as resolve_palettes  # noqa: E402
 
 CRYSTAL_SHA1 = "f2f52230b536214ef7c9924f483392993e226cfb"
 
@@ -98,6 +99,7 @@ def main():
         "symbols": embed_symbols(symbols),
         "newBarkTown": parse_new_bark_town(pokecrystal),
         "fontCharmap": parse_charmap(pokecrystal),
+        "palettes": resolve_palettes(pokecrystal),
     }
     with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
