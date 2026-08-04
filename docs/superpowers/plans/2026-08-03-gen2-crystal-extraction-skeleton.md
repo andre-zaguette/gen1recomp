@@ -1461,6 +1461,104 @@ In the launcher, select the "Crystal (alpha)" tab, choose `roms/Pokemon - Crysta
 
 Compare `crystal/data/generated/maps.lua`'s `NEW_BARK_TOWN.warps` (4 entries expected) and the rendered tileset PNG against known New Bark Town structure (professor's lab, player's house, rival's house, and the routes to the west/east) — if the extracted warp count or tileset art doesn't match, work backward from which Task's byte offsets are wrong (most likely Task 4/5 Step 2b's event-row parsing or Task 3's macro assumptions) and fix that task, then re-run from Task 8 Step 1.
 
+**Found during this step (real bug, not anticipated by the plan):** attempting to import Crystal crashed the launcher —
+
+```
+src/import/LauncherView.lua:54: attempt to index local 'c' (a nil value)
+```
+
+Root cause, confirmed by reading the code: `src/import/LauncherView.lua`'s tab bar is a **hardcoded array of exactly 3 game tabs** (`red`/`blue`/`yellow`, plus `mods`/`find`) at the `local tabs = { ... }` literal inside `buildHeader` (around line 565) — Task 6 only wired Crystal into `GameVersion.lua`/`RomImporter.lua`'s *import logic*, never into this separate, hand-maintained UI tab list, so there is no Crystal tab button to click at all. Separately, `RomImporter.lua:893-895` already sets `self.tab = version` on ROM drop by SHA-1 regardless of whether a tab button exists for it, so dropping the Crystal ROM flips the active tab to `"crystal"` programmatically and the (correctly data-driven) ROM-card panel then tries to render a Crystal card — hitting `local accent = version == "yellow" and "gold" or version` (line 683) → `accent = "crystal"` → `C("crystal")` → `PAL["crystal"]` is nil → crash. A second, non-crashing but still wrong bug in the same area: the "N of 3 ready" filler text (line 633) hardcodes "3", which is now wrong with 4 versions.
+
+Fix this now, before re-attempting Step 1-3:
+
+### Task 9: Wire Crystal into the launcher tab bar
+
+**Files:**
+- Modify: `src/import/LauncherView.lua`
+
+**Interfaces:**
+- Consumes: `GameVersion.ORDER` (existing, already includes `"crystal"` since Task 6).
+- No other task depends on this; it only makes the already-correct, already-data-driven ROM-card rendering (which already works for Crystal, per Task 8 Step 1's crash trace showing it *tried* to render) reachable and crash-free.
+
+- [ ] **Step 1: Add a `crystal` accent color to `PAL`**
+
+In `src/import/LauncherView.lua`, the `PAL` table (around line 30-47), add a new entry alongside `red`/`blue`/`gold` — a cyan distinct from Crystal's siblings, matching the games's own icy-blue branding:
+
+```lua
+local PAL = {
+  bg        = { 10, 15, 34 },
+  card      = { 16, 23, 48 },
+  rowBg     = { 9, 14, 34 },
+  border    = { 120, 150, 220 },
+  red       = { 255, 60, 72 },
+  blue      = { 70, 150, 255 },
+  gold      = { 255, 203, 5 },
+  crystal   = { 125, 224, 224 },
+  green     = { 62, 224, 138 },
+  -- ... (rest unchanged)
+```
+
+- [ ] **Step 2: Add a `crystal` tab to the hardcoded `tabs` array**
+
+In `buildHeader`, the `local tabs = { ... }` literal (around line 565-571), add a fourth game tab between `yellow` and `mods`:
+
+```lua
+  local tabs = {
+    { id = "red", letter = "R", col = "red", ink = "white", labelText = Strings("RED") },
+    { id = "blue", letter = "B", col = "blue", ink = "white", labelText = Strings("BLUE") },
+    { id = "yellow", letter = "Y", col = "gold", ink = "bg", labelText = Strings("YELLOW") },
+    { id = "crystal", letter = "C", col = "crystal", ink = "bg", labelText = Strings("CRYSTAL") },
+    { id = "mods", icon = imp._modsIcon, col = "chipModTop", ink = "white", labelText = Strings("MODS") },
+    { id = "find", icon = imp._findIcon, col = "chipModTop", ink = "white", labelText = Strings("FIND MODS") },
+  }
+```
+
+(`ink = "bg"` matches `yellow`'s choice — both `gold` and `crystal` are light fills where dark text reads better than white; the letter-glyph ink-color branch at line ~604 already handles `ink == "bg"` generically, so no other code changes are needed for the glyph to render legibly.)
+
+- [ ] **Step 3: Make the "N of _ ready" count dynamic**
+
+Replace the hardcoded literal (around line 633):
+
+```lua
+  label(bar, Strings("%d of 3 ready", ready), 12 * m.s + 2, C("gray"),
+    { textWrap = false })
+```
+
+with:
+
+```lua
+  local totalVersions = #GameVersion.ORDER
+  label(bar, Strings("%d of %d ready", ready, totalVersions), 12 * m.s + 2, C("gray"),
+    { textWrap = false })
+```
+
+(`Strings.get`'s `string.format(text, ...)` call already supports multiple `%d` substitutions — confirmed by reading `src/core/Strings.lua:90-113` — so this is a direct drop-in, no other `Strings` changes needed.)
+
+- [ ] **Step 4: Manually verify**
+
+There's no automated test for this file (matches the established pattern for `LauncherView.lua`, which has no test coverage anywhere in this codebase today). Verification is Task 8's own retry: run `love .` in this worktree, confirm a 4th "C" tab appears in the tab bar alongside R/B/Y, confirm the "N of 4 ready" text (not "N of 3"), and confirm dropping the Crystal ROM no longer crashes — proceed to Task 8 Step 1-3 as originally written.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/import/LauncherView.lua
+git commit -m "$(cat <<'EOF'
+Add Crystal to the launcher's tab bar and accent palette
+
+Task 6 wired Crystal into GameVersion.lua/RomImporter.lua's import
+logic, but LauncherView.lua's tab bar is a separately hand-maintained
+list that was never updated -- so there was no Crystal tab to click,
+and dropping the ROM (which sets the active tab by SHA-1 regardless)
+crashed trying to color a ROM card with a nonexistent PAL entry.
+Found during Task 8's real-ROM manual verification.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 - [ ] **Step 4: If everything above passes, update the spec's status**
 
 Edit `docs/superpowers/specs/2026-08-03-gen2-crystal-extraction-skeleton-design.md`'s `Status:` line from "approved for planning" to "skeleton verified against real ROM, <today's date>", and commit:
