@@ -1559,7 +1559,84 @@ EOF
 
 ---
 
-- [ ] **Step 4: If everything above passes, update the spec's status**
+**Found during Task 9 Step 4's retry of Task 8 (real bug, not anticipated by the plan):** pressing Play after a successful Crystal import crashes with:
+
+```
+src/core/Game.lua:388: attempt to index field 'stack' (a nil value)
+```
+
+Root cause, confirmed by reading the code: `src/core/Data.lua`'s `MODULES` list (line 8) unconditionally requires 16 generated data modules — `constants, maps, tilesets, text, text_pointers, trainer_headers, font, sprites, pokemon, moves, items, type_chart, trainers, encounters, field, battle_anims` — and `error()`s on the first one that fails to `require` (`Data.lua:209-223`). `RomExtractorGen2.lua` (Task 5) only ever writes 3 of them: `maps`, `tilesets`, `sprites` (`self:write(...)` at lines 91, 147, 206) — by design, since the spec's non-goals exclude Pokédex/moves/items/battle/text data. So `Data:load()` throws on `constants` (the first missing module), before `Game:load()` reaches `self.stack = StateStack` (`Game.lua:60`).
+
+The crash you actually see is one step downstream of that: `LauncherView.lua:211` (`RomImporter:play` → `onComplete` → `main.lua`'s `bootGame` → `Game:load()`) runs inside a `pcall` in the click-dispatch path, which swallows the `Data:load()` error silently. But `main.lua` had already set `Importer = nil` and torn down the launcher UI before the throw, so every frame afterward, `love.draw()` falls through to `Game:draw()` on a `Game` object whose `load()` never finished — producing the visible `self.stack` nil crash, repeated every frame.
+
+Fix this now, before re-attempting Task 8 Step 1-3 again:
+
+### Task 10: Make Crystal's generated cache satisfy Data:load()'s module gate, and boot straight into New Bark Town
+
+**Files:**
+- Modify: `src/import/RomExtractorGen2.lua`
+- Add: a minimal pass-through UI screen (see Step 3)
+
+**Interfaces:**
+- Consumes: `src/core/Data.lua`'s `MODULES` list (unchanged — this task supplies what it demands, it does not weaken the gate); `src/world/FieldDefaults.lua`'s `seed()` (confirmed pure fill-if-absent, safe against a Kanto-map-free dataset); `src/world/SsAnneLayout.lua`'s `apply()` (confirmed to no-op safely when `SS_ANNE_1F`/`SS_ANNE_1F_ROOMS` are absent from `maps`); `src/ui/Screens.lua`'s `push(game, id, ...)` contract (a screen module's `new(game, onDone)` calls `onDone()` after popping itself — confirmed against `src/ui/OakSpeech.lua:235,551`).
+- Produces: `crystal/data/generated/{constants,text,text_pointers,trainer_headers,font,pokemon,moves,items,type_chart,trainers,encounters,field,battle_anims}.lua`, all minimal-but-valid-shaped stubs; a `field.lua` whose `boot` table points spawn at New Bark Town and skips the Oak-speech-equivalent starter-selection screen.
+
+Confirmed safe by reading the source directly (do not re-derive from scratch, but do verify nothing has drifted before relying on it):
+- `Data:seedDefaults()` (`Data.lua:92-148`) only additively fills gaps (`CONSTANT_DEFAULTS`, `BOOT_DEFAULTS`, `FieldDefaults.seed`) and computes `constants.dexSize` by scanning `self.pokemon` (safe at 0 entries → `dexSize = 0`, `dexDigits = 3`).
+- `Data:seedCinnabarGymTrainerHeaders` / `Data:seedFightingDojoKarateMaster` only require `self.trainer_headers` to be a non-nil table; they add a couple of inert Kanto-only keys to it that nothing Crystal-related ever reads. Harmless, not worth special-casing.
+- `src/render/Font.lua`'s `Font.load(data)` (`Font.lua:38-86`) tolerates `data.font = {}` cleanly (`pagesOf`, `def.charmap or {}`, `def.border or {}` all degrade to empty) — no glyphs render, which is fine since this skeleton shows no text/dialogue.
+
+Not yet confirmed — **verify against source, do not guess**, before writing the corresponding stub or wiring:
+- Whether `src/ui/TitleState.lua` and the splash screens (`src/ui/IntroMovie.lua`, whatever `bootScreens(self).splash` defaults to) touch any `Data` field beyond what's already stubbed. If they do, either extend the relevant stub or override `field.boot.screens.splash`/`.title` too — do not add Crystal-branded splash/title art; a generic/inert screen is in scope, custom presentation is not.
+- The exact New Bark Town spawn tile: read the already-generated `crystal/data/generated/maps.lua` (from Task 8's completed import) and pick a coordinate known walkable — e.g. one of `NEW_BARK_TOWN.warps[i]`'s own `(x, y)`, which is guaranteed walkable since that's where a warp lands the player. Do not invent a coordinate without checking it against the real extracted map.
+
+- [ ] **Step 1: Write minimal stub content for the 13 modules `RomExtractorGen2` doesn't otherwise produce**
+
+In `src/import/RomExtractorGen2.lua`, alongside the existing `self:write("maps", ...)` / `self:write("tilesets", ...)` / `self:write("sprites", ...)` calls, add `self:write(name, {})` for `constants`, `text`, `text_pointers`, `trainer_headers`, `font`, `pokemon`, `moves`, `items`, `type_chart`, `trainers`, `encounters`, `battle_anims` — bare empty tables satisfy `Data:load()`'s `require` gate and every downstream read site this task's research confirmed tolerates emptiness. Do not invent placeholder entries (fake species, fake moves) — an empty table is the honest representation of "not extracted yet," matching the spec's stated non-goals.
+
+`field` is not in that bare-empty list — it needs real content, in Step 2.
+
+- [ ] **Step 2: Stamp `field.boot` to spawn in New Bark Town and skip starter selection**
+
+Still in `RomExtractorGen2.lua`, write a `field` module (`self:write("field", { boot = { ... } })`) with:
+- `startMap = "NEW_BARK_TOWN"`, `startX`/`startY` = the verified walkable coordinate from this task's research above, `startFacing = "down"`.
+- `screens = { newGame = "<the no-op screen id from Step 3>" }` — leave `splash`/`title` on the `BOOT_DEFAULTS` fallback unless Step 1's source-reading above found a reason they need overriding too.
+
+Everything else in `BOOT_DEFAULTS` (`playerName`, `rivalName`, `startMoney`, `namePresets`) is filled in for free by `Data:seedDefaults`'s fill-if-absent pass — do not duplicate those keys.
+
+- [ ] **Step 3: Add a no-op "no starter selection" screen**
+
+`Screens.push` has no built-in skip sentinel (`Screens.lua:43-63` always resolves an id and instantiates it) — `field.boot.screens.newGame` must name a real screen module. Add one (naming and exact location at the implementer's discretion, e.g. `src/ui/NoOpScreen.lua`) matching `OakSpeech.new(game, onDone)`'s contract: pop itself and call `onDone()`, with no starter selection, no dialogue, no other side effect. Confirm by reading `OakSpeech.lua` fully (not skimming) that this is the complete contract a caller depends on — `Game:makeTitleState`'s `onNewGame` (`Game.lua:139-153`) already pushes `OverworldState` before pushing this screen on top, so once this screen pops itself the player is standing in New Bark Town.
+
+- [ ] **Step 4: Manually verify**
+
+No automated test covers this (real-ROM boot, like Task 8, is manual-only per the spec's own Testing section). Run `love .`, select Crystal, import if needed, press Play, press NEW GAME at the title screen. Expected: no crash, no starter-selection screen, player spawns standing in New Bark Town on a walkable tile — then proceed to Task 8 Step 2-3's visual/collision/warp-count checks as originally written.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/import/RomExtractorGen2.lua src/ui/<the-new-screen-file>.lua
+git commit -m "$(cat <<'EOF'
+Make Crystal's generated cache satisfy Data:load()'s module gate
+
+Data:load() requires 16 generated modules; RomExtractorGen2 only
+wrote 3 (maps, tilesets, sprites), so Data:load() threw on the
+missing 'constants' module every time -- silently swallowed by
+LauncherView's click-dispatch pcall, surfacing only as a nil
+self.stack crash in Game:draw one frame later. Stub the other 13
+with empty tables (all confirmed tolerant of emptiness by reading
+Data.lua, FieldDefaults.lua, SsAnneLayout.lua, and Font.lua directly)
+and stamp field.boot to spawn in New Bark Town through a no-op
+screen instead of Gen1's species-driven Oak speech.
+
+Found during Task 9's retry of Task 8's manual verification.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+- [ ] **Step 6: If everything above passes, update the spec's status**
 
 Edit `docs/superpowers/specs/2026-08-03-gen2-crystal-extraction-skeleton-design.md`'s `Status:` line from "approved for planning" to "skeleton verified against real ROM, <today's date>", and commit:
 
