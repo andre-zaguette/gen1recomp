@@ -231,8 +231,8 @@ class ResolveTest(unittest.TestCase):
             _write_fixture(tmp)
             result = palettes.resolve(tmp)
         self.assertEqual(result["byTime"]["morn"]["spriteColor"][0], [8, 8, 8])
-        self.assertEqual(result["byTime"]["day"]["spriteColor"][0], [89, 89, 89])
-        self.assertEqual(result["byTime"]["nite"]["spriteColor"][0], [172, 172, 172])
+        self.assertEqual(result["byTime"]["day"]["spriteColor"][0], [90, 90, 90])
+        self.assertEqual(result["byTime"]["nite"]["spriteColor"][0], [173, 173, 173])
 
     def test_dark_and_indoor_are_not_resolved(self):
         with tempfile.TemporaryDirectory() as tmp:
