@@ -3456,6 +3456,35 @@ do
   check(w ~= nil and w.def.destMap == "ROUTE_29", "New Bark Town fixture warp table intact")
 end
 
+-- Hand-built font data (not ROM-derived), matching the shape
+-- RomExtractorGen2:extractFont() produces -- proves Font.lua already
+-- consumes Gen2-shaped charmap data correctly, the same "zero engine
+-- changes" claim the map/tileset fixture above proves for map data.
+-- Reuses the map fixture's own PNG (Font.load never inspects pixel
+-- content, only the dimensions love_stub reads from the real PNG
+-- header -- see tests/love_stub.lua's pngSize).
+do
+  local Font = require("src.render.Font")
+  local fontData = {
+    image = "tests/fixture_data/assets/fix_out.png",
+    imageExtra = "tests/fixture_data/assets/fix_out.png",
+    mainBase = 0x80, extraBase = 0x60, glyphsPerRow = 16,
+    charmap = {
+      { seq = "A", code = 0x80 },
+      { seq = "B", code = 0x81 },
+      { seq = " ", code = 0x7f },
+    },
+  }
+  Font.load({ font = fontData })
+  local codes = Font.encode("AB A")
+  eq(#codes, 4, "Gen2 font fixture: 'AB A' is 4 glyphs")
+  eq(codes[1], 0x80, "Gen2 font fixture: 'A' resolves via charmap")
+  eq(codes[2], 0x81, "Gen2 font fixture: 'B' resolves via charmap")
+  eq(codes[3], 0x7f, "Gen2 font fixture: space resolves to extra-page code")
+  eq(codes[4], 0x80, "Gen2 font fixture: second 'A' resolves via charmap")
+  eq(Font.width("AB"), 16, "Gen2 font fixture: two fixed-width glyphs measure 16px")
+end
+
 -- ---------------------------------------------- the globbed tiers
 -- content_red (T3, the Red-pinned facts split out of this file),
 -- engine (T2, invariants over the fixture dataset) and modkit (T4, the
