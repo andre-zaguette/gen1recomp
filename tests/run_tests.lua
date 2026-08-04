@@ -3507,6 +3507,121 @@ do
   Font.load(Data)
 end
 
+-- Hand-built Crystal-shaped palette data (not ROM-derived), matching the
+-- shape tools/extract_gen2/palettes.py resolves and
+-- RomExtractorGen2:extractPalettes() forwards unchanged -- proves
+-- PaletteFX's gbcPack()/hasWorldTileset()/worldGroupAt()/
+-- worldGroupColors()/spriteObp() (all unmodified by this test) already
+-- resolve Gen2-shaped, time-of-day-bucketed data correctly, the same
+-- "zero further engine changes" claim the map/font fixtures above prove
+-- for their own data. Switches GameVersion to "crystal" and back, and
+-- clears PaletteFX's data reference afterward, so nothing here leaks into
+-- later checks in this file (see the font fixture block's own Font.load
+-- restore for the established precedent this follows).
+do
+  local GameVersion = require("src.core.GameVersion")
+  local PaletteFX = require("src.render.PaletteFX")
+  GameVersion.set("crystal")
+
+  local fakeTileGroups = { [0] = 2, [1] = 3 } -- tile 0 -> group 2, tile 1 -> group 3
+  local function flatColors(n)
+    -- one distinguishable {r,g,b}x4 per group, group N's color 0 = {N,N,N}
+    local out = {}
+    for g = 0, 7 do out[g + 1] = { { g, g, g }, { g, g, g }, { g, g, g }, { g, g, g } } end
+    return out
+  end
+  local fakePaletteData = {
+    tileGroups = fakeTileGroups,
+    byTime = {
+      morn = { groupColors = flatColors(), spriteColor = { { 40, 40, 40 }, { 40, 40, 40 }, { 40, 40, 40 }, { 40, 40, 40 } } },
+      day  = { groupColors = flatColors(), spriteColor = { { 50, 50, 50 }, { 50, 50, 50 }, { 50, 50, 50 }, { 50, 50, 50 } } },
+      nite = { groupColors = flatColors(), spriteColor = { { 60, 60, 60 }, { 60, 60, 60 }, { 60, 60, 60 }, { 60, 60, 60 } } },
+    },
+  }
+  PaletteFX.setData({ palettes = fakePaletteData })
+
+  check(PaletteFX.hasWorldTileset("TILESET_JOHTO"),
+    "Gen2 palette fixture: TILESET_JOHTO resolves as a known world tileset")
+  check(not PaletteFX.hasWorldTileset("TILESET_KANTO"),
+    "Gen2 palette fixture: an unrelated tileset does not")
+
+  eq(PaletteFX.worldGroupAt("TILESET_JOHTO", "NEW_BARK_TOWN", 0), 2,
+    "Gen2 palette fixture: tile 0 resolves to its extracted group")
+  eq(PaletteFX.worldGroupAt("TILESET_JOHTO", "NEW_BARK_TOWN", 1), 3,
+    "Gen2 palette fixture: tile 1 resolves to its extracted group")
+
+  -- explicit bucket override (this repo's established os.time()-injection
+  -- testability convention -- see PaletteFX.timeOfDay's own doc comment)
+  local morn = PaletteFX.gbcPack("morn")
+  -- table-valued results compared structurally (T.same), not by reference
+  -- (T.eq): gbcPack builds a fresh {r,g,b} table on every call, so eq's
+  -- `got == want` would fail even on a correct value -- see this file's
+  -- shared tests/harness.lua for the eq-vs-same distinction. Called as
+  -- T.same (not a new top-level local) -- this file's main chunk is
+  -- already at LuaJIT's 200-local ceiling.
+  T.same(morn.world.groupColors.TILESET_JOHTO[3][1], { 2, 2, 2 },
+    "Gen2 palette fixture: morn bucket resolves group 2's color")
+  local nite = PaletteFX.gbcPack("nite")
+  -- spriteObp has no bucket-override parameter of its own -- it always
+  -- resolves through gbcPack() with no argument, which falls back to
+  -- PaletteFX.timeOfDay()'s real-clock read (see gbcPack's own doc
+  -- comment above). Stub os.date for just this call (save/replace/restore,
+  -- the same idiom the font fixture block above uses for Font.drawCode) so
+  -- this assertion is deterministic regardless of the wall-clock hour this
+  -- suite happens to run at.
+  local savedDate = os.date
+  os.date = function(fmt) return fmt == "*t" and { hour = 20 } or savedDate(fmt) end
+  local colors, group = PaletteFX.spriteObp({ source = "ROM:ChrisSpriteGFX" }, "seed")
+  os.date = savedDate
+  eq(group, 0, "Gen2 palette fixture: Chris resolves to sprite group 0")
+  T.same(colors[1], { 60, 60, 60 },
+    "Gen2 palette fixture: Chris's sprite color follows the current (nite) bucket")
+  T.same(nite.world.groupColors.TILESET_JOHTO[4][1], { 3, 3, 3 },
+    "Gen2 palette fixture: nite bucket resolves group 3's color, independent of morn's cache")
+
+  -- morn/day/nite hour-boundary math (engine/rtc/rtc.asm: 4/10/18)
+  eq(PaletteFX.timeOfDay(3), "nite", "Gen2 palette fixture: hour 3 is nite")
+  eq(PaletteFX.timeOfDay(4), "morn", "Gen2 palette fixture: hour 4 is morn")
+  eq(PaletteFX.timeOfDay(9), "morn", "Gen2 palette fixture: hour 9 is still morn")
+  eq(PaletteFX.timeOfDay(10), "day", "Gen2 palette fixture: hour 10 is day")
+  eq(PaletteFX.timeOfDay(17), "day", "Gen2 palette fixture: hour 17 is still day")
+  eq(PaletteFX.timeOfDay(18), "nite", "Gen2 palette fixture: hour 18 is nite")
+
+  PaletteFX.setData(nil)
+  GameVersion.set("red")
+end
+
+-- Regression test for the string-vs-numeric tileGroups key bug Task 4's
+-- review caught: manifest.palettes.tileGroups arrives keyed by STRING tile
+-- ids (JSON always stringifies object keys, and src/link/Json.lua does not
+-- convert them back), so RomExtractorGen2:extractPalettes() re-keys them to
+-- numbers before writing data/generated/palettes.lua (see that function's
+-- own doc comment in src/import/RomExtractorGen2.lua). Exercises the
+-- extractor directly with a minimal fake `self`, instead of a full ROM
+-- fixture, since only this one re-keying behavior is in scope here.
+do
+  local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+  local written = nil
+  local fakeSelf = {
+    manifest = {
+      palettes = {
+        -- mimics a real JSON-decoded manifest: object keys always arrive
+        -- as strings, never numbers.
+        tileGroups = { ["0"] = 2, ["5"] = 3 },
+        byTime = {},
+      },
+    },
+    write = function(self, name, value) written = value end,
+  }
+  local result = RomExtractorGen2.extractPalettes(fakeSelf)
+
+  eq(result.tileGroups[0], 2, "extractPalettes: string key \"0\" normalized to numeric key 0")
+  eq(result.tileGroups[5], 3, "extractPalettes: string key \"5\" normalized to numeric key 5")
+  check(result.tileGroups["0"] == nil,
+    "extractPalettes: no leftover string key \"0\" survives normalization")
+  check(written == result, "extractPalettes: normalized table is what gets written")
+end
+
 -- ---------------------------------------------- the globbed tiers
 -- content_red (T3, the Red-pinned facts split out of this file),
 -- engine (T2, invariants over the fixture dataset) and modkit (T4, the
