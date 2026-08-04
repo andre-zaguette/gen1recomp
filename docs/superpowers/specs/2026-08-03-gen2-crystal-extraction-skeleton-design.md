@@ -1,6 +1,6 @@
 # Gen2 (Crystal) ROM Extraction Pipeline — Walking Skeleton
 
-Status: approved for planning
+Status: skeleton verified against real ROM, 2026-08-03
 Date: 2026-08-03
 
 ## Context
