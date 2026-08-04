@@ -1,6 +1,8 @@
 -- src/import/RomExtractorGen2.lua
 -- Gen2 (Crystal) runtime extractor, scoped to New Bark Town: map, the
--- TILESET_JOHTO tileset, and the player (Chris) overworld sprite.
+-- TILESET_JOHTO tileset, the player (Chris) overworld sprite, and the
+-- font (glyphs + charmap) used to draw the engine's own hardcoded UI
+-- strings (title screen, menus).
 -- Mirrors src/import/RomExtractor.lua's shape and helper usage; ported
 -- from tools/build_rom_data_gen2.py (Task 4) -- keep the two in sync if
 -- either changes. See docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
@@ -14,18 +16,18 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 3
+local STAGE_COUNT = 4
 
--- The other 13 modules Data:load()'s MODULES gate requires that this
--- skeleton's scope (New Bark Town's map/tileset/player sprite only, see
--- the spec's non-goals) never populates.  `field` gets real boot content
--- (extractField, below); the rest are bare empty tables -- confirmed by
--- reading Data:seedDefaults, FieldDefaults.seed, SsAnneLayout.apply and
--- Font.load directly that every one of them tolerates emptiness (Task 10
--- brief).  Not invented placeholder content: an empty table is the honest
--- "not extracted yet".
+-- The other 12 modules Data:load()'s MODULES gate requires that this
+-- skeleton's scope (New Bark Town's map/tileset/player sprite/font
+-- only, see the spec's non-goals) never populates.  `field` gets real
+-- boot content (extractField, below); the rest are bare empty tables --
+-- confirmed by reading Data:seedDefaults, FieldDefaults.seed,
+-- SsAnneLayout.apply and Font.load directly that every one of them
+-- tolerates emptiness (Task 10 brief).  Not invented placeholder
+-- content: an empty table is the honest "not extracted yet".
 local STUB_MODULES = {
-  "constants", "text", "text_pointers", "trainer_headers", "font",
+  "constants", "text", "text_pointers", "trainer_headers",
   "pokemon", "moves", "items", "type_chart", "trainers", "encounters",
   "battle_anims",
 }
@@ -105,6 +107,45 @@ function RomExtractorGen2:extractSprite()
   self:write("sprites", out)
   self:tick("Player sprite", 1, 1)
   return out
+end
+
+-- Font: 128 tiles, 128x64px, 1bpp -- codes $80-$FF (both cases + digits,
+-- confirmed against constants/charmap.asm during planning). FontExtra: 32
+-- tiles, 128x16px, 2bpp -- codes $60-$7F (space, quotes, the box-drawing
+-- border glyphs Font.DEFAULT_BORDER already expects at $79-$7E). Unlike
+-- Gen1 (whose font_extra.png is TextBoxGraphics plus a separate
+-- Pokedex-tile patch), Crystal ships this whole range as one INCBIN, so
+-- there is no patch step.
+function RomExtractorGen2:extractFont()
+  self:beginStage("Font")
+  local main = self:symbol("Font")
+  local raw = self.rom:bytes(main.bank, main.address, 128 * 8)
+  local image = ImageWriter.decode1bpp(raw, 128, 64, true)
+  self:save(image, "fonts/font.png")
+  self:tick("Font", 1, 2)
+
+  local extra = self:symbol("FontExtra")
+  local shaded = ImageWriter.decode2bpp(
+    self.rom:bytes(extra.bank, extra.address, 32 * 16), 128, 16)
+  local extraImage = ImageWriter.blank(128, 16, 0, 0, 0, 0)
+  for y = 0, 15 do
+    for x = 0, 127 do
+      local r = shaded:getPixel(x, y)
+      if r < 0.5 then extraImage:setPixel(x, y, 0, 0, 0, 1) end
+    end
+  end
+  self:save(extraImage, "fonts/font_extra.png")
+  self:tick("Font", 2, 2)
+
+  local data = {
+    source = "ROM:Font, FontExtra",
+    image = "assets/generated/fonts/font.png",
+    imageExtra = "assets/generated/fonts/font_extra.png",
+    mainBase = 0x80, extraBase = 0x60, glyphsPerRow = 16,
+    charmap = self.manifest.fontCharmap,
+  }
+  self:write("font", data)
+  return data
 end
 
 function RomExtractorGen2:extractTileset()
@@ -345,6 +386,7 @@ function RomExtractorGen2:run()
   results.sprites = self:extractSprite()
   results.tilesets = self:extractTileset()
   results.maps = self:extractMap()
+  results.font = self:extractFont()
   results.field = self:extractField(results.maps.NEW_BARK_TOWN)
   self:extractStubs()
   if self.progress then
