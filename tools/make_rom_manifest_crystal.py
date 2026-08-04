@@ -28,6 +28,7 @@ REQUIRED_SYMBOLS = (
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
     "ChrisSpriteGFX",
+    "KrisSpriteGFX",
     "Font",
     "FontExtra",
 )

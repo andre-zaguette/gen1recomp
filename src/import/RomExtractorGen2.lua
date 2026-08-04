@@ -95,14 +95,30 @@ end
 
 function RomExtractorGen2:extractSprite()
   self:beginStage("Player sprite")
-  local symbol = self:symbol("ChrisSpriteGFX")
-  local raw = self.rom:bytes(symbol.bank, symbol.address, 16 * 96 / 4)
-  local image = ImageWriter.decode2bpp(raw, 16, 96, true)
-  self:save(image, "sprites/chris.png")
+  local chris = self:symbol("ChrisSpriteGFX")
+  local chrisRaw = self.rom:bytes(chris.bank, chris.address, 16 * 96 / 4)
+  local chrisImage = ImageWriter.decode2bpp(chrisRaw, 16, 96, true)
+  self:save(chrisImage, "sprites/chris.png")
+
+  -- Kris: the girl protagonist, identical sheet shape to Chris (same
+  -- overworld_sprite macro, 12 tiles, 2bpp) -- only her default in-ROM
+  -- palette differs (PAL_OW_BLUE vs PAL_OW_RED), which this project's own
+  -- real-color palette work already resolves independently of the ROM's
+  -- own default, so it needs no special handling here.
+  local kris = self:symbol("KrisSpriteGFX")
+  local krisRaw = self.rom:bytes(kris.bank, kris.address, 16 * 96 / 4)
+  local krisImage = ImageWriter.decode2bpp(krisRaw, 16, 96, true)
+  self:save(krisImage, "sprites/kris.png")
+
   local out = {
     SPRITE_CHRIS = {
       id = "SPRITE_CHRIS", source = "ROM:ChrisSpriteGFX",
       image = "assets/generated/sprites/chris.png",
+      frames = 96 / 16, walker = true,
+    },
+    SPRITE_KRIS = {
+      id = "SPRITE_KRIS", source = "ROM:KrisSpriteGFX",
+      image = "assets/generated/sprites/kris.png",
       frames = 96 / 16, walker = true,
     },
   }
@@ -371,7 +387,7 @@ function RomExtractorGen2:extractField(newBarkTown)
     -- SpriteRenderer.new:85 on the very first setMap. surf/bike/fly stay
     -- on the Gen1 defaults deliberately: this skeleton extracts no sprite
     -- for them, so their guards correctly no-op instead of crashing.
-    playerSprites = { walk = "SPRITE_CHRIS" },
+    playerSprites = { walk = "SPRITE_CHRIS", walkAlt = "SPRITE_KRIS" },
     -- tryCardKeyDoor (OverworldController.lua:2002-2005) reads
     -- Game.data.field.cardKeyDoors.maps unguarded (`ipairs(ck.maps)`) on
     -- every interact-button press, on any map -- unlike closedDoors/
