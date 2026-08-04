@@ -877,6 +877,34 @@ function PaletteFX.setMode(mode)
   end
 end
 
+-- Crystal only: detects a real-world morn/day/nite boundary crossing
+-- while already in-game, and forces the same invalidate-and-reload
+-- setMode already does for a COLORS change, so the visible palette
+-- updates without restarting.  Cheap to call every frame -- os.date is
+-- the only work done once the bucket hasn't changed; the (comparatively
+-- expensive) atlas rebake only happens on an actual crossing.
+local lastCrystalBucket
+function PaletteFX.checkTimeOfDay()
+  if not GameVersion.isCrystal() then return end
+  local bucket = PaletteFX.timeOfDay()
+  if lastCrystalBucket == nil then
+    lastCrystalBucket = bucket
+    return
+  end
+  if bucket == lastCrystalBucket then return end
+  lastCrystalBucket = bucket
+  crystalPackCache, crystalPackBucket = nil, nil
+  pcall(function() require("src.battle.BattleState").invalidate() end)
+  pcall(function() require("src.render.SpriteRenderer").invalidate() end)
+  pcall(function()
+    require("src.world.MapLoader").invalidateAll()
+    local Game = require("src.core.Game")
+    if Game.overworld and Game.overworld.map and Game.overworld.reloadMap then
+      Game.overworld:reloadMap(Game.overworld.map.id, "timeOfDay")
+    end
+  end)
+end
+
 function PaletteFX.cycleMode()
   local cur = PaletteFX.mode or "gbc"
   local idx = 1

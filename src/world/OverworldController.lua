@@ -850,6 +850,7 @@ function OverworldState:updateParallel()
 end
 
 function OverworldState:update(dt)
+  PaletteFX.checkTimeOfDay()
   -- deferred cutscene launch (see queueScript): run a queued script only
   -- once the triggering warp's transition has finished, its runner has gone
   -- dead, and no scripted walk is mid-step.  This is how the HALL_OF_FAME
