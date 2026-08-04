@@ -279,6 +279,18 @@ function RomExtractorGen2:extractField(newBarkTown)
     flyWarps = {},
     waterTilesets = {},
     ledges = {},
+    -- checkForcedMovement (OverworldController.lua:3506) reads
+    -- Game.data.field.forcedMovement.tiles unguarded (`fm.tiles[mapId]`,
+    -- indexed before its own `or {}`) on every setMap, including boot.
+    -- FieldDefaults.FIELD.forcedMovement only carries `clearMaps` (Route
+    -- 16/18 gate cleanup, unrelated) -- it was never meant to double as a
+    -- `tiles` fallback, since every real Gen1 extraction always stamps
+    -- its own `tiles`. Crystal doesn't, so FieldDefaults.seed's fill()
+    -- deep-copied the incomplete default in wholesale, leaving `.tiles`
+    -- permanently nil. Stub `tiles = {}` here so fill() merges it
+    -- in alongside the inherited (harmless, no Crystal map matches it)
+    -- `clearMaps` default instead of leaving the key out entirely.
+    forcedMovement = { tiles = {} },
     -- Player.new:46 reads field.playerSprites.walk unguarded (unlike
     -- surf/bike/surfPikachu, each gated behind `data.sprites[id] and`) to
     -- build the player's on-foot SpriteRenderer -- FieldDefaults.FIELD's
