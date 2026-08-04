@@ -3483,6 +3483,28 @@ do
   eq(codes[3], 0x7f, "Gen2 font fixture: space resolves to extra-page code")
   eq(codes[4], 0x80, "Gen2 font fixture: second 'A' resolves via charmap")
   eq(Font.width("AB"), 16, "Gen2 font fixture: two fixed-width glyphs measure 16px")
+
+  -- Font.encode/width only read state.byFirstByte and fall back to a flat
+  -- 8px default, so they'd pass even if pageFor's base arithmetic or either
+  -- page's quad table were wrong.  Stub Font.drawCode (same save/replace/
+  -- restore pattern as the other Font.drawCode stubs in this file) to prove
+  -- Font.draw actually resolves each code through pageFor and a real quad --
+  -- 0x7f in particular only resolves off the *extra* page (base 0x60), not
+  -- the main one (base 0x80).
+  local drawnCodes = {}
+  local savedDrawCode = Font.drawCode
+  Font.drawCode = function(code) drawnCodes[#drawnCodes + 1] = code end
+  Font.draw("AB A", 0, 0)
+  Font.drawCode = savedDrawCode
+  eq(#drawnCodes, 4, "Gen2 font fixture: draw visits 4 glyphs")
+  eq(drawnCodes[1], 0x80, "Gen2 font fixture: draw resolves 'A' through main page")
+  eq(drawnCodes[2], 0x81, "Gen2 font fixture: draw resolves 'B' through main page")
+  eq(drawnCodes[3], 0x7f, "Gen2 font fixture: draw resolves space through extra page")
+  eq(drawnCodes[4], 0x80, "Gen2 font fixture: draw resolves second 'A' through main page")
+
+  -- Restore the real Gen1 font state this file loaded near the top (Font.load(Data)),
+  -- so nothing appended after this block silently inherits the 3-glyph Crystal fixture.
+  Font.load(Data)
 end
 
 -- ---------------------------------------------- the globbed tiers

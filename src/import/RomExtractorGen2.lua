@@ -3,9 +3,11 @@
 -- TILESET_JOHTO tileset, the player (Chris) overworld sprite, and the
 -- font (glyphs + charmap) used to draw the engine's own hardcoded UI
 -- strings (title screen, menus).
--- Mirrors src/import/RomExtractor.lua's shape and helper usage; ported
--- from tools/build_rom_data_gen2.py (Task 4) -- keep the two in sync if
--- either changes. See docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
+-- Mirrors src/import/RomExtractor.lua's shape and helper usage; the
+-- sprite/tileset/map extraction was ported from tools/build_rom_data_gen2.py
+-- (Task 4) -- keep those three in sync if either changes; extractFont()
+-- (below) has no counterpart in that Python dev-tool script. See
+-- docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
 
 local bit = require("bit")
 local ImageWriter = require("src.import.ImageWriter")
@@ -107,45 +109,6 @@ function RomExtractorGen2:extractSprite()
   self:write("sprites", out)
   self:tick("Player sprite", 1, 1)
   return out
-end
-
--- Font: 128 tiles, 128x64px, 1bpp -- codes $80-$FF (both cases + digits,
--- confirmed against constants/charmap.asm during planning). FontExtra: 32
--- tiles, 128x16px, 2bpp -- codes $60-$7F (space, quotes, the box-drawing
--- border glyphs Font.DEFAULT_BORDER already expects at $79-$7E). Unlike
--- Gen1 (whose font_extra.png is TextBoxGraphics plus a separate
--- Pokedex-tile patch), Crystal ships this whole range as one INCBIN, so
--- there is no patch step.
-function RomExtractorGen2:extractFont()
-  self:beginStage("Font")
-  local main = self:symbol("Font")
-  local raw = self.rom:bytes(main.bank, main.address, 128 * 8)
-  local image = ImageWriter.decode1bpp(raw, 128, 64, true)
-  self:save(image, "fonts/font.png")
-  self:tick("Font", 1, 2)
-
-  local extra = self:symbol("FontExtra")
-  local shaded = ImageWriter.decode2bpp(
-    self.rom:bytes(extra.bank, extra.address, 32 * 16), 128, 16)
-  local extraImage = ImageWriter.blank(128, 16, 0, 0, 0, 0)
-  for y = 0, 15 do
-    for x = 0, 127 do
-      local r = shaded:getPixel(x, y)
-      if r < 0.5 then extraImage:setPixel(x, y, 0, 0, 0, 1) end
-    end
-  end
-  self:save(extraImage, "fonts/font_extra.png")
-  self:tick("Font", 2, 2)
-
-  local data = {
-    source = "ROM:Font, FontExtra",
-    image = "assets/generated/fonts/font.png",
-    imageExtra = "assets/generated/fonts/font_extra.png",
-    mainBase = 0x80, extraBase = 0x60, glyphsPerRow = 16,
-    charmap = self.manifest.fontCharmap,
-  }
-  self:write("font", data)
-  return data
 end
 
 function RomExtractorGen2:extractTileset()
@@ -261,6 +224,45 @@ function RomExtractorGen2:extractMap()
   self:write("maps", out)
   self:tick("New Bark Town", 1, 1)
   return out
+end
+
+-- Font: 128 tiles, 128x64px, 1bpp -- codes $80-$FF (both cases + digits,
+-- confirmed against constants/charmap.asm during planning). FontExtra: 32
+-- tiles, 128x16px, 2bpp -- codes $60-$7F (space, quotes, the box-drawing
+-- border glyphs Font.DEFAULT_BORDER already expects at $79-$7E). Unlike
+-- Gen1 (whose font_extra.png is TextBoxGraphics plus a separate
+-- Pokedex-tile patch), Crystal ships this whole range as one INCBIN, so
+-- there is no patch step.
+function RomExtractorGen2:extractFont()
+  self:beginStage("Font")
+  local main = self:symbol("Font")
+  local raw = self.rom:bytes(main.bank, main.address, 128 * 8)
+  local image = ImageWriter.decode1bpp(raw, 128, 64, true)
+  self:save(image, "fonts/font.png")
+  self:tick("Font", 1, 2)
+
+  local extra = self:symbol("FontExtra")
+  local shaded = ImageWriter.decode2bpp(
+    self.rom:bytes(extra.bank, extra.address, 32 * 16), 128, 16)
+  local extraImage = ImageWriter.blank(128, 16, 0, 0, 0, 0)
+  for y = 0, 15 do
+    for x = 0, 127 do
+      local r = shaded:getPixel(x, y)
+      if r < 0.5 then extraImage:setPixel(x, y, 0, 0, 0, 1) end
+    end
+  end
+  self:save(extraImage, "fonts/font_extra.png")
+  self:tick("Font", 2, 2)
+
+  local data = {
+    source = "ROM:Font, FontExtra",
+    image = "assets/generated/fonts/font.png",
+    imageExtra = "assets/generated/fonts/font_extra.png",
+    mainBase = 0x80, extraBase = 0x60, glyphsPerRow = 16,
+    charmap = self.manifest.fontCharmap,
+  }
+  self:write("font", data)
+  return data
 end
 
 -- field.boot spawns straight into New Bark Town instead of Gen1's

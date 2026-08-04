@@ -45,6 +45,9 @@ class ParseCharmapTest(unittest.TestCase):
         self.assertEqual(by_seq["A"], 0x80)
         self.assertEqual(by_seq["B"], 0x81)
         self.assertEqual(by_seq["a"], 0xa0)
+        # ASCII double-quote has no charmap.asm entry of its own; parse_charmap
+        # aliases it to Crystal's own closing-quote glyph at $73 (mirrors Gen1).
+        self.assertEqual(by_seq['"'], 0x73)
 
     def test_sorted_longest_seq_first(self):
         with tempfile.TemporaryDirectory() as tmp:

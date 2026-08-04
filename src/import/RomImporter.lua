@@ -73,6 +73,7 @@ local VERSION_REQUIRED_FILES = {
     "assets/generated/battle/profoakb.png",
     "assets/generated/pikachu/pikapic_1.png",
   },
+  crystal = { "assets/generated/fonts/font.png" },
 }
 
 -- "Split-screen ROM selector" first-run palette (matches the FirstRun mockup):

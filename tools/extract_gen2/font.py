@@ -42,6 +42,11 @@ def parse_charmap(pokecrystal):
         seen.add(seq)
         if 0x60 <= code <= 0xFF:
             entries.append({"seq": seq, "code": code})
+    # ASCII double-quote has no charmap.asm entry of its own (mirrors Gen1,
+    # tools/extract/font.py's parse_charmap); Crystal's $73 is also its own
+    # closing-quote glyph, so alias it there rather than leave hand-written
+    # UI text containing '"' rendering blank.
+    entries.append({"seq": '"', "code": 0x73})
     # longest-first so a greedy matcher (Font.split) picks multi-char
     # sequences before any single-char prefix of them
     entries.sort(key=lambda e: (-len(e["seq"]), e["seq"]))
