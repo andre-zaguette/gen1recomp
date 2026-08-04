@@ -1,6 +1,6 @@
 # Gen2 (Crystal) Font Extraction
 
-Status: approved for planning
+Status: verified against real ROM, 2026-08-04
 Date: 2026-08-03
 
 ## Context
