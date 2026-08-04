@@ -18,7 +18,7 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 5
+local STAGE_COUNT = 6
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (New Bark Town's map/tileset/player sprite/font
@@ -31,7 +31,7 @@ local STAGE_COUNT = 5
 -- placeholder content: an empty table is the honest "not extracted yet".
 local STUB_MODULES = {
   "constants", "text_pointers", "trainer_headers",
-  "pokemon", "moves", "items", "type_chart", "trainers", "encounters",
+  "moves", "items", "type_chart", "encounters",
   "battle_anims",
 }
 
@@ -182,6 +182,103 @@ function RomExtractorGen2:extractTileset()
   self:write("tilesets", out)
   self:tick("Johto tileset", 1, 1)
   return out
+end
+
+-- Ported verbatim from src/import/Rom.lua's (private, unexported)
+-- transposePicTiles -- Gen1's Pokemon-pic decompressor has its own copy for
+-- the same reason: Pokemon/trainer PIC tile data (unlike tileset gfx) is
+-- stored column-major in ROM, so decode2bpp's row-major tile walk needs the
+-- width x width tile grid transposed first. Confirmed empirically during
+-- planning: decoding PokemonProfPic's raw LZ3 output straight through
+-- decode2bpp the same way extractTileset does (no transpose) produced a
+-- diagonally-scrambled portrait, not Oak; adding this fixed it and produced
+-- a recognizable portrait. Operates on a 1-indexed flat byte array in place.
+local function transposePicTiles(data, width)
+  local tileCount = width * width
+  for index = 0, tileCount - 1 do
+    local other = (index * width + math.floor(index / width)) % tileCount
+    if index < other then
+      for offset = 1, 16 do
+        local left = index * 16 + offset
+        local right = other * 16 + offset
+        data[left], data[right] = data[right], data[left]
+      end
+    end
+  end
+end
+
+-- Oak's trainer portrait and Wooper's front sprite, both LZ3-compressed
+-- 2bpp pics -- same decompress-then-decode2bpp shape extractTileset already
+-- uses for TilesetJohtoGFX, plus the transpose step above that PIC data
+-- (unlike tileset gfx) needs.
+--
+-- PokemonProfPic decompresses to exactly 49 tiles (784 bytes, confirmed
+-- against the real ROM during planning) -- trainer pics always fill the
+-- full 7x7/56x56 box and aren't animated in Gen2 (only Pokemon pics are,
+-- confirmed by reading engine/gfx/load_pics.asm's GetTrainerPic, which
+-- decompresses straight into the display buffer with no dimension lookup
+-- or padding step, unlike _GetFrontpic below), so it's a plain
+-- transpose+decode after decompression.
+--
+-- WooperFrontpic decompresses to 34 tiles (544 bytes, confirmed against the
+-- real ROM) -- more than a static sprite needs. Gen2 Pokemon frontpics
+-- support two-frame animation (pokecrystal's engine/gfx/pic_animation.asm),
+-- and WooperFrontpic's compressed data is pointed at by
+-- data/pokemon/pic_pointers.asm the same way for both the animated and
+-- non-animated call paths -- there's no separate "static-only" symbol.
+-- Reading engine/gfx/load_pics.asm's _GetFrontpic (the non-animated path
+-- GetMonFrontpic uses) shows it decompresses that same blob but only ever
+-- copies out wBasePicSize's b*b tiles (via PadFrontpic) -- b = 5 for
+-- Wooper, confirmed against gfx/pokemon/wooper/front.dimensions in the
+-- pokecrystal source (single byte $55, i.e. 5x5). The trailing 9 tiles are
+-- delta/blend tiles only pic_animation.asm's frame table
+-- (gfx/pokemon/wooper/frames.asm) references, via GetAnimatedFrontpic's
+-- separate GetAnimatedEnemyFrontpic call that _GetFrontpic's own
+-- (non-animated) path never makes. So a plain static decode slices to the
+-- first 25 tiles (400 bytes, 40x40px) before transposing/decoding, matching
+-- what _GetFrontpic itself renders for a non-animated frontpic request.
+function RomExtractorGen2:extractIntroPics()
+  self:beginStage("Intro portraits")
+  local oakWidth = 7
+  local oak = self:symbol("PokemonProfPic")
+  local oakCompressed = self.rom:bytes(oak.bank, oak.address, 0x1000)
+  local oakRaw = Lz3.decompress(oakCompressed)
+  assert(#oakRaw == oakWidth * oakWidth * 16,
+    "PokemonProfPic: unexpected decompressed size " .. #oakRaw)
+  transposePicTiles(oakRaw, oakWidth)
+  local oakImage = ImageWriter.decode2bpp(oakRaw, oakWidth * 8, oakWidth * 8)
+  self:save(oakImage, "trainers/oak.png")
+  self:tick("Intro portraits", 1, 2)
+
+  local wooperWidth = 5
+  local wooper = self:symbol("WooperFrontpic")
+  local wooperCompressed = self.rom:bytes(wooper.bank, wooper.address, 0x1000)
+  local wooperDecompressed = Lz3.decompress(wooperCompressed)
+  assert(#wooperDecompressed >= wooperWidth * wooperWidth * 16,
+    "WooperFrontpic: decompressed data shorter than its base frame")
+  local wooperRaw = {}
+  for i = 1, wooperWidth * wooperWidth * 16 do
+    wooperRaw[i] = wooperDecompressed[i]
+  end
+  transposePicTiles(wooperRaw, wooperWidth)
+  local wooperImage =
+    ImageWriter.decode2bpp(wooperRaw, wooperWidth * 8, wooperWidth * 8)
+  self:save(wooperImage, "pokemon/wooper_front.png")
+  self:tick("Intro portraits", 2, 2)
+
+  local trainers = { OPP_PROF_OAK = {
+    id = "OPP_PROF_OAK", source = "ROM:PokemonProfPic",
+    pic = "assets/generated/trainers/oak.png",
+  } }
+  self:write("trainers", trainers)
+
+  local pokemon = { WOOPER = {
+    id = "WOOPER", source = "ROM:WooperFrontpic",
+    spriteFront = "assets/generated/pokemon/wooper_front.png",
+  } }
+  self:write("pokemon", pokemon)
+
+  return { trainers = trainers, pokemon = pokemon }
 end
 
 function RomExtractorGen2:extractMap()
@@ -501,6 +598,9 @@ function RomExtractorGen2:run()
   local results = {}
   results.sprites = self:extractSprite()
   results.tilesets = self:extractTileset()
+  local intro = self:extractIntroPics()
+  results.trainers = intro.trainers
+  results.pokemon = intro.pokemon
   results.maps = self:extractMap()
   results.font = self:extractFont()
   results.palettes = self:extractPalettes()

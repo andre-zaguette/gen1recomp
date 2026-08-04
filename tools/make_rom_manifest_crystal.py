@@ -38,6 +38,8 @@ REQUIRED_SYMBOLS = (
     "_OakText6",
     "_OakText7",
     "_AreYouABoyOrAreYouAGirlText",
+    "PokemonProfPic",
+    "WooperFrontpic",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
