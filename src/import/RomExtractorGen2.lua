@@ -301,6 +301,34 @@ function RomExtractorGen2:extractField(newBarkTown)
     -- on the Gen1 defaults deliberately: this skeleton extracts no sprite
     -- for them, so their guards correctly no-op instead of crashing.
     playerSprites = { walk = "SPRITE_CHRIS" },
+    -- tryCardKeyDoor (OverworldController.lua:2002-2005) reads
+    -- Game.data.field.cardKeyDoors.maps unguarded (`ipairs(ck.maps)`) on
+    -- every interact-button press, on any map -- unlike closedDoors/
+    -- skipMaps (both read safely through FieldDefaults.fieldValue's
+    -- per-leaf fallback elsewhere in this file), .maps/.doorTiles/
+    -- .openBlock/.silphCo11F only ever exist in a real Gen1 extraction
+    -- (data/events/card_key_maps.asm et al, Silph Co-only) and were never
+    -- added to FieldDefaults.FIELD.cardKeyDoors, which only carries
+    -- closedDoors/skipMaps. Crystal doesn't stamp cardKeyDoors at all, so
+    -- fill() deep-copied that incomplete default in, leaving .maps
+    -- permanently nil and crashing the very first interact press anywhere
+    -- in the game. maps = {} alone is enough: the onList loop finds no
+    -- match and returns false before touching doorTiles/openBlock/
+    -- silphCo11F, which stay correctly unreachable (Crystal has no Silph
+    -- Co, and its own equivalent is out of this skeleton's scope).
+    cardKeyDoors = { maps = {} },
+    -- tryHiddenObject (OverworldController.lua:1839), reached from the same
+    -- interact() chain as tryCardKeyDoor, reads three more
+    -- Game.data.field.hiddenExtras.* keys unguarded (`ipairs(extras.X[mapId])`,
+    -- indexed before their own `or {}`): pcTiles (1919), benchGuys (1947),
+    -- gymStatues (1961). FieldDefaults.FIELD.hiddenExtras only carries
+    -- printTrash/trashCans (both read safely elsewhere, `extras.printTrash
+    -- and ...`) -- pcTiles/benchGuys/gymStatues have no default at all, so
+    -- with Crystal never stamping hiddenExtras, fill() deep-copied the
+    -- incomplete default in and left all three permanently nil. Empty
+    -- tables here merge in alongside the inherited printTrash/trashCans,
+    -- same shape as every other stub above.
+    hiddenExtras = { pcTiles = {}, benchGuys = {}, gymStatues = {} },
   }
   self:write("field", out)
   return out
