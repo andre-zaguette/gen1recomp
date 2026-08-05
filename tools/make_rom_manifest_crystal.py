@@ -50,6 +50,32 @@ REQUIRED_SYMBOLS = (
     "Cry_Wooper_Ch5",
     "Cry_Wooper_Ch6",
     "Cry_Wooper_Ch8",
+    # Title screen graphics + palette (engine/movie/title.asm). One logo
+    # image carries the "CRYSTAL VERSION" text baked into its own pixels
+    # -- unlike Red/Blue/Yellow, Crystal has no separate ribbon asset (see
+    # docs/superpowers/plans/2026-08-05-gen2-crystal-title-screen.md's
+    # "Research already done" section).
+    "TitleSuicuneGFX",
+    "TitleLogoGFX",
+    "TitleCrystalGFX",
+    "TitleScreenPalettes",
+    # Music_TitleScreen's pulse (Ch1/Ch2) and noise (Ch4) channels, plus
+    # every subroutine they sound_call/sound_loop into. Ch3 (wave) is
+    # deliberately absent -- out of scope, see the plan's Non-goals.
+    # Addresses confirmed against pokecrystal.sym; see the plan's
+    # "Research already done" section for the full byte-level decode this
+    # is built from.
+    "Music_TitleScreen_Ch1",
+    "Music_TitleScreen_Ch1.sub1",
+    "Music_TitleScreen_Ch1.sub1loop1",
+    "Music_TitleScreen_Ch2",
+    "Music_TitleScreen_Ch2.sub1",
+    "Music_TitleScreen_Ch4",
+    "Music_TitleScreen_Ch4.loop1",
+    "Music_TitleScreen_Ch4.sub1",
+    "Music_TitleScreen_Ch4.sub2",
+    "Music_TitleScreen_Ch4.sub3",
+    "Music_TitleScreen_Ch4.sub4",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)

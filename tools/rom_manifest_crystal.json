@@ -2192,6 +2192,50 @@
       49,
       31296
     ],
+    "Music_TitleScreen_Ch1": [
+      58,
+      30740
+    ],
+    "Music_TitleScreen_Ch1.sub1": [
+      58,
+      31085
+    ],
+    "Music_TitleScreen_Ch1.sub1loop1": [
+      58,
+      31089
+    ],
+    "Music_TitleScreen_Ch2": [
+      58,
+      31108
+    ],
+    "Music_TitleScreen_Ch2.sub1": [
+      58,
+      31463
+    ],
+    "Music_TitleScreen_Ch4": [
+      58,
+      31836
+    ],
+    "Music_TitleScreen_Ch4.loop1": [
+      58,
+      32064
+    ],
+    "Music_TitleScreen_Ch4.sub1": [
+      58,
+      32119
+    ],
+    "Music_TitleScreen_Ch4.sub2": [
+      58,
+      32129
+    ],
+    "Music_TitleScreen_Ch4.sub3": [
+      58,
+      32139
+    ],
+    "Music_TitleScreen_Ch4.sub4": [
+      58,
+      32147
+    ],
     "NewBarkTown_MapAttributes": [
       37,
       19928
@@ -2215,6 +2259,22 @@
     "TilesetJohtoMeta": [
       6,
       23566
+    ],
+    "TitleCrystalGFX": [
+      67,
+      31982
+    ],
+    "TitleLogoGFX": [
+      67,
+      29478
+    ],
+    "TitleScreenPalettes": [
+      67,
+      32478
+    ],
+    "TitleSuicuneGFX": [
+      67,
+      28486
     ],
     "WooperFrontpic": [
       85,
