@@ -70,6 +70,17 @@ REQUIRED_SYMBOLS = (
     "Music_TitleScreen_Ch1.sub1loop1",
     "Music_TitleScreen_Ch2",
     "Music_TitleScreen_Ch2.sub1",
+    # Ch2.sub1 has its own internal loop point, same shape as Ch1.sub1's
+    # sub1loop1 (present in REQUIRED_SYMBOLS above) -- confirmed against
+    # the real pokecrystal.sym (`3a:7aeb Music_TitleScreen_Ch2.sub1loop1`,
+    # 4 bytes into .sub1, right after its note_type+note lead-in) and
+    # against the disassembly (audio/music/titlescreen.asm's Ch2 .sub1
+    # block: `sound_loop 5, .sub1loop1` targets it). Missing from the
+    # original symbol list here was a real gap Task 4 hit: without it,
+    # CrystalMusicTranscoder errors decoding Ch2's real ROM bytes with
+    # "sound_call/sound_loop target $7AEB has no matching entry in the
+    # labels map" the moment it reaches Ch2's own sound_loop instruction.
+    "Music_TitleScreen_Ch2.sub1loop1",
     "Music_TitleScreen_Ch4",
     "Music_TitleScreen_Ch4.loop1",
     "Music_TitleScreen_Ch4.sub1",

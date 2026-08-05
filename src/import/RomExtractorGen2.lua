@@ -11,6 +11,7 @@
 
 local bit = require("bit")
 local CrystalCryTranscoder = require("src.audio.CrystalCryTranscoder")
+local CrystalMusicTranscoder = require("src.audio.CrystalMusicTranscoder")
 local ImageWriter = require("src.import.ImageWriter")
 local LuaWriter = require("src.import.LuaWriter")
 local Lz3 = require("src.import.Lz3")
@@ -19,7 +20,7 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 8
+local STAGE_COUNT = 9
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (New Bark Town's map/tileset/player sprite/font
@@ -620,7 +621,6 @@ function RomExtractorGen2:extractCry()
   cry.pitch = self.manifest.cryPitch
   cry.length = self.manifest.cryLength
   local audio = { cries = { WOOPER = cry } }
-  self:write("audio", audio)
   self:tick("Wooper cry", 1, 1)
   return audio
 end
@@ -685,6 +685,88 @@ function RomExtractorGen2:extractTitle()
   return title
 end
 
+-- Music_TitleScreen's pulse (Ch1/Ch2) and noise (Ch4) channels, translated
+-- from Crystal's bytecode dialect via CrystalMusicTranscoder. Channel 3
+-- (wave) is not read -- out of scope, see the plan's Non-goals. Generous
+-- byte-window sizes (400/400/300 for the three main bodies, 40/40 for
+-- Ch1/Ch2's one subroutine each, 20 each for Ch4's four) are comfortably
+-- larger than the real verified spans (345/355/222 and 23/26/10/10/8/11
+-- respectively) -- decodeChannel stops at sound_ret regardless of extra
+-- trailing bytes in the window, same margin convention extractCry already
+-- established.
+function RomExtractorGen2:extractTitleMusic()
+  self:beginStage("Title music")
+
+  local ch1 = self:symbol("Music_TitleScreen_Ch1")
+  local ch1Sub1 = self:symbol("Music_TitleScreen_Ch1.sub1")
+  local ch1Sub1Loop1 = self:symbol("Music_TitleScreen_Ch1.sub1loop1")
+  local ch1Labels = {
+    [ch1Sub1.address] = "sub1",
+    [ch1Sub1Loop1.address] = "sub1loop1",
+  }
+
+  local ch2 = self:symbol("Music_TitleScreen_Ch2")
+  local ch2Sub1 = self:symbol("Music_TitleScreen_Ch2.sub1")
+  local ch2Sub1Loop1 = self:symbol("Music_TitleScreen_Ch2.sub1loop1")
+  local ch2Labels = {
+    [ch2Sub1.address] = "sub1",
+    [ch2Sub1Loop1.address] = "sub1loop1",
+  }
+
+  local ch4 = self:symbol("Music_TitleScreen_Ch4")
+  local ch4Loop1 = self:symbol("Music_TitleScreen_Ch4.loop1")
+  local ch4Sub1 = self:symbol("Music_TitleScreen_Ch4.sub1")
+  local ch4Sub2 = self:symbol("Music_TitleScreen_Ch4.sub2")
+  local ch4Sub3 = self:symbol("Music_TitleScreen_Ch4.sub3")
+  local ch4Sub4 = self:symbol("Music_TitleScreen_Ch4.sub4")
+  local ch4Labels = {
+    [ch4Loop1.address] = "loop1",
+    [ch4Sub1.address] = "sub1",
+    [ch4Sub2.address] = "sub2",
+    [ch4Sub3.address] = "sub3",
+    [ch4Sub4.address] = "sub4",
+  }
+
+  local song = CrystalMusicTranscoder.buildSong({
+    {
+      hw = 1, baseAddress = ch1.address,
+      bytes = self.rom:bytes(ch1.bank, ch1.address, 400),
+      subroutines = {
+        sub1 = { baseAddress = ch1Sub1.address,
+                 bytes = self.rom:bytes(ch1Sub1.bank, ch1Sub1.address, 40) },
+      },
+      labels = ch1Labels,
+    },
+    {
+      hw = 2, baseAddress = ch2.address,
+      bytes = self.rom:bytes(ch2.bank, ch2.address, 400),
+      subroutines = {
+        sub1 = { baseAddress = ch2Sub1.address,
+                 bytes = self.rom:bytes(ch2Sub1.bank, ch2Sub1.address, 40) },
+      },
+      labels = ch2Labels,
+    },
+    {
+      hw = 4, baseAddress = ch4.address,
+      bytes = self.rom:bytes(ch4.bank, ch4.address, 300),
+      subroutines = {
+        sub1 = { baseAddress = ch4Sub1.address,
+                 bytes = self.rom:bytes(ch4Sub1.bank, ch4Sub1.address, 20) },
+        sub2 = { baseAddress = ch4Sub2.address,
+                 bytes = self.rom:bytes(ch4Sub2.bank, ch4Sub2.address, 20) },
+        sub3 = { baseAddress = ch4Sub3.address,
+                 bytes = self.rom:bytes(ch4Sub3.bank, ch4Sub3.address, 20) },
+        sub4 = { baseAddress = ch4Sub4.address,
+                 bytes = self.rom:bytes(ch4Sub4.bank, ch4Sub4.address, 20) },
+      },
+      labels = ch4Labels,
+    },
+  })
+
+  self:tick("Title music", 1, 1)
+  return song
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -704,7 +786,10 @@ function RomExtractorGen2:run()
   results.text = self:extractIntroText()
   local title = self:extractTitle()
   results.field = self:extractField(results.maps.NEW_BARK_TOWN, title)
-  results.audio = self:extractCry()
+  local cries = self:extractCry()
+  local titleSong = self:extractTitleMusic()
+  results.audio = { cries = cries.cries, songs = { Music_TitleScreen = titleSong } }
+  self:write("audio", results.audio)
   self:extractStubs()
   if self.progress then
     self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
