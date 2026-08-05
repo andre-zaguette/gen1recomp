@@ -532,12 +532,26 @@ function TitleState:draw()
     if self.logo then
       local iw, ih = self.logo:getDimensions()
       local stripH = 8
-      for y = 0, ih - 1, stripH do
+      -- title.asm's own DrawTitleGraphic call draws the logo at
+      -- hlcoord 0,3 -> pixel (0,24), height 7 tiles (56px) -- NOT Gen1's
+      -- (16,8) TitleScreen_PlacePokemonLogo position.  Only 7 of the
+      -- decoded sheet's 8 tile-rows are the logo: the 8th (y=56-63) is
+      -- the copyright-text glyph strip, drawn separately by title.asm's
+      -- second DrawTitleGraphic call onto a different BG map at a
+      -- different screen position (confirmed by the tile-index math:
+      -- the logo call consumes tiles $80..$80+139, and $80+140 wraps
+      -- (mod 256) to $0C, exactly the copyright call's own base tile --
+      -- i.e. it continues reading the same decompressed buffer right
+      -- where the logo's 7 rows left off).  This engine already draws
+      -- the copyright line as text via Font.draw at the bottom of
+      -- :draw, so only these first 7 rows belong here.
+      local logoRows = math.min(ih, 56)
+      for y = 0, logoRows - 1, stripH do
         local dir = ((y / stripH) % 2 == 0) and 1 or -1
         local dx = dir * self.entranceSCX
         love.graphics.draw(self.logo,
-          love.graphics.newQuad(0, y, iw, math.min(stripH, ih - y), iw, ih),
-          16 + dx, 8 + y)
+          love.graphics.newQuad(0, y, iw, math.min(stripH, logoRows - y), iw, ih),
+          dx, 24 + y)
       end
     end
     if self.crystalOrnament then
