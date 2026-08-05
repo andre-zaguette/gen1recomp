@@ -11,6 +11,10 @@ Image.__index = Image
 function Image:getDimensions() return self.w, self.h end
 function Image:getWidth() return self.w end
 function Image:getHeight() return self.h end
+-- real love2d Images (unlike this stub's bare table) carry setFilter; code
+-- like IntroMovie:new calls img:setFilter("nearest","nearest") on any image
+-- loaded via love.graphics.newImage, so the stub needs the same no-op.
+function Image:setFilter() end
 
 -- read PNG dimensions from the file header (no decoder needed)
 local function pngSize(path)

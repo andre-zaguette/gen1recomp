@@ -3250,7 +3250,13 @@ end
 local function primaryEffectFailed(msgs)
   if not msgs or #msgs == 0 then return true end
   local m = msgs[1]
-  if m == "But, it failed!" or m == "Nothing happened!" then return true end
+  -- substring, not ==: the extracted _ButItFailedText carries a trailing
+  -- space ("But, it failed! ", romText off the real ROM text bank) that an
+  -- exact match against the plain fallback literal never sees, so an
+  -- already-landed status effect (e.g. Hypnosis on a sleeping target) was
+  -- slipping past this check and arming an applying animation it should not.
+  if m:find("But, it failed!", 1, true) then return true end
+  if m:find("Nothing happened!", 1, true) then return true end
   if m:find("didn't affect", 1, true) then return true end
   if m:find("is unaffected", 1, true) then return true end
   if m:find("protected by MIST", 1, true) then return true end

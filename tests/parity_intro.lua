@@ -123,10 +123,20 @@ if oakGfx then
     if fh then fh:close() end
   end
 end
-check(Data.audio.sfx and Data.audio.sfx.Shrink ~= nil, "SFX_SHRINK is extracted")
-check(Data.audio.songs and Data.audio.songs.Music_Routes2 ~= nil
-      and Data.audio.songs.Music_MeetProfOak ~= nil,
-      "Routes2 + MeetProfOak songs are extracted")
+-- audio is an OPTIONAL data module (src/core/Data.lua): tools/build_data.py
+-- never implemented audio extraction, so data/generated/audio.lua does not
+-- exist in this checkout (only a real ROM import can produce it) and
+-- Data.audio is nil here.  Skip explicitly rather than indexing into nil or
+-- silently reporting these as checked.
+if Data.audio then
+  check(Data.audio.sfx and Data.audio.sfx.Shrink ~= nil, "SFX_SHRINK is extracted")
+  check(Data.audio.songs and Data.audio.songs.Music_Routes2 ~= nil
+        and Data.audio.songs.Music_MeetProfOak ~= nil,
+        "Routes2 + MeetProfOak songs are extracted")
+else
+  print("skip: SFX_SHRINK / Routes2+MeetProfOak song checks -- require " ..
+        "data/generated/audio.lua, not available in this environment")
+end
 
 -- =====================================================================
 -- (D) Lab walk-in with UP held: a Delay3 emote queued from Oak's entry

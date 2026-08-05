@@ -427,6 +427,11 @@ M.ROCKET_HIDEOUT_B4F = {
           game.stack:push(TextBox.new(game, cannotBe, function()
             game.stack:push(TextBox.new(game, hope, function()
               local Transition = require("src.render.Transition")
+              -- "black_fade", not the default "warp_fade": a scripted
+              -- GBFadeOutToBlack -> HideObject/ShowObject -> GBFadeInFromBlack
+              -- cutscene (RocketHideoutB4F.asm BeatGiovanniScript), which
+              -- genuinely fades back in unlike an ordinary warp -- see
+              -- src/render/Transition.lua's Transition.STYLES.black_fade.
               game.stack:push(Transition.new(game, function()
                 local Commands = require("src.script.Commands")
                 local ctx = { game = game, save = game.save, overworld = ow }
@@ -437,7 +442,7 @@ M.ROCKET_HIDEOUT_B4F = {
               end, function()
                 ow:afterBattle(result, battle)
                 done()
-              end))
+              end, "black_fade"))
             end))
           end))
         end

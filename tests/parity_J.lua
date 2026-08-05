@@ -283,7 +283,8 @@ end
 do
   local pressed = {}
   local tb = freshBattle()
-  tb.game = { input = { wasPressed = function(_, k) return pressed[k] or false end },
+  tb.game = { input = { wasPressed = function(_, k) return pressed[k] or false end,
+                        isDown = function() return false end },
               stack = { top = function() return tb end },
               save = Game.save }
   tb.kind = "wild"
@@ -359,7 +360,8 @@ do
   local fg = {
     data = Data,
     save = require("src.core.SaveData").newGame(),
-    input = { wasPressed = function(_, k) return pressed[k] or false end },
+    input = { wasPressed = function(_, k) return pressed[k] or false end,
+              isDown = function() return false end },
     stack = stack,
   }
   fg.save.party = { Pokemon.new(Data, "BULBASAUR", 20) }
@@ -426,10 +428,15 @@ do
     bag:update(1 / 60)
   end
   check(stack:top() ~= bag, "the ball is thrown without input")
+  -- Catching pops BattleState and pushes Transition.battleReturn's fade;
+  -- onFinish only fires once that fade completes (BattleState.lua:4513-4514).
+  -- Drive whatever is actually on top (matching the bag-hover loop above),
+  -- not a stale direct reference to `demo` once it's no longer there.
   for _ = 1, 2000 do
     if finished then break end
     pressed.a = true
-    demo:update(1 / 60)
+    local top = stack:top()
+    if top then top:update(1 / 60) end
   end
   pressed.a = false
   check(finished, "the throw ends the demo battle")

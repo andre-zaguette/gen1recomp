@@ -37,11 +37,22 @@ local function fadeAlpha(t, len)
   return step / (steps - 1)
 end
 
--- The two fades as transitions records, so a mod retimes a warp fade the
+-- The fades as transitions records, so a mod retimes a warp fade the
 -- same way it retimes a battle wipe.  BattleTransition.registerInto pulls
 -- these in with its eight wipes -- one registrant owns the registry.
+--
+-- black_fade is the *other* shape GBFadeOutToBlack shows up in: a scripted
+-- cutscene that fades to black, runs a HideObject/ShowObject while the
+-- screen is solid, and then genuinely calls GBFadeInFromBlack
+-- (home/fade.asm:21, 4 x 8 = 32 frames -- see docs/timing-parity.md) to
+-- bring the map back, unlike an ordinary warp (which never fades back in;
+-- LoadGBPal just restores the palettes in one write once the new map is
+-- built).  ViridianGym.asm's Giovanni farewell and
+-- RocketHideoutB4F.asm's BeatGiovanniScript both take this shape.
 Transition.STYLES = {
   warp_fade = { kind = "fade", frames = FRAMES, framesIn = FRAMES_IN },
+  black_fade = { kind = "fade", frames = Timing.FADE_OUT_TO_BLACK,
+                 framesIn = Timing.FADE_IN_FROM_BLACK },
   white_flash = { kind = "fade", frames = FLASH_FRAMES },
 }
 
@@ -59,14 +70,18 @@ local function styleOf(game, id)
   return record or Transition.STYLES[id]
 end
 
-function Transition.new(game, onMidpoint, onDone)
+-- styleId defaults to "warp_fade" (map warps and PartyMenu field moves,
+-- which never fade back in on real hardware); pass "black_fade" for a
+-- scripted GBFadeOutToBlack -> HideObject -> GBFadeInFromBlack cutscene
+-- that genuinely fades back in.
+function Transition.new(game, onMidpoint, onDone, styleId)
   local self = setmetatable({}, Transition)
   self.game = game
   self.onMidpoint = onMidpoint
   self.onDone = onDone
   self.t = 0
   self.phase = "out"
-  local style = styleOf(game, "warp_fade")
+  local style = styleOf(game, styleId or "warp_fade")
   self.frames = style.frames or FRAMES
   -- a style may still ask for a fade in (mods, and the record is data-driven);
   -- the built-in warp is 0, matching hardware
