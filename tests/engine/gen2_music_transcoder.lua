@@ -169,4 +169,81 @@ local song = CrystalMusicTranscoder.buildSong({
 check(song.chip and song.chip.blob ~= nil, "Music transcoder: buildSong produces a chip blob")
 eq(song.chip.channels[1].number, 1, "Music transcoder: buildSong tags hardware channel 1")
 
+-- Music_TitleScreen_Ch4 (bank $3a, address $7c5c), first 20 real bytes --
+-- toggle_noise/stereo_panning/note_type (hw==4's 2-byte drum_speed form,
+-- no volume/fade byte)/rest, then 13 real drum records, plus a synthetic
+-- sound_ret terminator (same real-bytes-plus-synthetic-terminator
+-- convention as the ch1Bytes block above; this 20-byte window is just the
+-- real song's opening bytes, not a complete channel, so it has no real
+-- $FF of its own within the window). These exact bytes were confirmed
+-- byte-for-byte against the real ROM in an earlier task of this plan (see
+-- task-4-report.md's "toggle_noise ($E3) operand-width concern: verified,
+-- not just untested" section, which reads this exact address and quotes
+-- this exact `E3 05` / `EF F0` opening) -- this fixture exists to give
+-- decodeChannel's hw==4 branches (drum_speed's 1-byte-shorter note_type
+-- form, toggle_noise's operand width, and the drum-id-is-the-raw-high-
+-- nibble encoding, with no pitch-nibble-minus-one correction) their own
+-- regression coverage, distinct from ch1Bytes' pulse-channel path above.
+local ch4Bytes = {
+  0xE3, 0x05,             -- toggle_noise 5 (dropped, no event emitted)
+  0xEF, 0xF0,             -- stereo_panning TRUE, FALSE
+  0xD8, 0x0C,             -- note_type 12 (hw==4 drum_speed form: no volume/fade byte)
+  0x03,                   -- rest 4
+  0x11,                   -- drum 1, len 2
+  0x10,                   -- drum 1, len 1
+  0x10,                   -- drum 1, len 1
+  0x11,                   -- drum 1, len 2
+  0x10,                   -- drum 1, len 1
+  0x10,                   -- drum 1, len 1
+  0x10,                   -- drum 1, len 1
+  0x10,                   -- drum 1, len 1
+  0x15,                   -- drum 1, len 6
+  0x11,                   -- drum 1, len 2
+  0x10,                   -- drum 1, len 1
+  0x10,                   -- drum 1, len 1
+  0x11,                   -- drum 1, len 2
+  0xFF,                   -- sound_ret (synthetic terminator for this fixture window)
+}
+local ch4BaseAddress = 0x7C5C
+
+local ch4Events = CrystalMusicTranscoder.decodeChannel(ch4Bytes, 4, ch4BaseAddress, {})
+eq(#ch4Events, 17, "Music transcoder: 16 real Crystal commands in the 20-byte prefix, minus "
+  .. "1 dropped (toggle_noise), plus 1 for the terminal sound_ret -> 17 events "
+  .. "(pan/notetype/rest/drum x13/ret)")
+check(ch4Events[1].pan == 0xF0, "Music transcoder: Ch4 stereo_panning packs to 0xF0 "
+  .. "(toggle_noise right before it was dropped, no event in between)")
+check(ch4Events[2].notetype and ch4Events[2].notetype.speed == 12
+  and ch4Events[2].notetype.volume == 0 and ch4Events[2].notetype.fade == 0,
+  "Music transcoder: Ch4 note_type 12 (hw==4 drum_speed form) decodes with volume/fade "
+  .. "both 0, no volume/fade byte consumed")
+eq(ch4Events[3].rest, 4, "Music transcoder: Ch4 rest 4")
+eq(ch4Events[4].drum, 1, "Music transcoder: Ch4 drum id decodes as the raw high nibble "
+  .. "(1), no -1 offset unlike pulse-channel pitch")
+eq(ch4Events[4].len, 2, "Music transcoder: Ch4 first drum record length 2")
+eq(ch4Events[5].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[5].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[6].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[6].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[7].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[7].len, 2, "Music transcoder: Ch4 drum record length 2")
+eq(ch4Events[8].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[8].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[9].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[9].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[10].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[10].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[11].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[11].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[12].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[12].len, 6, "Music transcoder: Ch4 drum record length 6 (from $15)")
+eq(ch4Events[13].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[13].len, 2, "Music transcoder: Ch4 drum record length 2")
+eq(ch4Events[14].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[14].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[15].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[15].len, 1, "Music transcoder: Ch4 drum record length 1")
+eq(ch4Events[16].drum, 1, "Music transcoder: Ch4 drum 1")
+eq(ch4Events[16].len, 2, "Music transcoder: Ch4 last real-byte drum record length 2")
+eq(ch4Events[17].ret, true, "Music transcoder: Ch4 window ends with the synthetic sound_ret")
+
 T.finish("Gen2 music transcoder")
