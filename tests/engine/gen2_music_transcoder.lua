@@ -14,23 +14,31 @@
 -- such block exists there; the cry-transcoder fixture actually lives
 -- here, auto-discovered by tier_runner, which is the convention this
 -- file follows instead. See task-3-report.md for the full account of
--- this and two other brief/reality mismatches this fixture's assertion
--- values had to be corrected for (both empirically verified against the
--- real byte arrays below, not guessed):
+-- this and the other brief/reality mismatches this fixture's assertion
+-- values had to be corrected for (all empirically verified against the
+-- real byte arrays below via a throwaway probe script, not guessed):
 --   1. The byte arrays are exactly as task-3-brief.md gave them (real,
---      ROM-verified bytes, unmodified). Decoding the full 30-byte Ch1
---      prefix (+ synthetic $FF terminator) produces 17 events, not the
---      13 the brief's own fixture claimed ("17 commands -> 13 events" is
---      an arithmetic error in the brief: only pitch_offset is dropped
---      among those 17 commands, so 16 produce events, +1 for the final
---      sound_ret = 17, not 13). This file asserts the true 17-event
---      sequence, including the four trailing notes/rests the brief's
---      assertions silently stopped short of.
+--      ROM-verified bytes, unmodified) and are never edited to make an
+--      assertion pass -- only the derived expected event count/order is.
 --   2. In .sub1, the label sub1loop1 sits at the exact same address as
 --      the very next command (a rest) -- decodeChannel checks for a
 --      label at the current address *before* reading that address's
 --      command byte, so the label event is emitted before that rest
 --      event, not after (the brief's assertion order had this reversed).
+--   3. `volume_cmd` ($E5, "volume 7, 7") writes the GLOBAL NR50 master
+--      volume, not the per-channel envelope volume_envelope_cmd ($DC)
+--      writes -- despite sharing the same dn(a, b) byte packing, they
+--      are different registers with different scope. A code-review pass
+--      caught that this file's decodeChannel originally (wrongly) re-
+--      emitted volume_cmd as a notetype event, treating it as equivalent
+--      to volume_envelope_cmd; src/audio/CrystalMusicTranscoder.lua now
+--      drops it instead (no ChipAsm master-volume event exists, and this
+--      song's own `7, 7` is already max-on-both-sides, ChipSynth's
+--      default anyway, so dropping it is lossless here). That shifts
+--      Ch1's event count/indices down by one from the count this file
+--      originally asserted (17 -> 16): 17 real Crystal commands in the
+--      30-byte prefix, minus 2 dropped (pitch_offset, volume_cmd), plus
+--      1 for the terminal sound_ret = 16 events, asserted below.
 
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
@@ -68,38 +76,40 @@ local ch1Bytes = {
 local ch1BaseAddress = 0x7814
 
 local events = CrystalMusicTranscoder.decodeChannel(ch1Bytes, 1, ch1BaseAddress, {})
-eq(#events, 17, "Music transcoder: 17 commands (pitch_offset dropped) -> 17 events "
-  .. "(tempo/volume/duty/vibrato/pan/notetype x3/octave x2/rest x2/note x4/ret)")
+eq(#events, 16, "Music transcoder: 17 real Crystal commands in the 30-byte prefix, minus "
+  .. "2 dropped (pitch_offset, volume_cmd), plus 1 for the terminal sound_ret -> 16 events "
+  .. "(tempo/duty/vibrato/pan/notetype x3/octave x2/rest x2/note x4/ret)")
 eq(events[1].tempo, 134, "Music transcoder: tempo decodes to 134")
-eq(events[2].duty, nil, "Music transcoder: volume event has no duty field")
-check(events[2].notetype and events[2].notetype.volume == 7 and events[2].notetype.fade == 7,
-  "Music transcoder: volume_cmd 7,7 decodes as a notetype reusing the default speed (12)")
-check(events[3].duty == 3, "Music transcoder: duty_cycle decodes to 3")
-check(events[4].vibrato and events[4].vibrato.delay == 16
-  and events[4].vibrato.depth == 1 and events[4].vibrato.rate == 2,
+-- volume_cmd ("volume 7, 7", between tempo and duty_cycle in the byte
+-- stream) is dropped -- see this file's header comment -- so duty_cycle
+-- is the very next event after tempo, not a notetype standing in for it.
+check(events[2].duty == 3, "Music transcoder: duty_cycle decodes to 3 "
+  .. "(volume_cmd right before it was dropped, no event in between)")
+check(events[3].vibrato and events[3].vibrato.delay == 16
+  and events[3].vibrato.depth == 1 and events[3].vibrato.rate == 2,
   "Music transcoder: vibrato 16,1,2 decodes correctly")
-eq(events[5].pan, 0xF0, "Music transcoder: stereo_panning packs to 0xF0")
-check(events[6].notetype and events[6].notetype.speed == 12
-  and events[6].notetype.volume == 10 and events[6].notetype.fade == 7,
+eq(events[4].pan, 0xF0, "Music transcoder: stereo_panning packs to 0xF0")
+check(events[5].notetype and events[5].notetype.speed == 12
+  and events[5].notetype.volume == 10 and events[5].notetype.fade == 7,
   "Music transcoder: note_type 12,10,7 decodes correctly")
-check(events[7].notetype and events[7].notetype.speed == 12
-  and events[7].notetype.volume == 10 and events[7].notetype.fade == 0,
+check(events[6].notetype and events[6].notetype.speed == 12
+  and events[6].notetype.volume == 10 and events[6].notetype.fade == 0,
   "Music transcoder: volume_envelope 10,0 reuses the last note_type speed (12)")
-eq(events[8].octave, 3, "Music transcoder: octave 3")
-eq(events[9].rest, 4, "Music transcoder: rest 4")
-check(events[10].notetype.volume == 10 and events[10].notetype.fade == 7,
+eq(events[7].octave, 3, "Music transcoder: octave 3")
+eq(events[8].rest, 4, "Music transcoder: rest 4")
+check(events[9].notetype.volume == 10 and events[9].notetype.fade == 7,
   "Music transcoder: volume_envelope 10,7")
-eq(events[11].octave, 2, "Music transcoder: octave 2")
-eq(events[12].pitch, 7, "Music transcoder: note G_ decodes to pitch 7 (G, 0-indexed)")
-eq(events[12].len, 1, "Music transcoder: note G_,1 length")
-eq(events[13].rest, 2, "Music transcoder: rest 2")
-eq(events[14].pitch, 9, "Music transcoder: note A_ decodes to pitch 9")
-eq(events[14].len, 1, "Music transcoder: note A_,1 length")
-eq(events[15].pitch, 11, "Music transcoder: note B_ decodes to pitch 11")
-eq(events[15].len, 8, "Music transcoder: note B_,8 length")
-eq(events[16].pitch, 7, "Music transcoder: note G_ decodes to pitch 7 again")
-eq(events[16].len, 4, "Music transcoder: note G_,4 length")
-eq(events[17].ret, true, "Music transcoder: ends with sound_ret")
+eq(events[10].octave, 2, "Music transcoder: octave 2")
+eq(events[11].pitch, 7, "Music transcoder: note G_ decodes to pitch 7 (G, 0-indexed)")
+eq(events[11].len, 1, "Music transcoder: note G_,1 length")
+eq(events[12].rest, 2, "Music transcoder: rest 2")
+eq(events[13].pitch, 9, "Music transcoder: note A_ decodes to pitch 9")
+eq(events[13].len, 1, "Music transcoder: note A_,1 length")
+eq(events[14].pitch, 11, "Music transcoder: note B_ decodes to pitch 11")
+eq(events[14].len, 8, "Music transcoder: note B_,8 length")
+eq(events[15].pitch, 7, "Music transcoder: note G_ decodes to pitch 7 again")
+eq(events[15].len, 4, "Music transcoder: note G_,4 length")
+eq(events[16].ret, true, "Music transcoder: ends with sound_ret")
 
 -- Music_TitleScreen_Ch1.sub1 (bank $3a, address $796d), full 23 bytes,
 -- including its internal .sub1loop1 label (offset 4, address $7971)

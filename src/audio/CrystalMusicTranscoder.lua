@@ -24,13 +24,16 @@
 -- section byte-verifies both against real ROM data (`e5 77` = volume_cmd,
 -- `d5`/`d6`/`d7` = octave_cmd), and the brief's own fixture bytes use
 -- both. Running the brief's code as literally given errors out on the
--- fixture's first `$E5` byte. The two branches added here were verified
--- empirically (not guessed): decoding the fixture's real ROM bytes with
--- them produces every other field the fixture's own assertions check
--- (tempo/duty/vibrato/pan/notetype x3/octave x2/rest/pitch, ~20 fields)
--- exactly -- see task-3-report.md for the full comparison. That match
--- across so many independent fields is what justifies adding these two
--- branches rather than treating the crash as a sign to drop the bytes.
+-- fixture's first `$E5` byte. octave_cmd was verified empirically (not
+-- guessed): decoding the fixture's real ROM bytes with it produces every
+-- other field the fixture's own assertions check (tempo/duty/vibrato/
+-- pan/notetype/octave/rest/pitch fields) exactly -- see task-3-report.md
+-- for the full comparison. volume_cmd is handled below by dropping it,
+-- not by re-emitting an event -- see its own branch's comment for why
+-- (an earlier version of this file wrongly treated it as equivalent to
+-- volume_envelope_cmd; code review caught that they are different
+-- registers with different scope that only coincidentally share a byte
+-- packing).
 local bit = require("bit")
 local ChipAsm = require("src.audio.ChipAsm")
 
@@ -101,16 +104,21 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
         volume = bit.rshift(packed, 4), fade = fadeValue(bit.band(packed, 0x0F)),
       } }
       i = i + 2
-    elseif cmd == 0xE5 then -- volume_cmd: same dn(volume, fade) packing and
-      -- the same "no direct ChipAsm event, re-emit as notetype carrying
-      -- the last-known speed" treatment as volume_envelope_cmd above (this
-      -- opcode is missing from task-3-brief.md's own dispatch table --
-      -- see this file's header comment for why it is added here)
-      local packed = bytes[i + 1]
-      events[#events + 1] = { notetype = {
-        speed = lastSpeed,
-        volume = bit.rshift(packed, 4), fade = fadeValue(bit.band(packed, 0x0F)),
-      } }
+    elseif cmd == 0xE5 then -- volume_cmd: writes wVolume, the GLOBAL NR50
+      -- hardware master left/right volume (0-7 per side) -- NOT the
+      -- per-channel envelope volume/fade volume_envelope_cmd ($DC, above)
+      -- writes. The two opcodes only coincidentally share the same
+      -- dn(a, b) byte packing; they are different registers with
+      -- different scope, so re-emitting this as a notetype (as an
+      -- earlier version of this file did) was a false equivalence.
+      -- ChipAsm's event vocabulary has no master-volume event at all (see
+      -- src/audio/ChipAsm.lua's KEYS list), and this song's own usage
+      -- (`volume 7, 7`) is already max-on-both-sides -- ChipSynth's
+      -- default state anyway -- so dropping it is lossless here, same
+      -- "no ChipAsm equivalent, drop the structural-only bytes" treatment
+      -- as toggle_noise_cmd/pitch_offset_cmd below. This opcode is
+      -- missing from task-3-brief.md's own dispatch table -- see this
+      -- file's header comment for why it is handled here.
       i = i + 2
     elseif cmd == 0xD8 then -- note_type_cmd (also drum_speed on hw==4)
       local speed = bytes[i + 1]
