@@ -10,6 +10,7 @@
 -- docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
 
 local bit = require("bit")
+local CrystalCryTranscoder = require("src.audio.CrystalCryTranscoder")
 local ImageWriter = require("src.import.ImageWriter")
 local LuaWriter = require("src.import.LuaWriter")
 local Lz3 = require("src.import.Lz3")
@@ -18,7 +19,7 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 6
+local STAGE_COUNT = 7
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (New Bark Town's map/tileset/player sprite/font
@@ -588,6 +589,32 @@ function RomExtractorGen2:extractField(newBarkTown)
   return out
 end
 
+-- Wooper's cry: Cry_Wooper_Ch5/_Ch6/_Ch8's three real channel programs
+-- (ROM bank $3c) translated from Crystal's opcode dialect into Gen1's via
+-- CrystalCryTranscoder, then assembled into a self-contained chip blob by
+-- src/audio/ChipAsm.lua -- the same pseudo-bank-0 mechanism mod-authored
+-- ChipAsm songs/sfx already use, so no ROM bank dump or wave-sample table
+-- is needed (Engine.new only reads WaveSamples when a header lacks a
+-- `chip` field; ours always has one). See
+-- docs/superpowers/plans/2026-08-04-gen2-crystal-cry-transcoder.md.
+function RomExtractorGen2:extractCry()
+  self:beginStage("Wooper cry")
+  local ch5 = self:symbol("Cry_Wooper_Ch5")
+  local ch6 = self:symbol("Cry_Wooper_Ch6")
+  local ch8 = self:symbol("Cry_Wooper_Ch8")
+  local cry = CrystalCryTranscoder.buildCry({
+    { hw = 1, bytes = self.rom:bytes(ch5.bank, ch5.address, 40) },
+    { hw = 2, bytes = self.rom:bytes(ch6.bank, ch6.address, 40) },
+    { hw = 4, bytes = self.rom:bytes(ch8.bank, ch8.address, 20) },
+  })
+  cry.pitch = self.manifest.cryPitch
+  cry.length = self.manifest.cryLength
+  local audio = { cries = { WOOPER = cry } }
+  self:write("audio", audio)
+  self:tick("Wooper cry", 1, 1)
+  return audio
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -606,6 +633,7 @@ function RomExtractorGen2:run()
   results.palettes = self:extractPalettes()
   results.text = self:extractIntroText()
   results.field = self:extractField(results.maps.NEW_BARK_TOWN)
+  results.audio = self:extractCry()
   self:extractStubs()
   if self.progress then
     self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
