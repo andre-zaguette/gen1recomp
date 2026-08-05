@@ -655,6 +655,40 @@ function RomExtractorGen2:extractTitle()
 
   local crystalGfx = self:symbol("TitleCrystalGFX")
   local crystalRaw = Lz3.decompress(self.rom:bytes(crystalGfx.bank, crystalGfx.address, 0x1000))
+  -- gfx/title/crystal.2bpp is built with pokecrystal's own `tools/gfx
+  -- --interleave` (Makefile: "gfx/title/crystal.2bpp: tools/gfx +=
+  -- --interleave --png=$<") -- unlike the logo/Suicune sheets, which are
+  -- plain raster tile order. --interleave (tools/gfx.c's interleave())
+  -- pairs up consecutive tile-ROWS and alternates their tiles
+  -- column-by-column: stream position t's source (row, col) is
+  -- row = 2*floor(t/12) + (t%12 odd and 1 or 0), col = (t%12) // 2 for a
+  -- 48px-wide (6-tile) image. Confirmed against the real decompressed
+  -- bytes (byte-for-byte identical to the pret/pokecrystal checkout's own
+  -- pre-interleave gfx/title/crystal.2bpp build artifact) and against
+  -- tools/gfx.c's interleave() transform directly: without undoing this,
+  -- ImageWriter.decode2bpp's plain-raster assumption renders a scrambled
+  -- checkerboard instead of the crystal shard.
+  local function deinterleaveTiles(raw, widthTiles)
+    local out = {}
+    local numTiles = #raw / 16
+    local pairWidth = widthTiles * 2
+    for t = 0, numTiles - 1 do
+      local pair = math.floor(t / pairWidth)
+      local rem = t % pairWidth
+      local row, col
+      if rem % 2 == 0 then
+        row, col = pair * 2, rem / 2
+      else
+        row, col = pair * 2 + 1, (rem - 1) / 2
+      end
+      local destTile = row * widthTiles + col
+      for byteIndex = 1, 16 do
+        out[destTile * 16 + byteIndex] = raw[t * 16 + byteIndex]
+      end
+    end
+    return out
+  end
+  crystalRaw = deinterleaveTiles(crystalRaw, 48 / 8)
   local crystalImage = ImageWriter.decode2bpp(crystalRaw, 48, 80)
   self:save(crystalImage, "title/crystal.png")
   self:tick("Title screen", 3, 4)
