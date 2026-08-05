@@ -649,7 +649,15 @@ function RomExtractorGen2:extractTitle()
   -- blank corner there. Pad to the full 160-tile rectangle the same way.
   local logoExpectedLength = 160 * 64 * 2 / 8
   for index = #logoRaw + 1, logoExpectedLength do logoRaw[index] = 0 end
-  local logoImage = ImageWriter.decode2bpp(logoRaw, 160, 64)
+  -- Real hardware draws the crystal ornament as an OAM sprite with the
+  -- BG-priority bit set (title.asm InitializeBackground: `ld a, 0 |
+  -- OAM_PRIO`), which means the sprite is hidden behind the background's
+  -- ink (color 1-3) but shows through the background's blank/color-0
+  -- pixels. Decoding the logo with transparent=true makes its shade-0
+  -- pixels alpha=0, reproducing that "see-through" blank-area behavior so
+  -- the crystal drawn behind it (TitleState's crystalLayout branch) peeks
+  -- through the gaps instead of being fully hidden by an opaque logo.
+  local logoImage = ImageWriter.decode2bpp(logoRaw, 160, 64, true)
   self:save(logoImage, "title/logo.png")
   self:tick("Title screen", 2, 4)
 

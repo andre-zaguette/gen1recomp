@@ -529,6 +529,17 @@ function TitleState:draw()
     -- row-pair (the "interlaced" effect) -- draw the logo in 8px-tall
     -- strips, odd/even strips offset in opposite directions, both
     -- converging on 0 as self.entranceSCX counts down to 0.
+    -- The crystal ornament sprite is drawn first (behind), then the logo
+    -- on top: real hardware draws the ornament OAM with OAM_PRIO set,
+    -- which sits behind the background's ink but in front of its blank
+    -- (color-0) pixels. extractTitle() now decodes the logo with
+    -- transparent=true so its blank areas have alpha=0, letting the
+    -- ornament drawn underneath show through the gaps while the logo's
+    -- opaque ink still fully covers it -- matching that layering instead
+    -- of painting the crystal over the finished logo.
+    if self.crystalOrnament then
+      love.graphics.draw(self.crystalOrnament, 56, self.ornamentY)
+    end
     if self.logo then
       local iw, ih = self.logo:getDimensions()
       local stripH = 8
@@ -553,9 +564,6 @@ function TitleState:draw()
           love.graphics.newQuad(0, y, iw, math.min(stripH, logoRows - y), iw, ih),
           dx, 24 + y)
       end
-    end
-    if self.crystalOrnament then
-      love.graphics.draw(self.crystalOrnament, 56, self.ornamentY)
     end
     if self.phase == "loop" and self.suicuneSheet then
       -- SuicuneFrameIterator's .Frames table selects one of 4 fixed
