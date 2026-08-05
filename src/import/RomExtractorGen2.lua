@@ -641,6 +641,14 @@ function RomExtractorGen2:extractTitle()
 
   local logo = self:symbol("TitleLogoGFX")
   local logoRaw = Lz3.decompress(self.rom:bytes(logo.bank, logo.address, 0x1000))
+  -- The real compressed data only encodes 156 of the logo's 160 tiles (20x8):
+  -- the bottom-right 4 tiles are genuinely blank background, and the
+  -- compressor never bothered emitting trailing all-zero tiles. On real
+  -- hardware VRAM is cleared before Decompress runs, so those tile slots
+  -- read back as zero, i.e. shade 0 / white -- matching the real logo's
+  -- blank corner there. Pad to the full 160-tile rectangle the same way.
+  local logoExpectedLength = 160 * 64 * 2 / 8
+  for index = #logoRaw + 1, logoExpectedLength do logoRaw[index] = 0 end
   local logoImage = ImageWriter.decode2bpp(logoRaw, 160, 64)
   self:save(logoImage, "title/logo.png")
   self:tick("Title screen", 2, 4)
