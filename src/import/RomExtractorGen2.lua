@@ -504,7 +504,7 @@ function RomExtractorGen2:extractField(newBarkTown, title)
       -- scope, no species data extracted); splash/title stay on the
       -- BOOT_DEFAULTS fallback (Game.lua's bootScreens(self).X or
       -- <default> reads), confirmed to need no Crystal-specific data.
-      screens = { newGame = "NoOpScreen" },
+      screens = { newGame = "CrystalIntro" },
     },
     -- These three data.field.* keys are read with no nil-guard on the
     -- boot -> walk path (unlike everything FieldDefaults.FIELD already
