@@ -19,7 +19,7 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 7
+local STAGE_COUNT = 8
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (New Bark Town's map/tileset/player sprite/font
@@ -491,10 +491,11 @@ end
 -- COLLISION_PERMISSION never marks one a wall.  Deriving the coordinate
 -- from the map this extractor just decoded is verified against the real
 -- ROM on every import, which a hardcoded guess could not be here.
-function RomExtractorGen2:extractField(newBarkTown)
+function RomExtractorGen2:extractField(newBarkTown, title)
   local spawn = assert(newBarkTown.warps[1],
     "NewBarkTown has no warps to derive a walkable spawn tile from")
   local out = {
+    title = title,
     boot = {
       startMap = "NEW_BARK_TOWN", startX = spawn.x, startY = spawn.y,
       startFacing = "down",
@@ -624,6 +625,66 @@ function RomExtractorGen2:extractCry()
   return audio
 end
 
+-- Title screen art (engine/movie/title.asm): the Pokemon logo (with
+-- "CRYSTAL VERSION" baked into its own pixels -- Crystal has no separate
+-- ribbon asset, unlike Red/Blue/Yellow), the running-Suicune tile sheet,
+-- the falling crystal ornament, and the title's 16 GBC palettes (8 BG + 8
+-- OBJ). See docs/superpowers/plans/2026-08-05-gen2-crystal-title-screen.md.
+function RomExtractorGen2:extractTitle()
+  self:beginStage("Title screen")
+
+  local suicune = self:symbol("TitleSuicuneGFX")
+  local suicuneRaw = Lz3.decompress(self.rom:bytes(suicune.bank, suicune.address, 0x1000))
+  local suicuneImage = ImageWriter.decode2bpp(suicuneRaw, 128, 128)
+  self:save(suicuneImage, "title/suicune.png")
+  self:tick("Title screen", 1, 4)
+
+  local logo = self:symbol("TitleLogoGFX")
+  local logoRaw = Lz3.decompress(self.rom:bytes(logo.bank, logo.address, 0x1000))
+  local logoImage = ImageWriter.decode2bpp(logoRaw, 160, 64)
+  self:save(logoImage, "title/logo.png")
+  self:tick("Title screen", 2, 4)
+
+  local crystalGfx = self:symbol("TitleCrystalGFX")
+  local crystalRaw = Lz3.decompress(self.rom:bytes(crystalGfx.bank, crystalGfx.address, 0x1000))
+  local crystalImage = ImageWriter.decode2bpp(crystalRaw, 48, 80)
+  self:save(crystalImage, "title/crystal.png")
+  self:tick("Title screen", 3, 4)
+
+  -- 16 GBC palettes (8 BG, 8 OBJ), 4 colors each, RGB555 packed 2
+  -- bytes/color -- same layout and scale5 conversion RomExtractor.lua's
+  -- extractPalettes already uses for Gen1's SuperPalettes/CGBBasePalettes.
+  local palTable = self:symbol("TitleScreenPalettes")
+  local function scale5(value) return math.floor(value * 255 / 31 + 0.5) end
+  local function readPalettes(startIndex, count)
+    local out = {}
+    for index = 0, count - 1 do
+      local colors = {}
+      for color = 0, 3 do
+        local value = self.rom:word(palTable.bank,
+          palTable.address + (startIndex + index) * 8 + color * 2)
+        colors[#colors + 1] = {
+          scale5(bit.band(value, 0x1F)),
+          scale5(bit.band(bit.rshift(value, 5), 0x1F)),
+          scale5(bit.band(bit.rshift(value, 10), 0x1F)),
+        }
+      end
+      out[#out + 1] = colors
+    end
+    return out
+  end
+  local palette = { bg = readPalettes(0, 8), obj = readPalettes(8, 8) }
+  self:tick("Title screen", 4, 4)
+
+  local title = {
+    logo = "assets/generated/title/logo.png",
+    suicune = "assets/generated/title/suicune.png",
+    crystalOrnament = "assets/generated/title/crystal.png",
+    palette = palette,
+  }
+  return title
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -641,7 +702,8 @@ function RomExtractorGen2:run()
   results.font = self:extractFont()
   results.palettes = self:extractPalettes()
   results.text = self:extractIntroText()
-  results.field = self:extractField(results.maps.NEW_BARK_TOWN)
+  local title = self:extractTitle()
+  results.field = self:extractField(results.maps.NEW_BARK_TOWN, title)
   results.audio = self:extractCry()
   self:extractStubs()
   if self.progress then
