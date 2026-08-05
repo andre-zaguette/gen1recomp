@@ -40,6 +40,16 @@ REQUIRED_SYMBOLS = (
     "_AreYouABoyOrAreYouAGirlText",
     "PokemonProfPic",
     "WooperFrontpic",
+    # Wooper's three real cry channel programs (pulse 1, pulse 2, noise).
+    # Read directly by name rather than via Cry_Wooper's own header table
+    # (a 3-byte-per-channel {channel_number, address} list) -- confirmed
+    # against the real .sym file: Cry_Wooper_Ch5 3c:722e, Cry_Wooper_Ch6
+    # 3c:7249, Cry_Wooper_Ch8 3c:7264 (all bank $3c). See
+    # docs/superpowers/plans/2026-08-04-gen2-crystal-cry-transcoder.md's
+    # "Research already done" section for the fully-verified byte decode.
+    "Cry_Wooper_Ch5",
+    "Cry_Wooper_Ch6",
+    "Cry_Wooper_Ch8",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
@@ -139,6 +149,36 @@ def parse_new_bark_town(pokecrystal):
     }
 
 
+def resolve_wooper_cry(pokecrystal):
+    """Wooper's row in data/pokemon/cries.asm's PokemonCries table:
+    `mon_cry CRY_WOOPER, 147, 175 ; WOOPER`. `mon_cry`'s macro body is
+    `dw \\1, \\2, \\3` (three 16-bit words = 6 bytes/row, confirmed by
+    reading the macro definition at the top of cries.asm) -- NOT Gen1's
+    one-byte pitch/length (src/import/RomExtractor.lua's extractAudio
+    reads a 3-byte-per-row table there). Both fields can be negative
+    (e.g. QUAGSIRE's row is `CRY_WOOPER, -198, 320`), so this reads them
+    as plain signed decimal literals straight off the source line --
+    exactly the value the assembler would encode as `dw`, no byte
+    packing/unpacking needed since this never touches raw ROM bytes.
+
+    Every row carries its species name as a trailing comment
+    (`; WOOPER`), an unambiguous single-match anchor for the one species
+    this skeleton's intro needs (confirmed exactly one `; WOOPER$` line
+    in the file). extract/util.py's read_asm strips `;` comments before
+    a caller ever sees a line, which would remove that anchor, so this
+    reads the raw file text directly instead.
+    """
+    path = os.path.join(pokecrystal, "data/pokemon/cries.asm")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(
+        r"mon_cry\s+CRY_\w+,\s*(-?\d+),\s*(-?\d+)\s*;\s*WOOPER\s*$",
+        text, re.MULTILINE)
+    if not m:
+        raise SystemExit("WOOPER row not found in data/pokemon/cries.asm")
+    return {"pitch": int(m.group(1)), "length": int(m.group(2))}
+
+
 def embed_symbols(symbols):
     out = {}
     for name in REQUIRED_SYMBOLS:
@@ -163,6 +203,7 @@ def main():
         raise SystemExit(f"{pokecrystal} is not a pokecrystal checkout")
 
     symbols = SymbolTable(os.path.abspath(args.symbols))
+    wooper_cry = resolve_wooper_cry(pokecrystal)
     data = {
         "romSha1": CRYSTAL_SHA1,
         "symbols": embed_symbols(symbols),
@@ -170,6 +211,8 @@ def main():
         "fontCharmap": parse_charmap(pokecrystal),
         "charmap": text_charmap(pokecrystal),
         "palettes": resolve_palettes(pokecrystal),
+        "cryPitch": wooper_cry["pitch"],
+        "cryLength": wooper_cry["length"],
     }
     with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)

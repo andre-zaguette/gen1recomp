@@ -249,6 +249,8 @@
     "98": "<BOLD_C>",
     "99": "<BOLD_D>"
   },
+  "cryLength": 175,
+  "cryPitch": 147,
   "fontCharmap": [
     {
       "code": 96,
@@ -2165,6 +2167,18 @@
     "ChrisSpriteGFX": [
       48,
       16384
+    ],
+    "Cry_Wooper_Ch5": [
+      60,
+      29230
+    ],
+    "Cry_Wooper_Ch6": [
+      60,
+      29257
+    ],
+    "Cry_Wooper_Ch8": [
+      60,
+      29284
     ],
     "Font": [
       62,
