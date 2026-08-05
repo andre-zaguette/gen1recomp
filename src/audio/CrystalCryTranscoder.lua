@@ -16,7 +16,16 @@ local CrystalCryTranscoder = {}
 
 -- packed low nibble -> signed fade, identical to src/core/ChipSynth.lua's
 -- fadeValue and src/audio/ChipAsm.lua's Cursor:fade (bit 3 set means a
--- decay of the low three bits)
+-- decay of the low three bits).
+--
+-- Note: Crystal's real ROM data (Wooper's noise channel, Ch8) contains
+-- "negative zero" fade nibbles ($_8, i.e. bit 3 set with the low 3 bits
+-- all zero), which this normalizes to plain 0 (-bit.band(8, 7) = -0 = 0).
+-- ChipAsm.lua's Cursor:fade then re-encodes that 0 back as $_0, not $_8,
+-- so a byte-diff of this transcoder's output blob against the original ROM
+-- bytes will show a few differing bytes here. That is expected and
+-- behaviorally correct (fade 0 = envelope off either way), not a bug --
+-- the two nibbles do not round-trip byte-for-byte, only semantically.
 local function fadeValue(nibble)
   if bit.band(nibble, 8) ~= 0 then return -bit.band(nibble, 7) end
   return nibble
@@ -87,6 +96,12 @@ function CrystalCryTranscoder.buildCry(channels)
   for index, channel in ipairs(channels) do
     specs[index] = {
       hw = channel.hw,
+      -- hw == 4 selects the noise channel's 3-byte note record; hw 1/2
+      -- (pulse) use the 4-byte record. hw == 3 (wave) has its own record
+      -- shape entirely and is out of scope for this module -- Wooper's
+      -- three real channels never use it, and nothing here detects or
+      -- rejects it, so a future caller adding a wave channel must not
+      -- assume this line's condition covers it.
       program = CrystalCryTranscoder.decodeChannel(channel.bytes, channel.hw == 4),
     }
   end

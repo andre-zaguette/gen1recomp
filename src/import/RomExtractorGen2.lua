@@ -607,6 +607,15 @@ function RomExtractorGen2:extractCry()
     { hw = 2, bytes = self.rom:bytes(ch6.bank, ch6.address, 40) },
     { hw = 4, bytes = self.rom:bytes(ch8.bank, ch8.address, 20) },
   })
+  -- These feed into Gen1-engine conventions elsewhere (ChipSynth.lua's
+  -- bit.band(register + frequencyOffset, 0x7FF) and frameTicks = 0x80 +
+  -- cryLength), which were designed around Gen1's own byte-range
+  -- semantics, not Crystal's. Wooper's values (147/175) happen to land in
+  -- range and were confirmed correct by a human listening to the real
+  -- rendered output -- this cross-engine scaling is verified for Wooper
+  -- specifically, not structurally guaranteed for any future species. A
+  -- future species with very different pitch/length values should
+  -- re-verify by ear, not assume the scaling holds.
   cry.pitch = self.manifest.cryPitch
   cry.length = self.manifest.cryLength
   local audio = { cries = { WOOPER = cry } }
