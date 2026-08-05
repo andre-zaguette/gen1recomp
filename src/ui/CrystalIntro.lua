@@ -113,15 +113,30 @@ function CrystalIntro:runStep(step)
   if kind == "gender" then
     self:sayText(self:stepText(step), function()
       local Menu = require("src.ui.Menu")
+      -- Game.lua:onNewGame pushes OverworldState (which constructs
+      -- game.overworld.player from whatever save.player.gender held at
+      -- that moment -- unset, at boot) BEFORE pushing this intro screen,
+      -- so the Player object already exists by the time either choice
+      -- below runs, with the wrong/default walk sprite baked in. Refresh
+      -- it in place after writing the real gender rather than restructure
+      -- that shared, Gen1-critical boot order (see Player:refreshSprite's
+      -- own comment for why an in-place field swap is safe here).
+      local function refreshPlayerSprite()
+        local ow = self.game.overworld
+        local p = ow and ow.player
+        if p and p.refreshSprite then p:refreshSprite(self.game.data, self.game.save) end
+      end
       local items = {
         { label = "BOY", onSelect = function()
           self.game.save.player.gender = "boy"
           self:recordAnswer(step, 1, "BOY", "boy")
+          refreshPlayerSprite()
           self:advance()
         end },
         { label = "GIRL", onSelect = function()
           self.game.save.player.gender = "girl"
           self:recordAnswer(step, 2, "GIRL", "girl")
+          refreshPlayerSprite()
           self:advance()
         end },
       }

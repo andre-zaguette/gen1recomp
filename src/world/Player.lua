@@ -102,6 +102,33 @@ function Player.new(data, cx, cy, facing, save)
   return self
 end
 
+-- Rebuild the on-foot walk sprite from the live save.player.gender.
+-- Player.new (above) bakes walkId in exactly once, at construction, and
+-- OverworldState:enter's reposition-only path (self.player already set,
+-- src/world/OverworldController.lua) never rebuilds it -- so a gender
+-- choice made AFTER the Player object already exists (CrystalIntro's
+-- "gender" step runs on top of the overworld state that constructed the
+-- player, since Game.lua:onNewGame pushes OverworldState before the intro
+-- screen) needs an explicit poke or it never takes effect for the rest of
+-- the session. Same "something changed, make the live object reflect it
+-- now" idiom PaletteFX.checkTimeOfDay uses to force a reload after a
+-- real-world time bucket crossing, scoped down to the one field that
+-- actually depends on gender: pose()/draw() read self.sprite fresh every
+-- frame (never cache a copy), so reassigning it here alone is enough --
+-- no need to touch cellX/cellY/facing/moving or rebuild the whole Player,
+-- and no identity change for anything holding a reference to this object
+-- (self.entities, PikachuFollower's ow.player, etc.).
+function Player:refreshSprite(data, save)
+  local walkId = FieldDefaults.fieldValue(data, "playerSprites", "walk")
+  if save and save.player and save.player.gender == "girl" then
+    local altId = FieldDefaults.fieldValue(data, "playerSprites", "walkAlt")
+    if altId and data.sprites[altId] then walkId = altId end
+  end
+  if walkId and data.sprites[walkId] then
+    self.sprite = SpriteRenderer.new(data.sprites[walkId], "player")
+  end
+end
+
 function Player:position()
   return self.cellX, self.cellY
 end
