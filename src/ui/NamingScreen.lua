@@ -194,12 +194,20 @@ function NamingScreen:draw()
     for i = 1, self.maxLen do
       Font.draw(self.glyphs[i] or "-", 40 + (i - 1) * 8, 48)
     end
+    -- column x = c * 16 (no extra left offset) matches Crystal's real
+    -- glyph spacing: engine/menus/naming_screen.asm's .row/.col loop
+    -- writes NameInputUpper (data/text/name_input_chars.asm) starting at
+    -- hlcoord 2,8 with one blank BG tile between letters, so letter c
+    -- (1-indexed) lands at tile column 2c, i.e. pixel 16c. The extra "16 +"
+    -- this port previously added shifted every row 16px right, pushing the
+    -- 9th (last) column -- I, R, the row-3 space, <MN>, and ED itself --
+    -- entirely past the 160px-wide canvas.
     for r, row in ipairs(self:grid()) do
       for c, cell in ipairs(row) do
-        Font.draw(Strings(cell), 16 + c * 16, 48 + r * 16)
+        Font.draw(Strings(cell), c * 16, 48 + r * 16)
       end
     end
-    Font.drawCode(Theme.cursor, 8 + self.col * 16, 48 + self.row * 16)
+    Font.drawCode(Theme.cursor, self.col * 16 - 8, 48 + self.row * 16)
   else
     Font.draw(self.title, 8, 8)
     -- typed name with dashes for the empty slots
