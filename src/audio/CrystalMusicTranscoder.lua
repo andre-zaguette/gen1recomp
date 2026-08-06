@@ -14,8 +14,10 @@
 -- "Research already done" section for the verified opcode table and the
 -- two dialect corrections (sound_call/sound_loop are byte-swapped vs.
 -- ChipAsm; the note pitch nibble is offset by one and REST reuses pitch
--- 0 on every channel) this is built from. Channel 3 (wave) is out of
--- scope: this module only handles pulse (hw 1/2) and noise (hw 4).
+-- 0 on every channel) this is built from. Channel 3 (wave) support was
+-- added for Milestone 2 (docs/superpowers/plans/2026-08-06-gen2-crystal-
+-- milestone2-music.md, Task 1) -- all of the 5 songs required then use
+-- Channel 3.
 --
 -- Two opcodes below (volume_cmd $E5, octave_cmd $D0-$D7) are NOT in the
 -- task-3-brief.md code this module otherwise transcribes verbatim -- the
@@ -49,8 +51,10 @@ end
 -- Decodes one Crystal-dialect music channel program into a ChipAsm event
 -- list. `bytes` is a 1-indexed byte array (Rom:bytes(...)'s shape)
 -- starting exactly at `baseAddress` (the absolute ROM address of
--- bytes[1]). `hw` is 1/2 (pulse) or 4 (noise) -- never 3 (wave), which
--- this module does not decode. `labels` is an address -> name map: every
+-- bytes[1]). `hw` is 1/2 (pulse), 3 (wave), or 4 (noise) -- all three are
+-- now supported as of Milestone 2 (docs/superpowers/plans/
+-- 2026-08-06-gen2-crystal-milestone2-music.md, Task 1), when the first 5
+-- songs all required Channel 3. `labels` is an address -> name map: every
 -- time the byte currently being read sits at an address present in
 -- `labels`, a {label = name} marker is emitted first (covers both
 -- self-referential loop points inside this same window and, when
@@ -97,12 +101,20 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
       i = i + 2
     elseif cmd == 0xDC then -- volume_envelope_cmd: no direct ChipAsm event,
       -- re-emitted as a notetype carrying the last-known speed (see the
-      -- plan's "Research already done" section)
+      -- plan's "Research already done" section). hw==3 packs
+      -- waveLevel/waveInstrument here too, same distinction as note_type_cmd.
       local packed = bytes[i + 1]
-      events[#events + 1] = { notetype = {
-        speed = lastSpeed,
-        volume = bit.rshift(packed, 4), fade = fadeValue(bit.band(packed, 0x0F)),
-      } }
+      if hw == 3 then
+        events[#events + 1] = { notetype = {
+          speed = lastSpeed,
+          waveLevel = bit.rshift(packed, 4), waveInstrument = bit.band(packed, 0x0F),
+        } }
+      else
+        events[#events + 1] = { notetype = {
+          speed = lastSpeed,
+          volume = bit.rshift(packed, 4), fade = fadeValue(bit.band(packed, 0x0F)),
+        } }
+      end
       i = i + 2
     elseif cmd == 0xE5 then -- volume_cmd: writes wVolume, the GLOBAL NR50
       -- hardware master left/right volume (0-7 per side) -- NOT the
@@ -126,6 +138,15 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
       if hw == 4 then
         events[#events + 1] = { notetype = { speed = speed, volume = 0, fade = 0 } }
         i = i + 2
+      elseif hw == 3 then -- wave channel: packed byte is waveLevel/waveInstrument,
+        -- not volume/fade -- matches ChipAsm.lua's own E.notetype dispatch
+        -- ("wave level plus instrument on channel 3").
+        local packed = bytes[i + 2]
+        events[#events + 1] = { notetype = {
+          speed = speed,
+          waveLevel = bit.rshift(packed, 4), waveInstrument = bit.band(packed, 0x0F),
+        } }
+        i = i + 3
       else
         local packed = bytes[i + 2]
         events[#events + 1] = { notetype = {
