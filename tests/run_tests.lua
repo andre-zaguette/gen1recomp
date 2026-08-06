@@ -3666,6 +3666,40 @@ do
   GameVersion.set("red")
 end
 
+-- Regression test for stale Crystal caches imported before
+-- RomExtractorGen2:extractField() started stamping
+-- field.boot.screens.newGame = "CrystalIntro": Data:seedDefaults() used to
+-- fill the missing/newGame-default path with BOOT_DEFAULTS' OakSpeech, so
+-- pressing NEW GAME on Crystal incorrectly ran Red's intro unless the user
+-- re-imported. The fix is versioned at seed time, mirroring the older Yellow
+-- splash override above: only the untouched default flips, explicit data
+-- still wins.
+do
+  local GameVersion = require("src.core.GameVersion")
+  local Data = require("src.core.Data")
+  GameVersion.set("crystal")
+
+  local fake = {
+    constants = {}, pokemon = {}, maps = {}, trainer_headers = {},
+    field = { boot = { screens = { splash = "IntroMovie", title = "TitleState",
+                                   newGame = "OakSpeech" } } },
+  }
+  Data.seedDefaults(fake)
+  eq(fake.field.boot.screens.newGame, "CrystalIntro",
+    "Crystal boot defaults: stale/default OakSpeech fallback upgrades to CrystalIntro")
+
+  local explicit = {
+    constants = {}, pokemon = {}, maps = {}, trainer_headers = {},
+    field = { boot = { screens = { splash = "IntroMovie", title = "TitleState",
+                                   newGame = "SomeCustomIntro" } } },
+  }
+  Data.seedDefaults(explicit)
+  eq(explicit.field.boot.screens.newGame, "SomeCustomIntro",
+    "Crystal boot defaults: explicit newGame screen override still wins")
+
+  GameVersion.set("red")
+end
+
 -- Regression test for the string-vs-numeric tileGroups key bug Task 4's
 -- review caught: manifest.palettes.tileGroups arrives keyed by STRING tile
 -- ids (JSON always stringifies object keys, and src/link/Json.lua does not
