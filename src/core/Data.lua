@@ -106,7 +106,7 @@ function Data:seedDefaults()
   if constants.dexDigits == nil then
     constants.dexDigits = math.max(3, #tostring(constants.dexSize))
   end
-  self:applyVersionedFieldData()
+  Data.applyVersionedFieldData(self)
   local boot = self.field.boot
   if boot == nil then
     boot = {}
@@ -114,6 +114,16 @@ function Data:seedDefaults()
   end
   for key, value in pairs(BOOT_DEFAULTS) do
     if boot[key] == nil then boot[key] = copy(value) end
+  end
+  -- Older imported caches can carry a partial boot.screens table (for
+  -- example only splash/title, or an empty table). The top-level fill above
+  -- does not repair missing nested keys once boot.screens itself exists, so
+  -- Game.lua later falls through its `or "OakSpeech"` NEW GAME fallback and
+  -- incorrectly runs Red's intro on Crystal. Fill the known screen ids
+  -- field-by-field, but keep any explicit override that is already present.
+  boot.screens = boot.screens or {}
+  for key, value in pairs(BOOT_DEFAULTS.screens) do
+    if boot.screens[key] == nil then boot.screens[key] = value end
   end
   -- Yellow boots its own attract movie (engine/movie/intro_yellow.asm);
   -- only the un-overridden default flips, so a total conversion that set
@@ -148,11 +158,11 @@ function Data:seedDefaults()
   -- extractor never writes headers for them.  Seed the EVENT_BEAT_* /
   -- after-battle rows so Blaine's SetEventRange deactivation and talk
   -- after-text work like the other gyms (scripts/CinnabarGym.asm).
-  self:seedCinnabarGymTrainerHeaders()
+  Data.seedCinnabarGymTrainerHeaders(self)
   -- #197: the Fighting Dojo Karate Master is text_asm, so the extractor
   -- writes no header for him -- seed one so he engages on sight and has
   -- his defeat / re-talk lines (same idea as the Cinnabar seed above).
-  self:seedFightingDojoKarateMaster()
+  Data.seedFightingDojoKarateMaster(self)
   -- #189: 1F cabin door order vs rooms map (survey zoom)
   require("src.world.SsAnneLayout").apply(self.maps)
 end

@@ -32,10 +32,9 @@ tools/extract_gen2/font.py's fontCharmap already sets precedent for):
     wears PAL_OW_RED (row 0 of each time block) -- the only overworld
     sprite this skeleton extracts.
 
-Deliberately resolves only morn/day/nite (this project's Crystal work
-has no cave or indoor map extracted yet, so "dark" and "indoor" data --
-real, but meaningless without one -- are left unresolved; see the
-Gen2 (Crystal) Native Color design spec's non-goals).
+Deliberately resolves only morn/day/nite. The minimal Crystal import
+uses both outdoor and indoor environments, so the relevant tilesets are
+split between those two environment tables.
 """
 
 import os
@@ -53,17 +52,24 @@ PAL_BG_NAMES = ("GRAY", "RED", "GREEN", "WATER", "YELLOW", "BROWN", "ROOF", "TEX
 # ids 96-127; bank 1 tile ids resume at 128 (see module docstring)
 BANK1_START_ID = 128
 
+TILESET_FILES = {
+    "TILESET_JOHTO": ("gfx/tilesets/johto_palette_map.asm", "outdoor"),
+    "TILESET_PLAYERS_HOUSE": ("gfx/tilesets/players_house_palette_map.asm", "indoor"),
+    "TILESET_PLAYERS_ROOM": ("gfx/tilesets/players_room_palette_map.asm", "indoor"),
+    "TILESET_LAB": ("gfx/tilesets/lab_palette_map.asm", "indoor"),
+    "TILESET_HOUSE": ("gfx/tilesets/house_palette_map.asm", "indoor"),
+}
+
 
 def _scale5(v):
     """5-bit (0-31) RGB555 component -> 8-bit (0-255)."""
     return round(v * 255 / 31)
 
 
-def parse_tile_groups(pokecrystal):
+def parse_palette_map(path):
     groups = {}
     tile_id = 0
     seen_bank1 = False
-    path = os.path.join(pokecrystal, "gfx/tilesets/johto_palette_map.asm")
     for _, line in read_asm(path):
         m = re.match(r"tilepal\s+(\d+),\s*(.+)$", line.strip())
         if not m:
@@ -78,25 +84,29 @@ def parse_tile_groups(pokecrystal):
     return groups
 
 
-def parse_outdoor_index(pokecrystal):
-    """4 rows (morn/day/nite/dark), each 8 ints -- indexes into bg_tiles.pal."""
+def parse_environment_index(pokecrystal):
+    """Named 4-row (morn/day/nite/dark) x 8-col environment index tables."""
     path = os.path.join(pokecrystal, "data/maps/environment_colors.asm")
-    rows = []
-    in_block = False
+    rows = {}
+    current = None
     for _, line in read_asm(path):
         s = line.strip()
-        if s == ".OutdoorColors:":
-            in_block = True
+        block = re.match(r"\.(\w+Colors):$", s)
+        if block:
+            current = block.group(1)
+            rows[current] = []
             continue
-        if not in_block:
+        if current is None:
             continue
         m = re.match(r"db\s+(.+)$", s)
         if not m:
-            break
-        rows.append([parse_number(v.strip()) for v in m.group(1).split(",")])
-    if len(rows) != 4:
-        raise SystemExit(
-            f".OutdoorColors: expected 4 rows (morn/day/nite/dark), got {len(rows)}")
+            current = None
+            continue
+        rows[current].append([parse_number(v.strip()) for v in m.group(1).split(",")])
+    for name in ("OutdoorColors", "IndoorColors"):
+        if len(rows.get(name, [])) != 4:
+            raise SystemExit(
+                f".{name}: expected 4 rows (morn/day/nite/dark), got {len(rows.get(name, []))}")
     return rows
 
 
@@ -112,20 +122,37 @@ def _parse_rgb_rows(path):
 
 
 def resolve(pokecrystal):
-    tile_groups = parse_tile_groups(pokecrystal)
-    outdoor_index = parse_outdoor_index(pokecrystal)  # [morn, day, nite, dark]
+    tile_groups = {}
+    environment_for_tileset = {}
+    for tileset, spec in TILESET_FILES.items():
+      relpath, environment = spec
+      tile_groups[tileset] = parse_palette_map(os.path.join(pokecrystal, relpath))
+      environment_for_tileset[tileset] = environment
+    environment_index = parse_environment_index(pokecrystal)
     bg_rows = _parse_rgb_rows(os.path.join(pokecrystal, "gfx/tilesets/bg_tiles.pal"))
     sprite_rows = _parse_rgb_rows(
         os.path.join(pokecrystal, "gfx/overworld/npc_sprites.pal"))
 
     by_time = {}
     for time_idx, time_name in enumerate(("morn", "day", "nite")):
-        group_colors = []
-        for group in range(8):
-            row = bg_rows[outdoor_index[time_idx][group]]
-            group_colors.append([[_scale5(c) for c in color] for color in row])
-        sprite_row = sprite_rows[time_idx * 8 + 0]  # PAL_OW_RED = 0
-        sprite_color = [[_scale5(c) for c in color] for color in sprite_row]
-        by_time[time_name] = {"groupColors": group_colors, "spriteColor": sprite_color}
+        group_colors = {}
+        for tileset, environment in environment_for_tileset.items():
+            index_rows = environment_index["OutdoorColors" if environment == "outdoor"
+                                           else "IndoorColors"]
+            groups = []
+            for group in range(8):
+                row = bg_rows[index_rows[time_idx][group]]
+                groups.append([[_scale5(c) for c in color] for color in row])
+            group_colors[tileset] = groups
+        sprite_colors = {}
+        for palette_idx, palette_name in enumerate(
+                ("red", "blue", "green", "brown", "pink", "silver", "tree", "rock")):
+            sprite_row = sprite_rows[time_idx * 8 + palette_idx]
+            sprite_colors[palette_name] = [[_scale5(c) for c in color] for color in sprite_row]
+        by_time[time_name] = {
+            "groupColors": group_colors,
+            "spriteColor": sprite_colors["red"],
+            "spriteColors": sprite_colors,
+        }
 
     return {"tileGroups": tile_groups, "byTime": by_time}

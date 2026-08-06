@@ -508,3 +508,14 @@ file pickers are ordinary desktop dialogs and still appear normally, and a
 run started from a terminal (`lovec.exe`, what `scripts\run.ps1` prefers)
 keeps its terminal and its printed output. Set `POKEPORT_CONSOLE=1` to opt
 out.
+
+## Gen2 types in the shared type chart
+
+`src/battle/TypeChart.lua` is shared by every version, so bringing up
+Crystal's battle data means adding the types Gen1 never had -- STEEL, DARK,
+and CURSE (the ???-category type `data/types/type_names.asm` calls
+`CURSE`) -- to `TypeChart.TYPES`. Red/Blue/Yellow battles never reference
+them (no Gen1 move or Pokémon uses these types), so this is additive only:
+no existing matchup changes. It does shift the link fingerprint, since the
+digest covers the whole type chart table regardless of version, which is
+why the fixture golden was re-pinned alongside this change.

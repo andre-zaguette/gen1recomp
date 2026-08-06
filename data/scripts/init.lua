@@ -30,6 +30,10 @@ for _, mapEntry in ipairs({
   MapScripts.attachBase(mapEntry[1], require(mapEntry[2]))
 end
 
+if GameVersion.isCrystal() then
+  MapScripts.attachBase("ELMS_LAB", require("data.scripts.crystal_elms_lab"))
+end
+
 -- story-critical scripts, one table per map, in the order the old merge
 -- loop required them
 for _, file in ipairs({ "data.scripts.story", "data.scripts.story2",

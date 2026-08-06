@@ -9,6 +9,7 @@ local GameVersion = require("src.core.GameVersion")
 local Strings = require("src.core.Strings")
 local Runtime = require("src.mods.Runtime")
 local Logger = require("src.core.Logger")
+local Assets = require("src.render.Assets")
 
 local TitleState = {}
 TitleState.__index = TitleState
@@ -105,6 +106,79 @@ local function tryImage(path)
   return ok and img or nil
 end
 
+local function tryImageData(path)
+  if not path or not (love.image and love.image.newImageData) then return nil end
+  local ok, data = pcall(love.image.newImageData, path)
+  return ok and data or nil
+end
+
+local function shadeIndex(r)
+  if r > 0.83 then return 1 end
+  if r > 0.5 then return 2 end
+  if r > 0.17 then return 3 end
+  return 4
+end
+
+local function imageFromData(data)
+  if not data then return nil end
+  local ok, img = pcall(love.graphics.newImage, data)
+  return ok and img or nil
+end
+
+local function colorizeImage(path, colors, alphaWhite)
+  local data = tryImageData(path)
+  if not (data and colors and #colors >= 4) then
+    return tryImage(path)
+  end
+  data:mapPixel(function(_, _, r, g, b, a)
+    if a == 0 then return r, g, b, a end
+    local idx = shadeIndex(r)
+    local c = colors[idx]
+    if alphaWhite and idx == 1 then
+      return c[1] / 255, c[2] / 255, c[3] / 255, 0
+    end
+    return c[1] / 255, c[2] / 255, c[3] / 255, a
+  end)
+  return imageFromData(data)
+end
+
+local function colorizeLogo(path, bg)
+  local data = tryImageData(path)
+  if not (data and bg and #bg >= 7) then return tryImage(path) end
+  local bands = {
+    { y1 = 0, y2 = 16, colors = bg[3] },
+    { y1 = 16, y2 = 24, colors = bg[4] },
+    { y1 = 24, y2 = 32, colors = bg[5] },
+    { y1 = 32, y2 = 40, colors = bg[6] },
+    { y1 = 40, y2 = 56, colors = bg[7] },
+  }
+  data:mapPixel(function(x, y, r, g, b, a)
+    if a == 0 then return r, g, b, a end
+    local colors = bands[#bands].colors
+    for _, band in ipairs(bands) do
+      if y >= band.y1 and y < band.y2 then
+        colors = band.colors
+        break
+      end
+    end
+    if y >= 48 and y < 56 and x >= 40 and x < 128 then
+      colors = bg[2]
+    end
+    local c = colors[shadeIndex(r)]
+    local alpha = shadeIndex(r) == 1 and 0 or a
+    return c[1] / 255, c[2] / 255, c[3] / 255, alpha
+  end)
+  return imageFromData(data)
+end
+
+local function firstExistingImage(...)
+  for i = 1, select("#", ...) do
+    local path = select(i, ...)
+    if path and Assets.exists(path) then return path end
+  end
+  return select(1, ...)
+end
+
 -- the importer seeds field.title with {path,width,height} descriptors
 -- (the shape IntroMovie unwraps); mod patches may use plain path strings
 local function imagePath(entry)
@@ -163,10 +237,29 @@ function TitleState.new(game, opts)
     or "assets/generated/title/pika_bubble.png") or nil
   self.yellowLayout = self.yellow and self.yellowPikachu ~= nil
   self.crystal = GameVersion.isCrystal()
-  self.suicuneSheet = self.crystal and tryImage(imagePath(title.suicune)
-    or "assets/generated/title/suicune.png") or nil
-  self.crystalOrnament = self.crystal and tryImage(imagePath(title.crystalOrnament)
-    or "assets/generated/title/crystal.png") or nil
+  if self.crystal then
+    local crystalTitlePal = title.palette and title.palette.bg or nil
+    local logoPath = firstExistingImage(
+      imagePath(title.logo),
+      "assets/generated/title/logo.png",
+      "roms/pokecrystal/gfx/title/logo.png")
+    local suicunePath = firstExistingImage(
+      imagePath(title.suicune),
+      "assets/generated/title/suicune.png",
+      "roms/pokecrystal/gfx/title/suicune.png")
+    local ornamentPath = firstExistingImage(
+      imagePath(title.crystalOrnament),
+      "assets/generated/title/crystal.png",
+      "roms/pokecrystal/gfx/title/crystal.png")
+    self.logo = colorizeLogo(logoPath, crystalTitlePal)
+    self.suicuneSheet = colorizeImage(
+      suicunePath, crystalTitlePal and crystalTitlePal[1], true)
+    self.crystalOrnament = colorizeImage(
+      ornamentPath, crystalTitlePal and crystalTitlePal[1], true)
+  else
+    self.suicuneSheet = nil
+    self.crystalOrnament = nil
+  end
   self.crystalLayout = self.crystal and self.suicuneSheet ~= nil
   if self.crystalLayout then
     -- title.asm boot: hSCX starts at 112 (off-screen right / logo band's

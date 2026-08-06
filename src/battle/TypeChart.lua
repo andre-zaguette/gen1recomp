@@ -81,6 +81,7 @@ TypeChart.TYPES = {
   ROCK         = { name = "ROCK",     category = "physical" },
   BUG          = { name = "BUG",      category = "physical" },
   GHOST        = { name = "GHOST",    category = "physical" },
+  STEEL        = { name = "STEEL",    category = "physical" },
   FIRE         = { name = "FIRE",     category = "special" },
   WATER        = { name = "WATER",    category = "special" },
   GRASS        = { name = "GRASS",    category = "special" },
@@ -88,6 +89,8 @@ TypeChart.TYPES = {
   PSYCHIC_TYPE = { name = "PSYCHIC",  category = "special" },
   ICE          = { name = "ICE",      category = "special" },
   DRAGON       = { name = "DRAGON",   category = "special" },
+  DARK         = { name = "DARK",     category = "special" },
+  CURSE_TYPE   = { name = "CURSE",    category = "physical" },
 }
 
 -- The matchup rows come from the generated chart, so a dataset with a

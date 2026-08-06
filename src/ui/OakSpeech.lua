@@ -98,14 +98,14 @@ function OakSpeech.resolvePic(game, desc, speech)
   local t = desc.type
   if t == "trainer" then
     if speech and desc.id == "OPP_PROF_OAK" and speech.oakPic then
-      return speech.oakPic, false, false
+      return speech.oakPic, false, speech.oakPicTrueColor or false
     end
     if speech and desc.id == "OPP_RIVAL1" and speech.rivalPic then
-      return speech.rivalPic, false, false
+      return speech.rivalPic, false, speech.rivalPicTrueColor or false
     end
     local trainers = game.data.trainers or {}
     local tr = trainers[desc.id]
-    return tryImage(tr and tr.pic), false, false
+    return tryImage(tr and tr.pic), false, tr and tr.trueColor or false
   elseif t == "pokemon" then
     if speech and desc.id == speech.demoSpecies and speech.demoPic then
       return speech.demoPic, desc.flip and true or false, speech.demoTrueColor
@@ -600,7 +600,11 @@ end
 
 function OakSpeech:draw()
   love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.rectangle("fill", 0, 0, 160, 144)
+  if self.bgImage then
+    love.graphics.draw(self.bgImage, 0, 0)
+  else
+    love.graphics.rectangle("fill", 0, 0, 160, 144)
+  end
   if self.pic then
     -- IntroDisplayPicCenteredOrUpperRight centered: the 7x7-tile pic
     -- area sits at hlcoord 6,4 = (48,32); smaller mon pics pad inside
@@ -635,6 +639,9 @@ function OakSpeech:draw()
     self.walkQuad = self.walkQuad
       or love.graphics.newQuad(0, 0, 16, 16, self.walkSheet:getDimensions())
     love.graphics.draw(self.walkSheet, self.walkQuad, 64, 60)
+    if self.walkTrueColor then
+      require("src.render.PaletteFX").markTrueColor(64, 60, 16, 16)
+    end
   end
   if self.shrinkText then
     -- This is a REPLICA of the dialogue box that just closed, redrawn at

@@ -70,6 +70,9 @@ function NamingScreen.new(game, opts)
   self.maxLen = opts.maxLen or 7
   self.default = opts.default
   self.onDone = opts.onDone
+  self.layout = opts.layout or "gen1"
+  self.iconImage = opts.iconImage
+  self.iconTrueColor = opts.iconTrueColor and true or false
   self.glyphs = {} -- typed glyphs; multi-byte cells (<PK>, ♂, ×) count as 1
   self.row, self.col = 1, 1
   self.lower = false
@@ -176,17 +179,40 @@ function NamingScreen:draw()
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.rectangle("fill", 0, 0, 160, 144)
   love.graphics.setColor(0, 0, 0, 1)
-  Font.draw(self.title, 8, 8)
-  -- typed name with dashes for the empty slots
-  for i = 1, self.maxLen do
-    Font.draw(self.glyphs[i] or "-", 56 + (i - 1) * 8, 24)
-  end
-  for r, row in ipairs(self:grid()) do
-    for c, cell in ipairs(row) do
-      Font.draw(Strings(cell), c * 16, 32 + r * 16)
+  if self.layout == "crystal" then
+    local PaletteFX = require("src.render.PaletteFX")
+    if self.iconImage then
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.draw(self.iconImage, 8, 8)
+      if self.iconTrueColor then
+        local w, h = self.iconImage:getDimensions()
+        PaletteFX.markTrueColor(8, 8, w, h)
+      end
+      love.graphics.setColor(0, 0, 0, 1)
     end
+    Font.draw(self.title, 40, 16)
+    for i = 1, self.maxLen do
+      Font.draw(self.glyphs[i] or "-", 40 + (i - 1) * 8, 48)
+    end
+    for r, row in ipairs(self:grid()) do
+      for c, cell in ipairs(row) do
+        Font.draw(Strings(cell), 16 + c * 16, 48 + r * 16)
+      end
+    end
+    Font.drawCode(Theme.cursor, 8 + self.col * 16, 48 + self.row * 16)
+  else
+    Font.draw(self.title, 8, 8)
+    -- typed name with dashes for the empty slots
+    for i = 1, self.maxLen do
+      Font.draw(self.glyphs[i] or "-", 56 + (i - 1) * 8, 24)
+    end
+    for r, row in ipairs(self:grid()) do
+      for c, cell in ipairs(row) do
+        Font.draw(Strings(cell), c * 16, 32 + r * 16)
+      end
+    end
+    Font.drawCode(Theme.cursor, self.col * 16 - 8, 32 + self.row * 16)
   end
-  Font.drawCode(Theme.cursor, self.col * 16 - 8, 32 + self.row * 16)
   love.graphics.setColor(1, 1, 1, 1)
 end
 

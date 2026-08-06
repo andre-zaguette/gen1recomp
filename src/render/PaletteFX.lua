@@ -365,9 +365,20 @@ function PaletteFX.gbcPack(bucket)
     end
     bucket = bucket or PaletteFX.timeOfDay()
     local byTime = paletteData.byTime[bucket] or paletteData.byTime.day
+    local tileGroups = paletteData.tileGroups or {}
+    local groupColors = byTime.groupColors or {}
+    -- Back-compat with the older Crystal cache shape where tileGroups and
+    -- groupColors were the bare Johto tables rather than per-tileset maps.
+    if tileGroups[0] ~= nil or tileGroups[1] ~= nil then
+      tileGroups = { TILESET_JOHTO = tileGroups }
+    end
+    if groupColors[1] ~= nil or groupColors[0] ~= nil then
+      groupColors = { TILESET_JOHTO = groupColors }
+    end
+    local spriteColors = byTime.spriteColors or { red = byTime.spriteColor }
     crystalPackCache = { world = {
-      tileGroups = { TILESET_JOHTO = paletteData.tileGroups },
-      groupColors = { TILESET_JOHTO = byTime.groupColors },
+      tileGroups = tileGroups,
+      groupColors = groupColors,
       -- Crystal has no Gen1-style route/town roof-recolor exception; an
       -- empty (not nil) table makes worldGroupColors' `w.roofGroup[tileset]`
       -- index resolve to nil safely instead of erroring on a missing table.
@@ -375,8 +386,8 @@ function PaletteFX.gbcPack(bucket)
       -- Chris is the only overworld sprite this skeleton extracts, always
       -- resolving to spritePalettes' one entry (see spriteObp's
       -- ChrisSpriteGFX case below).
-      spriteAssignment = { [0] = 0 },
-      spritePalettes = { [0] = byTime.spriteColor },
+      spriteAssignment = { [0] = "red" },
+      spritePalettes = spriteColors,
     } }
     crystalPackBucket = bucket
     return crystalPackCache
@@ -806,6 +817,11 @@ function PaletteFX.spriteObp(spriteDef, seed)
   local w = pack and pack.world
   local src = spriteDef and (spriteDef.paletteSource or spriteDef.source)
   if not (w and src) then return nil end
+  local crystalPalette = src:match("^CRYSTAL_OW:(%w+)$")
+  if crystalPalette then
+    local colors = w.spritePalettes[crystalPalette]
+    return colors and PaletteFX.darkObp(colors, crystalPalette) or nil
+  end
   local idx = tonumber(src:match("%[(%d+)%]"))
   -- RedBikeSprite and SurfingPikachuSprite load outside
   -- SpriteSheetPointerTable, so their source has no bracketed index;
@@ -823,7 +839,8 @@ function PaletteFX.spriteObp(spriteDef, seed)
     for i = 1, #seed do h = (h * 31 + seed:byte(i)) % 4294967296 end
     group = h % 4
   end
-  return PaletteFX.darkObp(w.spritePalettes[group], group)
+  local colors = w.spritePalettes[group]
+  return colors and PaletteFX.darkObp(colors, group) or nil
 end
 
 -- GetHealthBarColor (home/palettes.asm) on the standard 48px bar

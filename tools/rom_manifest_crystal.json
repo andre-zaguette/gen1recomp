@@ -1349,196 +1349,1286 @@
       "seq": "ﾟ"
     }
   ],
-  "newBarkTown": {
-    "bgEventCount": 4,
-    "coordEventCount": 2,
-    "height": 9,
-    "objectCount": 3,
-    "tileset": "TILESET_JOHTO",
-    "warpCount": 4,
-    "width": 10
+  "mapLookup": {
+    "24:4": "NEW_BARK_TOWN",
+    "24:5": "ELMS_LAB",
+    "24:6": "PLAYERS_HOUSE_1F",
+    "24:7": "PLAYERS_HOUSE_2F",
+    "24:8": "PLAYERS_NEIGHBORS_HOUSE",
+    "24:9": "ELMS_HOUSE"
+  },
+  "maps": {
+    "ELMS_HOUSE": {
+      "bgEventCount": 3,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 24,
+      "height": 4,
+      "label": "ElmsHouse",
+      "number": 9,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "WALK",
+          "name": null,
+          "range": "UP_DOWN",
+          "script": "ElmsWife",
+          "sprite": "SPRITE_TEACHER",
+          "text": "Hi, {PLAYER}! My\nhusband's always\fso busy--I hope\nhe's OK.\fWhen he's caught\nup in his POKéMON\u000bresearch, he even\nforgets to eat.",
+          "x": 1,
+          "y": 5
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": null,
+          "range": "UP",
+          "script": "ElmsSon",
+          "sprite": "SPRITE_BUG_CATCHER",
+          "text": "When I grow up,\nI'm going to help\nmy dad!\fI'm going to be a\ngreat POKéMON\nprofessor!",
+          "x": 5,
+          "y": 4
+        }
+      ],
+      "signs": [
+        {
+          "script": "ElmsHousePC",
+          "text": "POKéMON. Where do\nthey come from? \fWhere are they\ngoing?\fWhy has no one\never witnessed a\u000bPOKéMON's birth?\fI want to know! I\nwill dedicate my\u000blife to the study\nof POKéMON!\f...\fIt's a part of\nPROF.ELM's re-\u000bsearch papers.",
+          "x": 0,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_PLAYERS_HOUSE",
+      "warpCount": 2,
+      "width": 4
+    },
+    "ELMS_LAB": {
+      "bgEventCount": 16,
+      "connections": {},
+      "coordEventCount": 8,
+      "group": 24,
+      "height": 6,
+      "label": "ElmsLab",
+      "number": 5,
+      "objectCount": 6,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "ELMSLAB_ELM",
+          "range": "DOWN",
+          "script": "ProfElmScript",
+          "sprite": "SPRITE_ELM",
+          "text": "TEXT_ELMSLAB_ELM",
+          "x": 5,
+          "y": 2
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "ELMSLAB_ELMS_AIDE",
+          "range": "ANY_DIR",
+          "script": "ElmsAideScript",
+          "sprite": "SPRITE_SCIENTIST",
+          "text": "TEXT_ELMSLAB_ELMS_AIDE",
+          "x": 2,
+          "y": 9
+        },
+        {
+          "index": 3,
+          "movement": "STAY",
+          "name": "ELMSLAB_POKE_BALL1",
+          "range": "NONE",
+          "script": "CyndaquilPokeBallScript",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ELMSLAB_CYNDAQUIL_POKE_BALL",
+          "x": 6,
+          "y": 3
+        },
+        {
+          "index": 4,
+          "movement": "STAY",
+          "name": "ELMSLAB_POKE_BALL2",
+          "range": "NONE",
+          "script": "TotodilePokeBallScript",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ELMSLAB_TOTODILE_POKE_BALL",
+          "x": 7,
+          "y": 3
+        },
+        {
+          "index": 5,
+          "movement": "STAY",
+          "name": "ELMSLAB_POKE_BALL3",
+          "range": "NONE",
+          "script": "ChikoritaPokeBallScript",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ELMSLAB_CHIKORITA_POKE_BALL",
+          "x": 8,
+          "y": 3
+        },
+        {
+          "index": 6,
+          "movement": "STAY",
+          "name": "ELMSLAB_OFFICER",
+          "range": "UP",
+          "script": "CopScript",
+          "sprite": "SPRITE_OFFICER",
+          "text": "TEXT_ELMSLAB_OFFICER",
+          "x": 5,
+          "y": 3
+        }
+      ],
+      "signs": [
+        {
+          "script": "ElmsLabHealingMachine",
+          "text": "I wonder what this\ndoes?",
+          "x": 2,
+          "y": 1
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "There's an e-mail\nmessage here!",
+          "x": 6,
+          "y": 1
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "PROF.ELM's re-\nsearch journals...\fIt's so complicated...",
+          "x": 7,
+          "y": 1
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "The wrapper is\neasy to tear.\fOpen the package and\neat.",
+          "x": 8,
+          "y": 1
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "x": 9,
+          "y": 1
+        },
+        {
+          "script": "ElmsLabTravelTip1",
+          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "x": 0,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabTravelTip2",
+          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "x": 1,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabTravelTip3",
+          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "x": 2,
+          "y": 7
+        }
+      ],
+      "tileset": "TILESET_LAB",
+      "warpCount": 2,
+      "width": 5
+    },
+    "NEW_BARK_TOWN": {
+      "bgEventCount": 4,
+      "connections": {
+        "east": {
+          "map": "ROUTE_27",
+          "offset": 0
+        },
+        "west": {
+          "map": "ROUTE_29",
+          "offset": 0
+        }
+      },
+      "coordEventCount": 2,
+      "group": 24,
+      "height": 9,
+      "label": "NewBarkTown",
+      "number": 4,
+      "objectCount": 3,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "WALK",
+          "name": null,
+          "range": "ANY_DIR",
+          "script": "NewBarkTownTeacherScript",
+          "sprite": "SPRITE_TEACHER",
+          "text": "Wow, your POKéGEAR\nis impressive!\fDid your mom get\nit for you?",
+          "x": 6,
+          "y": 8
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": null,
+          "range": "UP_DOWN",
+          "script": "NewBarkTownFisherScript",
+          "sprite": "SPRITE_FISHER",
+          "text": "Yo, {PLAYER}!\fI hear PROF.ELM\ndiscovered some\u000bnew POKéMON.",
+          "x": 12,
+          "y": 9
+        },
+        {
+          "index": 3,
+          "movement": "STAY",
+          "name": null,
+          "range": "RIGHT",
+          "script": "NewBarkTownRivalScript",
+          "sprite": "SPRITE_RIVAL",
+          "text": "...\fSo this is the\nfamous ELM POKéMON\u000bLAB...",
+          "x": 3,
+          "y": 2
+        }
+      ],
+      "signs": [
+        {
+          "script": "NewBarkTownSign",
+          "text": "NEW BARK TOWN\nThe Town Where\nThe Winds of a New\nBeginning Blow",
+          "x": 8,
+          "y": 8
+        },
+        {
+          "script": "NewBarkTownPlayersHouseSign",
+          "text": "{PLAYER}'s House",
+          "x": 11,
+          "y": 5
+        },
+        {
+          "script": "NewBarkTownElmsLabSign",
+          "text": "ELM POKéMON LAB",
+          "x": 3,
+          "y": 3
+        },
+        {
+          "script": "NewBarkTownElmsHouseSign",
+          "text": "ELM'S HOUSE",
+          "x": 9,
+          "y": 13
+        }
+      ],
+      "tileset": "TILESET_JOHTO",
+      "warpCount": 4,
+      "width": 10
+    },
+    "PLAYERS_HOUSE_1F": {
+      "bgEventCount": 4,
+      "connections": {},
+      "coordEventCount": 2,
+      "group": 24,
+      "height": 4,
+      "label": "PlayersHouse1F",
+      "number": 6,
+      "objectCount": 5,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": null,
+          "range": "LEFT",
+          "script": "MomScript",
+          "sprite": "SPRITE_MOM",
+          "text": "PROF.ELM is wait-\ning for you.\fHurry up, baby!",
+          "x": 7,
+          "y": 4
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": null,
+          "range": "RIGHT",
+          "script": "NeighborScript",
+          "sprite": "SPRITE_POKEFAN_F",
+          "text": "Hello, {PLAYER}!\nI'm visiting!\f{PLAYER}, have you\nheard?\fMy daughter is\nadamant about\u000bbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!",
+          "x": 4,
+          "y": 4
+        }
+      ],
+      "signs": [
+        {
+          "script": "PlayersHouse1FStoveScript",
+          "text": "Mom's specialty!\fCINNABAR VOLCANO\nBURGER!",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "PlayersHouse1FSinkScript",
+          "text": "The sink is spot-\nless. Mom likes it\nclean.",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "script": "PlayersHouse1FFridgeScript",
+          "text": "Let's see what's\nin the fridge...\fFRESH WATER and\ntasty LEMONADE!",
+          "x": 2,
+          "y": 1
+        },
+        {
+          "script": "PlayersHouse1FTVScript",
+          "text": "There's a movie on\nTV: Stars dot the\fsky as two boys\nride on a train...\fI'd better get\nrolling too!",
+          "x": 4,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_PLAYERS_HOUSE",
+      "warpCount": 3,
+      "width": 5
+    },
+    "PLAYERS_HOUSE_2F": {
+      "bgEventCount": 4,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 24,
+      "height": 3,
+      "label": "PlayersHouse2F",
+      "number": 7,
+      "objectCount": 4,
+      "objects": [],
+      "signs": [],
+      "tileset": "TILESET_PLAYERS_ROOM",
+      "warpCount": 1,
+      "width": 4
+    },
+    "PLAYERS_NEIGHBORS_HOUSE": {
+      "bgEventCount": 3,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 24,
+      "height": 4,
+      "label": "PlayersNeighborsHouse",
+      "number": 8,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": null,
+          "range": "RIGHT",
+          "script": "PlayersNeighborsDaughterScript",
+          "sprite": "SPRITE_COOLTRAINER_F",
+          "text": "PIKACHU is an\nevolved POKéMON.\fI was amazed by\nPROF.ELM's find-\u000bings.\fHe's so famous for\nhis research on\u000bPOKéMON evolution.\f...sigh...\fI wish I could be\na researcher like\nhim...",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": null,
+          "range": "LEFT",
+          "script": "PlayersNeighborScript",
+          "sprite": "SPRITE_POKEFAN_F",
+          "text": "My daughter is\nadamant about\fbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!\fBut then, so do I!",
+          "x": 5,
+          "y": 3
+        }
+      ],
+      "signs": [],
+      "tileset": "TILESET_HOUSE",
+      "warpCount": 2,
+      "width": 4
+    }
   },
   "palettes": {
     "byTime": {
       "day": {
-        "groupColors": [
-          [
+        "groupColors": {
+          "TILESET_HOUSE": [
             [
-              222,
-              255,
-              222
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              173,
-              173,
-              173
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              107,
-              107,
-              107
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_JOHTO": [
             [
-              222,
-              255,
-              222
+              [
+                222,
+                255,
+                222
+              ],
+              [
+                173,
+                173,
+                173
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              156,
-              197
+              [
+                222,
+                255,
+                222
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              247,
-              82,
-              49
+              [
+                181,
+                255,
+                82
+              ],
+              [
+                99,
+                206,
+                8
+              ],
+              [
+                41,
+                115,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                189,
+                189,
+                255
+              ],
+              [
+                148,
+                156,
+                255
+              ],
+              [
+                107,
+                99,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                222,
+                255,
+                222
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                222,
+                255,
+                222
+              ],
+              [
+                197,
+                148,
+                58
+              ],
+              [
+                165,
+                123,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                222,
+                255,
+                222
+              ],
+              [
+                123,
+                255,
+                255
+              ],
+              [
+                41,
+                140,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_LAB": [
             [
-              181,
-              255,
-              82
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              99,
-              206,
-              8
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              41,
-              115,
-              0
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_PLAYERS_HOUSE": [
             [
-              189,
-              189,
-              255
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              148,
-              156,
-              255
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              107,
-              99,
-              255
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_PLAYERS_ROOM": [
             [
-              222,
-              255,
-              222
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              255,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              132,
-              8
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
-            ]
-          ],
-          [
-            [
-              222,
-              255,
-              222
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              197,
-              148,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              165,
-              123,
-              25
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
-            ]
-          ],
-          [
-            [
-              222,
-              255,
-              222
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              123,
-              255,
-              255
-            ],
-            [
-              41,
-              140,
-              255
-            ],
-            [
-              58,
-              58,
-              58
-            ]
-          ],
-          [
-            [
-              255,
-              255,
-              132
-            ],
-            [
-              255,
-              255,
-              132
-            ],
-            [
-              115,
-              74,
-              0
-            ],
-            [
-              0,
-              0,
-              0
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ]
-        ],
+        },
         "spriteColor": [
           [
             222,
@@ -1560,42 +2650,84 @@
             0,
             0
           ]
-        ]
-      },
-      "morn": {
-        "groupColors": [
-          [
+        ],
+        "spriteColors": {
+          "blue": [
             [
-              230,
+              222,
               255,
-              132
-            ],
-            [
-              173,
-              173,
-              173
-            ],
-            [
-              107,
-              107,
-              107
-            ],
-            [
-              58,
-              58,
-              58
-            ]
-          ],
-          [
-            [
-              230,
-              255,
-              132
+              222
             ],
             [
               255,
               156,
-              197
+              82
+            ],
+            [
+              82,
+              74,
+              255
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "brown": [
+            [
+              222,
+              255,
+              222
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              123,
+              82,
+              25
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "green": [
+            [
+              222,
+              255,
+              222
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              58,
+              189,
+              25
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "pink": [
+            [
+              222,
+              255,
+              222
+            ],
+            [
+              255,
+              156,
+              82
             ],
             [
               247,
@@ -1603,12 +2735,78 @@
               49
             ],
             [
+              0,
+              0,
+              0
+            ]
+          ],
+          "red": [
+            [
+              222,
+              255,
+              222
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              255,
+              58,
+              8
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "rock": [
+            [
+              222,
+              255,
+              222
+            ],
+            [
+              197,
+              148,
+              58
+            ],
+            [
+              165,
+              123,
+              25
+            ],
+            [
               58,
               58,
               58
             ]
           ],
-          [
+          "silver": [
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              107,
+              107,
+              107
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "tree": [
             [
               181,
               255,
@@ -1629,118 +2827,902 @@
               58,
               58
             ]
-          ],
-          [
+          ]
+        }
+      },
+      "morn": {
+        "groupColors": {
+          "TILESET_HOUSE": [
             [
-              189,
-              189,
-              255
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              148,
-              156,
-              255
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              107,
-              99,
-              255
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_JOHTO": [
             [
-              230,
-              255,
-              132
+              [
+                230,
+                255,
+                132
+              ],
+              [
+                173,
+                173,
+                173
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              255,
-              58
+              [
+                230,
+                255,
+                132
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              132,
-              8
+              [
+                181,
+                255,
+                82
+              ],
+              [
+                99,
+                206,
+                8
+              ],
+              [
+                41,
+                115,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                189,
+                189,
+                255
+              ],
+              [
+                148,
+                156,
+                255
+              ],
+              [
+                107,
+                99,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                230,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                230,
+                255,
+                132
+              ],
+              [
+                197,
+                148,
+                58
+              ],
+              [
+                165,
+                123,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                230,
+                255,
+                132
+              ],
+              [
+                123,
+                255,
+                255
+              ],
+              [
+                41,
+                140,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_LAB": [
             [
-              230,
-              255,
-              132
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              197,
-              148,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              165,
-              123,
-              25
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_PLAYERS_HOUSE": [
             [
-              230,
-              255,
-              132
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              123,
-              255,
-              255
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              41,
-              140,
-              255
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              58,
-              58,
-              58
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
-          [
+          "TILESET_PLAYERS_ROOM": [
             [
-              255,
-              255,
-              132
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                156,
+                156,
+                156
+              ],
+              [
+                107,
+                107,
+                107
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              255,
-              255,
-              132
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                156,
+                197
+              ],
+              [
+                247,
+                82,
+                49
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              115,
-              74,
-              0
+              [
+                148,
+                197,
+                74
+              ],
+              [
+                123,
+                165,
+                8
+              ],
+              [
+                74,
+                107,
+                0
+              ],
+              [
+                58,
+                58,
+                58
+              ]
             ],
             [
-              0,
-              0,
-              0
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                123,
+                132,
+                255
+              ],
+              [
+                74,
+                74,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                255,
+                255,
+                58
+              ],
+              [
+                255,
+                132,
+                8
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                214,
+                197,
+                140
+              ],
+              [
+                173,
+                140,
+                58
+              ],
+              [
+                132,
+                107,
+                25
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                247,
+                230,
+                214
+              ],
+              [
+                140,
+                156,
+                255
+              ],
+              [
+                115,
+                132,
+                255
+              ],
+              [
+                58,
+                58,
+                58
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ]
-        ],
+        },
         "spriteColor": [
           [
             230,
@@ -1762,47 +3744,23 @@
             0,
             0
           ]
-        ]
-      },
-      "nite": {
-        "groupColors": [
-          [
+        ],
+        "spriteColors": {
+          "blue": [
             [
-              123,
-              115,
-              197
+              230,
+              255,
+              132
             ],
             [
-              90,
-              90,
-              156
+              255,
+              156,
+              82
             ],
             [
-              58,
-              58,
-              99
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          [
-            [
-              123,
-              115,
-              197
-            ],
-            [
-              115,
-              58,
-              140
-            ],
-            [
-              107,
-              0,
-              66
+              82,
+              74,
+              255
             ],
             [
               0,
@@ -1810,20 +3768,130 @@
               0
             ]
           ],
-          [
+          "brown": [
             [
-              123,
-              115,
-              197
+              230,
+              255,
+              132
             ],
             [
-              66,
-              107,
-              156
+              255,
+              156,
+              82
+            ],
+            [
+              123,
+              82,
+              25
             ],
             [
               0,
-              90,
+              0,
+              0
+            ]
+          ],
+          "green": [
+            [
+              230,
+              255,
+              132
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              58,
+              189,
+              25
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "pink": [
+            [
+              230,
+              255,
+              132
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              247,
+              82,
+              49
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "red": [
+            [
+              230,
+              255,
+              132
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              255,
+              58,
+              8
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "rock": [
+            [
+              230,
+              255,
+              132
+            ],
+            [
+              197,
+              148,
+              58
+            ],
+            [
+              165,
+              123,
+              25
+            ],
+            [
+              58,
+              58,
+              58
+            ]
+          ],
+          "silver": [
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              107,
+              107,
               107
             ],
             [
@@ -1832,117 +3900,923 @@
               0
             ]
           ],
-          [
+          "tree": [
             [
-              123,
-              107,
-              222
-            ],
-            [
-              82,
-              74,
-              165
-            ],
-            [
-              33,
-              25,
-              148
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          [
-            [
-              247,
-              247,
-              90
-            ],
-            [
-              132,
-              115,
-              148
-            ],
-            [
-              132,
-              115,
+              181,
+              255,
               82
             ],
             [
-              0,
-              0,
-              0
-            ]
-          ],
-          [
-            [
-              123,
-              115,
-              197
-            ],
-            [
               99,
-              74,
-              123
+              206,
+              8
             ],
             [
-              66,
-              33,
-              41
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          [
-            [
-              123,
+              41,
               115,
-              197
-            ],
-            [
-              107,
-              99,
-              189
-            ],
-            [
-              90,
-              74,
-              165
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          [
-            [
-              255,
-              255,
-              132
-            ],
-            [
-              255,
-              255,
-              132
-            ],
-            [
-              115,
-              74,
               0
             ],
             [
-              0,
-              0,
-              0
+              58,
+              58,
+              58
             ]
           ]
-        ],
+        }
+      },
+      "nite": {
+        "groupColors": {
+          "TILESET_HOUSE": [
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                90,
+                90,
+                156
+              ],
+              [
+                58,
+                58,
+                99
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                115,
+                58,
+                140
+              ],
+              [
+                107,
+                0,
+                66
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                66,
+                107,
+                156
+              ],
+              [
+                0,
+                90,
+                107
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                41,
+                41,
+                140
+              ],
+              [
+                25,
+                25,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                247,
+                247,
+                90
+              ],
+              [
+                132,
+                115,
+                148
+              ],
+              [
+                132,
+                115,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                99,
+                74,
+                123
+              ],
+              [
+                66,
+                33,
+                41
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                107,
+                99,
+                189
+              ],
+              [
+                90,
+                74,
+                165
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "TILESET_JOHTO": [
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                90,
+                90,
+                156
+              ],
+              [
+                58,
+                58,
+                99
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                115,
+                58,
+                140
+              ],
+              [
+                107,
+                0,
+                66
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                66,
+                107,
+                156
+              ],
+              [
+                0,
+                90,
+                107
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                107,
+                222
+              ],
+              [
+                82,
+                74,
+                165
+              ],
+              [
+                33,
+                25,
+                148
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                247,
+                247,
+                90
+              ],
+              [
+                132,
+                115,
+                148
+              ],
+              [
+                132,
+                115,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                99,
+                74,
+                123
+              ],
+              [
+                66,
+                33,
+                41
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                107,
+                99,
+                189
+              ],
+              [
+                90,
+                74,
+                165
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "TILESET_LAB": [
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                90,
+                90,
+                156
+              ],
+              [
+                58,
+                58,
+                99
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                115,
+                58,
+                140
+              ],
+              [
+                107,
+                0,
+                66
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                66,
+                107,
+                156
+              ],
+              [
+                0,
+                90,
+                107
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                41,
+                41,
+                140
+              ],
+              [
+                25,
+                25,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                247,
+                247,
+                90
+              ],
+              [
+                132,
+                115,
+                148
+              ],
+              [
+                132,
+                115,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                99,
+                74,
+                123
+              ],
+              [
+                66,
+                33,
+                41
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                107,
+                99,
+                189
+              ],
+              [
+                90,
+                74,
+                165
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "TILESET_PLAYERS_HOUSE": [
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                90,
+                90,
+                156
+              ],
+              [
+                58,
+                58,
+                99
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                115,
+                58,
+                140
+              ],
+              [
+                107,
+                0,
+                66
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                66,
+                107,
+                156
+              ],
+              [
+                0,
+                90,
+                107
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                41,
+                41,
+                140
+              ],
+              [
+                25,
+                25,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                247,
+                247,
+                90
+              ],
+              [
+                132,
+                115,
+                148
+              ],
+              [
+                132,
+                115,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                99,
+                74,
+                123
+              ],
+              [
+                66,
+                33,
+                41
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                107,
+                99,
+                189
+              ],
+              [
+                90,
+                74,
+                165
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "TILESET_PLAYERS_ROOM": [
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                90,
+                90,
+                156
+              ],
+              [
+                58,
+                58,
+                99
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                115,
+                58,
+                140
+              ],
+              [
+                107,
+                0,
+                66
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                66,
+                107,
+                156
+              ],
+              [
+                0,
+                90,
+                107
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                41,
+                41,
+                140
+              ],
+              [
+                25,
+                25,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                247,
+                247,
+                90
+              ],
+              [
+                132,
+                115,
+                148
+              ],
+              [
+                132,
+                115,
+                82
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                99,
+                74,
+                123
+              ],
+              [
+                66,
+                33,
+                41
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                123,
+                115,
+                197
+              ],
+              [
+                107,
+                99,
+                189
+              ],
+              [
+                90,
+                74,
+                165
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                255,
+                255,
+                132
+              ],
+              [
+                115,
+                74,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ]
+        },
         "spriteColor": [
           [
             123,
@@ -1964,205 +4838,1166 @@
             0,
             0
           ]
-        ]
+        ],
+        "spriteColors": {
+          "blue": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              82,
+              74,
+              255
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "brown": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              123,
+              82,
+              25
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "green": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              58,
+              189,
+              25
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "pink": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              247,
+              82,
+              49
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "red": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              255,
+              156,
+              82
+            ],
+            [
+              255,
+              58,
+              8
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "rock": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              99,
+              74,
+              123
+            ],
+            [
+              66,
+              33,
+              41
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "silver": [
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255
+            ],
+            [
+              107,
+              107,
+              107
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "tree": [
+            [
+              123,
+              115,
+              197
+            ],
+            [
+              66,
+              107,
+              156
+            ],
+            [
+              0,
+              90,
+              107
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ]
+        }
       }
     },
     "tileGroups": {
-      "0": 0,
-      "1": 5,
-      "2": 5,
-      "3": 1,
-      "4": 2,
-      "5": 2,
-      "6": 0,
-      "7": 1,
-      "8": 1,
-      "9": 1,
-      "10": 6,
-      "11": 6,
-      "12": 6,
-      "13": 6,
-      "14": 6,
-      "15": 6,
-      "16": 6,
-      "17": 6,
-      "18": 6,
-      "19": 2,
-      "20": 3,
-      "21": 2,
-      "22": 5,
-      "23": 5,
-      "24": 1,
-      "25": 1,
-      "26": 5,
-      "27": 5,
-      "28": 5,
-      "29": 2,
-      "30": 2,
-      "31": 2,
-      "32": 5,
-      "33": 5,
-      "34": 5,
-      "35": 1,
-      "36": 1,
-      "37": 5,
-      "38": 4,
-      "39": 5,
-      "40": 5,
-      "41": 5,
-      "42": 5,
-      "43": 5,
-      "44": 5,
-      "45": 5,
-      "46": 2,
-      "47": 2,
-      "48": 5,
-      "49": 5,
-      "50": 3,
-      "51": 3,
-      "52": 5,
-      "53": 5,
-      "54": 5,
-      "55": 4,
-      "56": 4,
-      "57": 5,
-      "58": 5,
-      "59": 5,
-      "60": 5,
-      "61": 5,
-      "62": 2,
-      "63": 2,
-      "64": 1,
-      "65": 5,
-      "66": 3,
-      "67": 3,
-      "68": 5,
-      "69": 2,
-      "70": 5,
-      "71": 5,
-      "72": 5,
-      "73": 3,
-      "74": 0,
-      "75": 5,
-      "76": 5,
-      "77": 5,
-      "78": 0,
-      "79": 0,
-      "80": 5,
-      "81": 5,
-      "82": 5,
-      "83": 5,
-      "84": 5,
-      "85": 5,
-      "86": 5,
-      "87": 5,
-      "88": 3,
-      "89": 0,
-      "90": 0,
-      "91": 0,
-      "92": 5,
-      "93": 5,
-      "94": 0,
-      "95": 0,
-      "128": 5,
-      "129": 5,
-      "130": 5,
-      "131": 1,
-      "132": 1,
-      "133": 1,
-      "134": 1,
-      "135": 1,
-      "136": 1,
-      "137": 1,
-      "138": 1,
-      "139": 1,
-      "140": 1,
-      "141": 1,
-      "142": 1,
-      "143": 1,
-      "144": 1,
-      "145": 1,
-      "146": 1,
-      "147": 1,
-      "148": 5,
-      "149": 5,
-      "150": 5,
-      "151": 5,
-      "152": 5,
-      "153": 5,
-      "154": 5,
-      "155": 0,
-      "156": 0,
-      "157": 5,
-      "158": 5,
-      "159": 5,
-      "160": 5,
-      "161": 0,
-      "162": 0,
-      "163": 0,
-      "164": 0,
-      "165": 0,
-      "166": 0,
-      "167": 5,
-      "168": 5,
-      "169": 0,
-      "170": 0,
-      "171": 0,
-      "172": 0,
-      "173": 0,
-      "174": 0,
-      "175": 5,
-      "176": 5,
-      "177": 0,
-      "178": 0,
-      "179": 0,
-      "180": 0,
-      "181": 0,
-      "182": 0,
-      "183": 5,
-      "184": 5,
-      "185": 0,
-      "186": 0,
-      "187": 0,
-      "188": 0,
-      "189": 0,
-      "190": 0,
-      "191": 5,
-      "192": 5,
-      "193": 5,
-      "194": 5,
-      "195": 5,
-      "196": 5,
-      "197": 5,
-      "198": 5,
-      "199": 5,
-      "200": 5,
-      "201": 5,
-      "202": 5,
-      "203": 5,
-      "204": 5,
-      "205": 5,
-      "206": 5,
-      "207": 5,
-      "208": 5,
-      "209": 5,
-      "210": 5,
-      "211": 5,
-      "212": 5,
-      "213": 5,
-      "214": 5,
-      "215": 5,
-      "216": 5,
-      "217": 5,
-      "218": 5,
-      "219": 5,
-      "220": 5,
-      "221": 5,
-      "222": 5,
-      "223": 5
+      "TILESET_HOUSE": {
+        "0": 3,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 5,
+        "6": 3,
+        "7": 3,
+        "8": 2,
+        "9": 2,
+        "10": 2,
+        "11": 2,
+        "12": 3,
+        "13": 3,
+        "14": 5,
+        "15": 5,
+        "16": 5,
+        "17": 5,
+        "18": 1,
+        "19": 1,
+        "20": 1,
+        "21": 5,
+        "22": 3,
+        "23": 3,
+        "24": 6,
+        "25": 6,
+        "26": 6,
+        "27": 6,
+        "28": 0,
+        "29": 0,
+        "30": 5,
+        "31": 5,
+        "32": 0,
+        "33": 0,
+        "34": 5,
+        "35": 5,
+        "36": 3,
+        "37": 5,
+        "38": 5,
+        "39": 5,
+        "40": 5,
+        "41": 5,
+        "42": 4,
+        "43": 2,
+        "44": 3,
+        "45": 3,
+        "46": 3,
+        "47": 5,
+        "48": 5,
+        "49": 5,
+        "50": 5,
+        "51": 5,
+        "52": 3,
+        "53": 5,
+        "54": 5,
+        "55": 5,
+        "56": 5,
+        "57": 5,
+        "58": 5,
+        "59": 5,
+        "60": 5,
+        "61": 3,
+        "62": 3,
+        "63": 5,
+        "64": 3,
+        "65": 3,
+        "66": 5,
+        "67": 5,
+        "68": 3,
+        "69": 3,
+        "70": 5,
+        "71": 5,
+        "72": 0,
+        "73": 0,
+        "74": 3,
+        "75": 0,
+        "76": 5,
+        "77": 5,
+        "78": 5,
+        "79": 3,
+        "80": 1,
+        "81": 1,
+        "82": 5,
+        "83": 5,
+        "84": 2,
+        "85": 4,
+        "86": 5,
+        "87": 5,
+        "88": 0,
+        "89": 0,
+        "90": 0,
+        "91": 0,
+        "92": 5,
+        "93": 5,
+        "94": 5,
+        "95": 5,
+        "128": 3,
+        "129": 1,
+        "130": 1,
+        "131": 1,
+        "132": 1,
+        "133": 5,
+        "134": 3,
+        "135": 3,
+        "136": 2,
+        "137": 2,
+        "138": 2,
+        "139": 2,
+        "140": 3,
+        "141": 3,
+        "142": 5,
+        "143": 5,
+        "144": 5,
+        "145": 5,
+        "146": 1,
+        "147": 1,
+        "148": 1,
+        "149": 5,
+        "150": 3,
+        "151": 3,
+        "152": 5,
+        "153": 5,
+        "154": 5,
+        "155": 5,
+        "156": 0,
+        "157": 0,
+        "158": 5,
+        "159": 5,
+        "160": 0,
+        "161": 0,
+        "162": 5,
+        "163": 5,
+        "164": 3,
+        "165": 5,
+        "166": 5,
+        "167": 5,
+        "168": 5,
+        "169": 5,
+        "170": 4,
+        "171": 2,
+        "172": 3,
+        "173": 3,
+        "174": 3,
+        "175": 5,
+        "176": 5,
+        "177": 5,
+        "178": 5,
+        "179": 5,
+        "180": 3,
+        "181": 5,
+        "182": 5,
+        "183": 5,
+        "184": 5,
+        "185": 5,
+        "186": 5,
+        "187": 5,
+        "188": 5,
+        "189": 3,
+        "190": 3,
+        "191": 5,
+        "192": 0,
+        "193": 0,
+        "194": 5,
+        "195": 5,
+        "196": 3,
+        "197": 3,
+        "198": 5,
+        "199": 5,
+        "200": 0,
+        "201": 0,
+        "202": 3,
+        "203": 0,
+        "204": 5,
+        "205": 5,
+        "206": 5,
+        "207": 3,
+        "208": 1,
+        "209": 1,
+        "210": 5,
+        "211": 5,
+        "212": 2,
+        "213": 4,
+        "214": 5,
+        "215": 5,
+        "216": 0,
+        "217": 0,
+        "218": 0,
+        "219": 0,
+        "220": 5,
+        "221": 5,
+        "222": 5,
+        "223": 5
+      },
+      "TILESET_JOHTO": {
+        "0": 0,
+        "1": 5,
+        "2": 5,
+        "3": 1,
+        "4": 2,
+        "5": 2,
+        "6": 0,
+        "7": 1,
+        "8": 1,
+        "9": 1,
+        "10": 6,
+        "11": 6,
+        "12": 6,
+        "13": 6,
+        "14": 6,
+        "15": 6,
+        "16": 6,
+        "17": 6,
+        "18": 6,
+        "19": 2,
+        "20": 3,
+        "21": 2,
+        "22": 5,
+        "23": 5,
+        "24": 1,
+        "25": 1,
+        "26": 5,
+        "27": 5,
+        "28": 5,
+        "29": 2,
+        "30": 2,
+        "31": 2,
+        "32": 5,
+        "33": 5,
+        "34": 5,
+        "35": 1,
+        "36": 1,
+        "37": 5,
+        "38": 4,
+        "39": 5,
+        "40": 5,
+        "41": 5,
+        "42": 5,
+        "43": 5,
+        "44": 5,
+        "45": 5,
+        "46": 2,
+        "47": 2,
+        "48": 5,
+        "49": 5,
+        "50": 3,
+        "51": 3,
+        "52": 5,
+        "53": 5,
+        "54": 5,
+        "55": 4,
+        "56": 4,
+        "57": 5,
+        "58": 5,
+        "59": 5,
+        "60": 5,
+        "61": 5,
+        "62": 2,
+        "63": 2,
+        "64": 1,
+        "65": 5,
+        "66": 3,
+        "67": 3,
+        "68": 5,
+        "69": 2,
+        "70": 5,
+        "71": 5,
+        "72": 5,
+        "73": 3,
+        "74": 0,
+        "75": 5,
+        "76": 5,
+        "77": 5,
+        "78": 0,
+        "79": 0,
+        "80": 5,
+        "81": 5,
+        "82": 5,
+        "83": 5,
+        "84": 5,
+        "85": 5,
+        "86": 5,
+        "87": 5,
+        "88": 3,
+        "89": 0,
+        "90": 0,
+        "91": 0,
+        "92": 5,
+        "93": 5,
+        "94": 0,
+        "95": 0,
+        "128": 5,
+        "129": 5,
+        "130": 5,
+        "131": 1,
+        "132": 1,
+        "133": 1,
+        "134": 1,
+        "135": 1,
+        "136": 1,
+        "137": 1,
+        "138": 1,
+        "139": 1,
+        "140": 1,
+        "141": 1,
+        "142": 1,
+        "143": 1,
+        "144": 1,
+        "145": 1,
+        "146": 1,
+        "147": 1,
+        "148": 5,
+        "149": 5,
+        "150": 5,
+        "151": 5,
+        "152": 5,
+        "153": 5,
+        "154": 5,
+        "155": 0,
+        "156": 0,
+        "157": 5,
+        "158": 5,
+        "159": 5,
+        "160": 5,
+        "161": 0,
+        "162": 0,
+        "163": 0,
+        "164": 0,
+        "165": 0,
+        "166": 0,
+        "167": 5,
+        "168": 5,
+        "169": 0,
+        "170": 0,
+        "171": 0,
+        "172": 0,
+        "173": 0,
+        "174": 0,
+        "175": 5,
+        "176": 5,
+        "177": 0,
+        "178": 0,
+        "179": 0,
+        "180": 0,
+        "181": 0,
+        "182": 0,
+        "183": 5,
+        "184": 5,
+        "185": 0,
+        "186": 0,
+        "187": 0,
+        "188": 0,
+        "189": 0,
+        "190": 0,
+        "191": 5,
+        "192": 5,
+        "193": 5,
+        "194": 5,
+        "195": 5,
+        "196": 5,
+        "197": 5,
+        "198": 5,
+        "199": 5,
+        "200": 5,
+        "201": 5,
+        "202": 5,
+        "203": 5,
+        "204": 5,
+        "205": 5,
+        "206": 5,
+        "207": 5,
+        "208": 5,
+        "209": 5,
+        "210": 5,
+        "211": 5,
+        "212": 5,
+        "213": 5,
+        "214": 5,
+        "215": 5,
+        "216": 5,
+        "217": 5,
+        "218": 5,
+        "219": 5,
+        "220": 5,
+        "221": 5,
+        "222": 5,
+        "223": 5
+      },
+      "TILESET_LAB": {
+        "0": 0,
+        "1": 3,
+        "2": 1,
+        "3": 5,
+        "4": 5,
+        "5": 5,
+        "6": 5,
+        "7": 5,
+        "8": 3,
+        "9": 3,
+        "10": 0,
+        "11": 0,
+        "12": 0,
+        "13": 0,
+        "14": 0,
+        "15": 0,
+        "16": 0,
+        "17": 3,
+        "18": 1,
+        "19": 5,
+        "20": 5,
+        "21": 5,
+        "22": 5,
+        "23": 5,
+        "24": 3,
+        "25": 3,
+        "26": 0,
+        "27": 0,
+        "28": 0,
+        "29": 0,
+        "30": 0,
+        "31": 0,
+        "32": 3,
+        "33": 3,
+        "34": 3,
+        "35": 3,
+        "36": 6,
+        "37": 5,
+        "38": 5,
+        "39": 5,
+        "40": 3,
+        "41": 3,
+        "42": 5,
+        "43": 5,
+        "44": 5,
+        "45": 2,
+        "46": 2,
+        "47": 2,
+        "48": 3,
+        "49": 3,
+        "50": 3,
+        "51": 3,
+        "52": 1,
+        "53": 5,
+        "54": 5,
+        "55": 0,
+        "56": 3,
+        "57": 3,
+        "58": 5,
+        "59": 5,
+        "60": 5,
+        "61": 2,
+        "62": 2,
+        "63": 2,
+        "64": 6,
+        "65": 6,
+        "66": 0,
+        "67": 0,
+        "68": 0,
+        "69": 0,
+        "70": 0,
+        "71": 0,
+        "72": 3,
+        "73": 0,
+        "74": 0,
+        "75": 0,
+        "76": 0,
+        "77": 0,
+        "78": 0,
+        "79": 0,
+        "80": 6,
+        "81": 6,
+        "82": 0,
+        "83": 0,
+        "84": 0,
+        "85": 0,
+        "86": 0,
+        "87": 0,
+        "88": 0,
+        "89": 0,
+        "90": 0,
+        "91": 0,
+        "92": 0,
+        "93": 0,
+        "94": 0,
+        "95": 0,
+        "128": 0,
+        "129": 0,
+        "130": 0,
+        "131": 0,
+        "132": 0,
+        "133": 0,
+        "134": 0,
+        "135": 3,
+        "136": 3,
+        "137": 3,
+        "138": 3,
+        "139": 3,
+        "140": 3,
+        "141": 3,
+        "142": 3,
+        "143": 3,
+        "144": 0,
+        "145": 0,
+        "146": 0,
+        "147": 0,
+        "148": 0,
+        "149": 3,
+        "150": 3,
+        "151": 3,
+        "152": 3,
+        "153": 3,
+        "154": 3,
+        "155": 3,
+        "156": 3,
+        "157": 3,
+        "158": 3,
+        "159": 3,
+        "160": 3,
+        "161": 0,
+        "162": 0,
+        "163": 0,
+        "164": 0,
+        "165": 3,
+        "166": 3,
+        "167": 3,
+        "168": 3,
+        "169": 3,
+        "170": 3,
+        "171": 3,
+        "172": 5,
+        "173": 2,
+        "174": 2,
+        "175": 2,
+        "176": 3,
+        "177": 3,
+        "178": 3,
+        "179": 3,
+        "180": 3,
+        "181": 3,
+        "182": 3,
+        "183": 3,
+        "184": 1,
+        "185": 1,
+        "186": 3,
+        "187": 3,
+        "188": 3,
+        "189": 3,
+        "190": 3,
+        "191": 3,
+        "192": 3,
+        "193": 3,
+        "194": 3,
+        "195": 3,
+        "196": 3,
+        "197": 3,
+        "198": 3,
+        "199": 3,
+        "200": 3,
+        "201": 3,
+        "202": 3,
+        "203": 3,
+        "204": 3,
+        "205": 3,
+        "206": 3,
+        "207": 3,
+        "208": 3,
+        "209": 3,
+        "210": 3,
+        "211": 3,
+        "212": 3,
+        "213": 3,
+        "214": 3,
+        "215": 3,
+        "216": 3,
+        "217": 3,
+        "218": 3,
+        "219": 3,
+        "220": 3,
+        "221": 3,
+        "222": 3,
+        "223": 3
+      },
+      "TILESET_PLAYERS_HOUSE": {
+        "0": 0,
+        "1": 5,
+        "2": 5,
+        "3": 5,
+        "4": 1,
+        "5": 2,
+        "6": 3,
+        "7": 3,
+        "8": 5,
+        "9": 5,
+        "10": 0,
+        "11": 0,
+        "12": 0,
+        "13": 0,
+        "14": 5,
+        "15": 5,
+        "16": 5,
+        "17": 5,
+        "18": 5,
+        "19": 5,
+        "20": 1,
+        "21": 5,
+        "22": 3,
+        "23": 3,
+        "24": 5,
+        "25": 5,
+        "26": 0,
+        "27": 0,
+        "28": 5,
+        "29": 5,
+        "30": 5,
+        "31": 5,
+        "32": 0,
+        "33": 0,
+        "34": 5,
+        "35": 5,
+        "36": 5,
+        "37": 5,
+        "38": 5,
+        "39": 5,
+        "40": 0,
+        "41": 0,
+        "42": 0,
+        "43": 0,
+        "44": 3,
+        "45": 3,
+        "46": 5,
+        "47": 5,
+        "48": 0,
+        "49": 0,
+        "50": 5,
+        "51": 5,
+        "52": 5,
+        "53": 5,
+        "54": 0,
+        "55": 0,
+        "56": 0,
+        "57": 0,
+        "58": 5,
+        "59": 5,
+        "60": 3,
+        "61": 3,
+        "62": 5,
+        "63": 5,
+        "64": 5,
+        "65": 0,
+        "66": 0,
+        "67": 0,
+        "68": 0,
+        "69": 0,
+        "70": 0,
+        "71": 0,
+        "72": 0,
+        "73": 0,
+        "74": 5,
+        "75": 5,
+        "76": 5,
+        "77": 5,
+        "78": 5,
+        "79": 5,
+        "80": 0,
+        "81": 0,
+        "82": 0,
+        "83": 0,
+        "84": 0,
+        "85": 0,
+        "86": 0,
+        "87": 0,
+        "88": 0,
+        "89": 0,
+        "90": 5,
+        "91": 5,
+        "92": 5,
+        "93": 5,
+        "94": 5,
+        "95": 5,
+        "128": 0,
+        "129": 5,
+        "130": 5,
+        "131": 5,
+        "132": 1,
+        "133": 2,
+        "134": 3,
+        "135": 3,
+        "136": 5,
+        "137": 5,
+        "138": 0,
+        "139": 0,
+        "140": 0,
+        "141": 0,
+        "142": 5,
+        "143": 5,
+        "144": 5,
+        "145": 5,
+        "146": 5,
+        "147": 5,
+        "148": 1,
+        "149": 5,
+        "150": 3,
+        "151": 3,
+        "152": 5,
+        "153": 5,
+        "154": 0,
+        "155": 0,
+        "156": 5,
+        "157": 5,
+        "158": 5,
+        "159": 5,
+        "160": 0,
+        "161": 0,
+        "162": 5,
+        "163": 5,
+        "164": 5,
+        "165": 5,
+        "166": 5,
+        "167": 5,
+        "168": 0,
+        "169": 0,
+        "170": 0,
+        "171": 0,
+        "172": 3,
+        "173": 3,
+        "174": 5,
+        "175": 5,
+        "176": 0,
+        "177": 0,
+        "178": 5,
+        "179": 5,
+        "180": 5,
+        "181": 5,
+        "182": 0,
+        "183": 0,
+        "184": 0,
+        "185": 0,
+        "186": 5,
+        "187": 5,
+        "188": 3,
+        "189": 3,
+        "190": 5,
+        "191": 5,
+        "192": 5,
+        "193": 0,
+        "194": 0,
+        "195": 0,
+        "196": 0,
+        "197": 0,
+        "198": 0,
+        "199": 0,
+        "200": 0,
+        "201": 0,
+        "202": 5,
+        "203": 5,
+        "204": 5,
+        "205": 5,
+        "206": 5,
+        "207": 5,
+        "208": 0,
+        "209": 0,
+        "210": 0,
+        "211": 0,
+        "212": 0,
+        "213": 0,
+        "214": 0,
+        "215": 0,
+        "216": 0,
+        "217": 0,
+        "218": 5,
+        "219": 5,
+        "220": 5,
+        "221": 5,
+        "222": 5,
+        "223": 5
+      },
+      "TILESET_PLAYERS_ROOM": {
+        "0": 5,
+        "1": 5,
+        "2": 5,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+        "6": 0,
+        "7": 2,
+        "8": 2,
+        "9": 1,
+        "10": 1,
+        "11": 0,
+        "12": 0,
+        "13": 1,
+        "14": 1,
+        "15": 1,
+        "16": 5,
+        "17": 5,
+        "18": 5,
+        "19": 0,
+        "20": 0,
+        "21": 0,
+        "22": 0,
+        "23": 2,
+        "24": 2,
+        "25": 1,
+        "26": 1,
+        "27": 0,
+        "28": 0,
+        "29": 3,
+        "30": 1,
+        "31": 1,
+        "32": 5,
+        "33": 5,
+        "34": 5,
+        "35": 0,
+        "36": 0,
+        "37": 0,
+        "38": 0,
+        "39": 2,
+        "40": 2,
+        "41": 6,
+        "42": 6,
+        "43": 0,
+        "44": 0,
+        "45": 4,
+        "46": 1,
+        "47": 1,
+        "48": 5,
+        "49": 5,
+        "50": 5,
+        "51": 0,
+        "52": 0,
+        "53": 0,
+        "54": 0,
+        "55": 2,
+        "56": 2,
+        "57": 6,
+        "58": 6,
+        "59": 3,
+        "60": 3,
+        "61": 2,
+        "62": 1,
+        "63": 1,
+        "64": 0,
+        "65": 0,
+        "66": 0,
+        "67": 0,
+        "68": 5,
+        "69": 5,
+        "70": 5,
+        "71": 2,
+        "72": 2,
+        "73": 4,
+        "74": 4,
+        "75": 3,
+        "76": 3,
+        "77": 5,
+        "78": 4,
+        "79": 4,
+        "80": 0,
+        "81": 0,
+        "82": 0,
+        "83": 0,
+        "84": 5,
+        "85": 5,
+        "86": 5,
+        "87": 2,
+        "88": 2,
+        "89": 4,
+        "90": 4,
+        "91": 0,
+        "92": 0,
+        "93": 5,
+        "94": 4,
+        "95": 4,
+        "128": 5,
+        "129": 5,
+        "130": 5,
+        "131": 0,
+        "132": 0,
+        "133": 0,
+        "134": 0,
+        "135": 2,
+        "136": 2,
+        "137": 1,
+        "138": 1,
+        "139": 0,
+        "140": 0,
+        "141": 1,
+        "142": 1,
+        "143": 1,
+        "144": 5,
+        "145": 5,
+        "146": 5,
+        "147": 0,
+        "148": 0,
+        "149": 0,
+        "150": 0,
+        "151": 2,
+        "152": 2,
+        "153": 1,
+        "154": 1,
+        "155": 0,
+        "156": 0,
+        "157": 3,
+        "158": 1,
+        "159": 1,
+        "160": 5,
+        "161": 5,
+        "162": 5,
+        "163": 0,
+        "164": 0,
+        "165": 0,
+        "166": 0,
+        "167": 2,
+        "168": 2,
+        "169": 6,
+        "170": 6,
+        "171": 0,
+        "172": 0,
+        "173": 4,
+        "174": 1,
+        "175": 1,
+        "176": 5,
+        "177": 5,
+        "178": 5,
+        "179": 0,
+        "180": 0,
+        "181": 0,
+        "182": 0,
+        "183": 2,
+        "184": 2,
+        "185": 6,
+        "186": 6,
+        "187": 3,
+        "188": 3,
+        "189": 2,
+        "190": 1,
+        "191": 1,
+        "192": 0,
+        "193": 0,
+        "194": 0,
+        "195": 0,
+        "196": 5,
+        "197": 5,
+        "198": 5,
+        "199": 2,
+        "200": 2,
+        "201": 4,
+        "202": 4,
+        "203": 3,
+        "204": 3,
+        "205": 5,
+        "206": 4,
+        "207": 4,
+        "208": 0,
+        "209": 0,
+        "210": 0,
+        "211": 0,
+        "212": 5,
+        "213": 5,
+        "214": 5,
+        "215": 2,
+        "216": 2,
+        "217": 4,
+        "218": 4,
+        "219": 0,
+        "220": 0,
+        "221": 5,
+        "222": 4,
+        "223": 4
+      }
     }
   },
   "romSha1": "f2f52230b536214ef7c9924f483392993e226cfb",
+  "spawn": {
+    "map": "PLAYERS_HOUSE_2F",
+    "x": 3,
+    "y": 3
+  },
   "symbols": {
     "ChrisSpriteGFX": [
       48,
@@ -2179,6 +6014,22 @@
     "Cry_Wooper_Ch8": [
       60,
       29284
+    ],
+    "ElmsHouse_MapAttributes": [
+      37,
+      25976
+    ],
+    "ElmsHouse_MapEvents": [
+      30,
+      28906
+    ],
+    "ElmsLab_MapAttributes": [
+      37,
+      25928
+    ],
+    "ElmsLab_MapEvents": [
+      30,
+      25566
     ],
     "Font": [
       62,
@@ -2248,9 +6099,45 @@
       106,
       17229
     ],
+    "PlayersHouse1F_MapAttributes": [
+      37,
+      25940
+    ],
+    "PlayersHouse1F_MapEvents": [
+      30,
+      27441
+    ],
+    "PlayersHouse2F_MapAttributes": [
+      37,
+      25952
+    ],
+    "PlayersHouse2F_MapEvents": [
+      30,
+      27801
+    ],
+    "PlayersNeighborsHouse_MapAttributes": [
+      37,
+      25964
+    ],
+    "PlayersNeighborsHouse_MapEvents": [
+      30,
+      28336
+    ],
     "PokemonProfPic": [
       86,
       16734
+    ],
+    "TilesetHouseColl": [
+      55,
+      23040
+    ],
+    "TilesetHouseGFX": [
+      55,
+      20816
+    ],
+    "TilesetHouseMeta": [
+      55,
+      22016
     ],
     "TilesetJohtoColl": [
       6,
@@ -2263,6 +6150,42 @@
     "TilesetJohtoMeta": [
       6,
       23566
+    ],
+    "TilesetLabColl": [
+      8,
+      22497
+    ],
+    "TilesetLabGFX": [
+      8,
+      19425
+    ],
+    "TilesetLabMeta": [
+      8,
+      21473
+    ],
+    "TilesetPlayersHouseColl": [
+      7,
+      23852
+    ],
+    "TilesetPlayersHouseGFX": [
+      7,
+      21836
+    ],
+    "TilesetPlayersHouseMeta": [
+      7,
+      22828
+    ],
+    "TilesetPlayersRoomColl": [
+      6,
+      31998
+    ],
+    "TilesetPlayersRoomGFX": [
+      6,
+      29758
+    ],
+    "TilesetPlayersRoomMeta": [
+      6,
+      30974
     ],
     "TitleCrystalGFX": [
       67,

@@ -19,6 +19,10 @@ endr
 	tilepal 1, RED, GRAY, GREEN, WATER, YELLOW, BROWN, ROOF, TEXT
 """
 
+HOUSE_PALETTE_MAP = """
+	tilepal 0, TEXT, RED, GREEN, WATER, YELLOW, BROWN, ROOF, GRAY
+"""
+
 ENVIRONMENT_COLORS = """
 EnvironmentColorsPointers:
 	dw .OutdoorColors ; unused
@@ -32,6 +36,9 @@ EnvironmentColorsPointers:
 
 .IndoorColors:
 	db $20, $21, $22, $23, $24, $25, $26, $07 ; morn
+	db $20, $21, $22, $23, $24, $25, $26, $07 ; day
+	db $10, $11, $12, $13, $14, $15, $16, $07 ; nite
+	db $18, $19, $1a, $1b, $1c, $1d, $1e, $07 ; dark
 """
 
 # 8 named rows per time block (gray/red/green/water/yellow/brown/roof/text),
@@ -136,6 +143,10 @@ def _write_fixture(root):
         with open(path, "w") as f:
             f.write(content)
     w("gfx/tilesets/johto_palette_map.asm", JOHTO_PALETTE_MAP)
+    w("gfx/tilesets/players_house_palette_map.asm", HOUSE_PALETTE_MAP)
+    w("gfx/tilesets/players_room_palette_map.asm", HOUSE_PALETTE_MAP)
+    w("gfx/tilesets/lab_palette_map.asm", HOUSE_PALETTE_MAP)
+    w("gfx/tilesets/house_palette_map.asm", HOUSE_PALETTE_MAP)
     w("data/maps/environment_colors.asm", ENVIRONMENT_COLORS)
     w("gfx/tilesets/bg_tiles.pal", BG_TILES_PAL)
     w("gfx/overworld/npc_sprites.pal", NPC_SPRITES_PAL)
@@ -146,17 +157,18 @@ class ResolveTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _write_fixture(tmp)
             result = palettes.resolve(tmp)
+        johto = result["tileGroups"]["TILESET_JOHTO"]
         # bank-0 block: tile ids 0-7 (one tilepal line, 8 names)
-        self.assertEqual(result["tileGroups"][0], 0)  # GRAY
-        self.assertEqual(result["tileGroups"][3], 3)  # WATER
-        self.assertEqual(result["tileGroups"][7], 7)  # TEXT
+        self.assertEqual(johto[0], 0)  # GRAY
+        self.assertEqual(johto[3], 3)  # WATER
+        self.assertEqual(johto[7], 7)  # TEXT
         # bank-1 block must start at tile id 128, not 8 -- the $ff-padded
         # gap (tile ids 8-127 in this trimmed fixture, 96-127 in the real
         # table) is never assigned
-        self.assertNotIn(8, result["tileGroups"])
-        self.assertNotIn(127, result["tileGroups"])
-        self.assertEqual(result["tileGroups"][128], 1)  # RED
-        self.assertEqual(result["tileGroups"][135], 7)  # TEXT
+        self.assertNotIn(8, johto)
+        self.assertNotIn(127, johto)
+        self.assertEqual(johto[128], 1)  # RED
+        self.assertEqual(johto[135], 7)  # TEXT
 
     def test_outdoor_water_slot_uses_the_special_overworld_water_row(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,9 +177,9 @@ class ResolveTest(unittest.TestCase):
         # group 3 (WATER) in .OutdoorColors' morn row is index $28, which
         # points at bg_tiles.pal's "overworld water / morn/day" row (RGB
         # 31,31,31,...), NOT the plain "water" row (RGB 04,04,04,...)
-        morn_water = result["byTime"]["morn"]["groupColors"][3]
+        morn_water = result["byTime"]["morn"]["groupColors"]["TILESET_JOHTO"][3]
         self.assertEqual(morn_water[0], [255, 255, 255])  # scale5(31) == 255
-        nite_water = result["byTime"]["nite"]["groupColors"][3]
+        nite_water = result["byTime"]["nite"]["groupColors"]["TILESET_JOHTO"][3]
         self.assertEqual(nite_water[0], [74, 74, 74])  # scale5(9) == 74
 
     def test_scale5_rgb555_to_rgb888(self):
@@ -175,7 +187,9 @@ class ResolveTest(unittest.TestCase):
             _write_fixture(tmp)
             result = palettes.resolve(tmp)
         # morn GRAY row: RGB 01,01,01 x4 -> scale5(1) == 8
-        self.assertEqual(result["byTime"]["morn"]["groupColors"][0][0], [8, 8, 8])
+        self.assertEqual(
+            result["byTime"]["morn"]["groupColors"]["TILESET_JOHTO"][0][0],
+            [8, 8, 8])
 
     def test_sprite_color_is_chris_red_row_per_time(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -185,11 +199,14 @@ class ResolveTest(unittest.TestCase):
         self.assertEqual(result["byTime"]["day"]["spriteColor"][0], [90, 90, 90])
         self.assertEqual(result["byTime"]["nite"]["spriteColor"][0], [173, 173, 173])
 
-    def test_dark_and_indoor_are_not_resolved(self):
+    def test_indoor_tilesets_use_the_indoor_environment_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             _write_fixture(tmp)
             result = palettes.resolve(tmp)
         self.assertEqual(set(result["byTime"].keys()), {"morn", "day", "nite"})
+        self.assertEqual(
+            result["byTime"]["morn"]["groupColors"]["TILESET_HOUSE"][0][0],
+            [0, 0, 0])
 
 
 if __name__ == "__main__":

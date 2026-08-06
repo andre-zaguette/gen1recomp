@@ -1,6 +1,7 @@
 -- src/import/RomExtractorGen2.lua
--- Gen2 (Crystal) runtime extractor, scoped to New Bark Town: map, the
--- TILESET_JOHTO tileset, the player (Chris) overworld sprite, and the
+-- Gen2 (Crystal) runtime extractor, scoped to Crystal's intro/new-game
+-- opening: New Bark Town, the player's house 1F/2F, their three tilesets,
+-- the player (Chris/Kris) overworld sprites, and the
 -- font (glyphs + charmap) used to draw the engine's own hardcoded UI
 -- strings (title screen, menus).
 -- Mirrors src/import/RomExtractor.lua's shape and helper usage; the
@@ -23,7 +24,7 @@ RomExtractorGen2.__index = RomExtractorGen2
 local STAGE_COUNT = 9
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
--- skeleton's scope (New Bark Town's map/tileset/player sprite/font
+-- skeleton's scope (Crystal intro/start maps/tilesets/player sprite/font
 -- only, see the spec's non-goals) never populates.  `field` gets real
 -- boot content (extractField, below); `text` gets real boot content too
 -- (extractIntroText, above -- the intro's ~8 narration/prompt labels);
@@ -33,7 +34,6 @@ local STAGE_COUNT = 9
 -- placeholder content: an empty table is the honest "not extracted yet".
 local STUB_MODULES = {
   "constants", "text_pointers", "trainer_headers",
-  "moves", "items", "type_chart", "encounters",
   "battle_anims",
 }
 
@@ -96,6 +96,20 @@ function RomExtractorGen2:save(image, relative)
   ImageWriter.save(image, "assets/generated/" .. relative)
 end
 
+local START_NPC_SPRITES = {
+  SPRITE_RIVAL = { file = "rival.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_TEACHER = { file = "teacher.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_FISHER = { file = "fisher.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_MOM = { file = "mom.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_POKEFAN_F = { file = "pokefan_f.png", frames = 6, walker = true, palette = "brown" },
+  SPRITE_COOLTRAINER_F = { file = "cooltrainer_f.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_BUG_CATCHER = { file = "bug_catcher.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_ELM = { file = "elm.png", frames = 6, walker = true, palette = "brown" },
+  SPRITE_SCIENTIST = { file = "scientist.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_OFFICER = { file = "officer.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_POKE_BALL = { file = "poke_ball.png", frames = 1, walker = false, palette = "red" },
+}
+
 function RomExtractorGen2:extractSprite()
   self:beginStage("Player sprite")
   local chris = self:symbol("ChrisSpriteGFX")
@@ -125,64 +139,695 @@ function RomExtractorGen2:extractSprite()
       frames = 96 / 16, walker = true,
     },
   }
+  for spriteId, spec in pairs(START_NPC_SPRITES) do
+    local sourcePath = "roms/pokecrystal/gfx/sprites/" .. spec.file
+    self:save(love.image.newImageData(sourcePath), "sprites/" .. spec.file)
+    out[spriteId] = {
+      id = spriteId,
+      source = "decomp:" .. sourcePath,
+      paletteSource = "CRYSTAL_OW:" .. spec.palette,
+      image = "assets/generated/sprites/" .. spec.file,
+      frames = spec.frames,
+      walker = spec.walker,
+    }
+  end
   self:write("sprites", out)
   self:tick("Player sprite", 1, 1)
   return out
 end
 
-function RomExtractorGen2:extractTileset()
-  self:beginStage("Johto tileset")
-  local gfx = self:symbol("TilesetJohtoGFX")
-  local meta = self:symbol("TilesetJohtoMeta")
-  local coll = self:symbol("TilesetJohtoColl")
+local function readTextFile(path)
+  local handle = assert(io.open(path, "rb"), "could not read " .. tostring(path))
+  local text = handle:read("*a")
+  handle:close()
+  return text
+end
 
-  local compressed = self.rom:bytes(gfx.bank, gfx.address, 0x4000)
-  local raw = Lz3.decompress(compressed)
-  local widthTiles = 16
-  local width = widthTiles * 8
-  local height = #raw / 16 / widthTiles * 8
-  local image = ImageWriter.decode2bpp(raw, width, height)
-  self:save(image, "tilesets/johto.png")
+local function trim(s)
+  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
 
-  local blocksRaw = self.rom:bytes(meta.bank, meta.address, 2048)
-  local blocks = {}
-  for offset = 1, #blocksRaw, 16 do
-    local block = {}
-    for pos = offset, offset + 15 do block[#block + 1] = blocksRaw[pos] end
-    blocks[#blocks + 1] = block
+local function fileExists(path)
+  local handle = io.open(path, "rb")
+  if handle then
+    handle:close()
+    return true
   end
+  return false
+end
 
-  local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
-  local walkableSet = {}
-  for blockIndex, block in ipairs(blocks) do
-    for cellIndex = 0, 3 do
-      local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
-      local permission = COLLISION_PERMISSION[collValue]
-      assert(permission, "unknown COLL_* value " .. tostring(collValue))
-      if bit.band(permission, 0x0F) == LAND_TILE then
-        local row = cellIndex < 2 and 1 or 3
-        local col = (cellIndex % 2) * 2
-        local tileId = block[row * 4 + col + 1]
-        walkableSet[tileId] = true
+local function splitCsv(text)
+  local out = {}
+  for part in text:gmatch("[^,]+") do
+    out[#out + 1] = trim(part)
+  end
+  return out
+end
+
+local function uniqueTypes(a, b)
+  if a == b then return { a } end
+  return { a, b }
+end
+
+local function crystalPercentToByte(value)
+  return math.floor((tonumber(value) or 0) * 0xFF / 100)
+end
+
+local function crystalBucket(percent)
+  if percent >= 100 then return 256 end
+  return math.floor(percent * 256 / 100)
+end
+
+local function crystalDisplayText(text)
+  text = trim(text or "")
+  text = text:gsub("#", "POKe")
+  return text
+end
+
+local SPECIAL_LABELS = {
+  FARFETCH_D = "FarfetchD",
+  HO_OH = "HoOh",
+  MR__MIME = "MrMime",
+  NIDORAN_F = "NidoranF",
+  NIDORAN_M = "NidoranM",
+  PORYGON2 = "Porygon2",
+}
+
+local function speciesLabelFromId(id)
+  if SPECIAL_LABELS[id] then return SPECIAL_LABELS[id] end
+  local out = {}
+  for part in id:gmatch("[A-Z0-9]+") do
+    if part:match("^%d+$") then
+      out[#out + 1] = part
+    else
+      out[#out + 1] = part:sub(1, 1) .. part:sub(2):lower()
+    end
+  end
+  return table.concat(out)
+end
+
+local CRYSTAL_EFFECT_MAP = {
+  EFFECT_ACCURACY_DOWN = "ACCURACY_DOWN1_EFFECT",
+  EFFECT_ACCURACY_DOWN_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ALL_UP_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ALWAYS_HIT = "SWIFT_EFFECT",
+  EFFECT_ATTACK_DOWN = "ATTACK_DOWN1_EFFECT",
+  EFFECT_ATTACK_DOWN_2 = "ATTACK_DOWN1_EFFECT",
+  EFFECT_ATTACK_DOWN_HIT = "ATTACK_DOWN_SIDE_EFFECT",
+  EFFECT_ATTACK_UP = "ATTACK_UP1_EFFECT",
+  EFFECT_ATTACK_UP_2 = "ATTACK_UP2_EFFECT",
+  EFFECT_ATTACK_UP_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ATTRACT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_BATON_PASS = "NO_ADDITIONAL_EFFECT",
+  EFFECT_BEAT_UP = "NO_ADDITIONAL_EFFECT",
+  EFFECT_BELLY_DRUM = "NO_ADDITIONAL_EFFECT",
+  EFFECT_BIDE = "BIDE_EFFECT",
+  EFFECT_BURN_HIT = "BURN_SIDE_EFFECT1",
+  EFFECT_CONFUSE = "CONFUSION_EFFECT",
+  EFFECT_CONFUSE_HIT = "CONFUSION_SIDE_EFFECT",
+  EFFECT_CONVERSION = "CONVERSION_EFFECT",
+  EFFECT_CONVERSION2 = "NO_ADDITIONAL_EFFECT",
+  EFFECT_COUNTER = "NO_ADDITIONAL_EFFECT",
+  EFFECT_CURSE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_DEFENSE_CURL = "DEFENSE_UP1_EFFECT",
+  EFFECT_DEFENSE_DOWN = "DEFENSE_DOWN1_EFFECT",
+  EFFECT_DEFENSE_DOWN_2 = "DEFENSE_DOWN2_EFFECT",
+  EFFECT_DEFENSE_DOWN_HIT = "DEFENSE_DOWN_SIDE_EFFECT",
+  EFFECT_DEFENSE_UP = "DEFENSE_UP1_EFFECT",
+  EFFECT_DEFENSE_UP_2 = "DEFENSE_UP2_EFFECT",
+  EFFECT_DEFENSE_UP_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_DESTINY_BOND = "NO_ADDITIONAL_EFFECT",
+  EFFECT_DISABLE = "DISABLE_EFFECT",
+  EFFECT_DOUBLE_HIT = "ATTACK_TWICE_EFFECT",
+  EFFECT_DREAM_EATER = "DREAM_EATER_EFFECT",
+  EFFECT_EARTHQUAKE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ENCORE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ENDURE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_EVASION_DOWN = "NO_ADDITIONAL_EFFECT",
+  EFFECT_EVASION_UP = "EVASION_UP1_EFFECT",
+  EFFECT_FALSE_SWIPE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_FLAME_WHEEL = "BURN_SIDE_EFFECT1",
+  EFFECT_FLINCH_HIT = "FLINCH_SIDE_EFFECT1",
+  EFFECT_FLY = "FLY_EFFECT",
+  EFFECT_FOCUS_ENERGY = "FOCUS_ENERGY_EFFECT",
+  EFFECT_FORCE_SWITCH = "SWITCH_AND_TELEPORT_EFFECT",
+  EFFECT_FORESIGHT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_FREEZE_HIT = "FREEZE_SIDE_EFFECT1",
+  EFFECT_FRUSTRATION = "NO_ADDITIONAL_EFFECT",
+  EFFECT_FURY_CUTTER = "NO_ADDITIONAL_EFFECT",
+  EFFECT_FUTURE_SIGHT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_GUST = "NO_ADDITIONAL_EFFECT",
+  EFFECT_HEAL = "HEAL_EFFECT",
+  EFFECT_HEAL_BELL = "NO_ADDITIONAL_EFFECT",
+  EFFECT_HIDDEN_POWER = "NO_ADDITIONAL_EFFECT",
+  EFFECT_HYPER_BEAM = "HYPER_BEAM_EFFECT",
+  EFFECT_JUMP_KICK = "JUMP_KICK_EFFECT",
+  EFFECT_LEECH_HIT = "DRAIN_HP_EFFECT",
+  EFFECT_LEECH_SEED = "LEECH_SEED_EFFECT",
+  EFFECT_LEVEL_DAMAGE = "SPECIAL_DAMAGE_EFFECT",
+  EFFECT_LIGHT_SCREEN = "LIGHT_SCREEN_EFFECT",
+  EFFECT_LOCK_ON = "NO_ADDITIONAL_EFFECT",
+  EFFECT_MAGNITUDE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_MEAN_LOOK = "NO_ADDITIONAL_EFFECT",
+  EFFECT_METRONOME = "METRONOME_EFFECT",
+  EFFECT_MIMIC = "MIMIC_EFFECT",
+  EFFECT_MIRROR_COAT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_MIRROR_MOVE = "MIRROR_MOVE_EFFECT",
+  EFFECT_MIST = "MIST_EFFECT",
+  EFFECT_MOONLIGHT = "HEAL_EFFECT",
+  EFFECT_MORNING_SUN = "HEAL_EFFECT",
+  EFFECT_MULTI_HIT = "TWO_TO_FIVE_ATTACKS_EFFECT",
+  EFFECT_NIGHTMARE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_NORMAL_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_OHKO = "OHKO_EFFECT",
+  EFFECT_PAIN_SPLIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_PARALYZE = "PARALYZE_EFFECT",
+  EFFECT_PARALYZE_HIT = "PARALYZE_SIDE_EFFECT1",
+  EFFECT_PAY_DAY = "PAY_DAY_EFFECT",
+  EFFECT_PERISH_SONG = "NO_ADDITIONAL_EFFECT",
+  EFFECT_POISON = "POISON_EFFECT",
+  EFFECT_POISON_HIT = "POISON_SIDE_EFFECT1",
+  EFFECT_POISON_MULTI_HIT = "TWINEEDLE_EFFECT",
+  EFFECT_PRESENT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_PRIORITY_HIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_PROTECT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_PSYCH_UP = "NO_ADDITIONAL_EFFECT",
+  EFFECT_PSYWAVE = "SPECIAL_DAMAGE_EFFECT",
+  EFFECT_PURSUIT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_RAGE = "RAGE_EFFECT",
+  EFFECT_RAIN_DANCE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_RAMPAGE = "THRASH_PETAL_DANCE_EFFECT",
+  EFFECT_RAPID_SPIN = "NO_ADDITIONAL_EFFECT",
+  EFFECT_RAZOR_WIND = "CHARGE_EFFECT",
+  EFFECT_RECOIL_HIT = "RECOIL_EFFECT",
+  EFFECT_REFLECT = "REFLECT_EFFECT",
+  EFFECT_RESET_STATS = "HAZE_EFFECT",
+  EFFECT_RETURN = "NO_ADDITIONAL_EFFECT",
+  EFFECT_REVERSAL = "NO_ADDITIONAL_EFFECT",
+  EFFECT_ROLLOUT = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SACRED_FIRE = "BURN_SIDE_EFFECT2",
+  EFFECT_SAFEGUARD = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SANDSTORM = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SELFDESTRUCT = "EXPLODE_EFFECT",
+  EFFECT_SKETCH = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SKULL_BASH = "CHARGE_EFFECT",
+  EFFECT_SKY_ATTACK = "CHARGE_EFFECT",
+  EFFECT_SLEEP = "SLEEP_EFFECT",
+  EFFECT_SLEEP_TALK = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SNORE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SOLARBEAM = "CHARGE_EFFECT",
+  EFFECT_SPEED_DOWN = "SPEED_DOWN1_EFFECT",
+  EFFECT_SPEED_DOWN_2 = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SPEED_DOWN_HIT = "SPEED_DOWN_SIDE_EFFECT",
+  EFFECT_SPEED_UP_2 = "SPEED_UP2_EFFECT",
+  EFFECT_SPIKES = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SPITE = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SPLASH = "SPLASH_EFFECT",
+  EFFECT_SP_ATK_UP = "SPECIAL_UP1_EFFECT",
+  EFFECT_SP_DEF_DOWN_HIT = "SPECIAL_DOWN_SIDE_EFFECT",
+  EFFECT_SP_DEF_UP_2 = "SPECIAL_UP2_EFFECT",
+  EFFECT_STATIC_DAMAGE = "SPECIAL_DAMAGE_EFFECT",
+  EFFECT_STOMP = "FLINCH_SIDE_EFFECT1",
+  EFFECT_SUBSTITUTE = "SUBSTITUTE_EFFECT",
+  EFFECT_SUNNY_DAY = "NO_ADDITIONAL_EFFECT",
+  EFFECT_SUPER_FANG = "SUPER_FANG_EFFECT",
+  EFFECT_SWAGGER = "CONFUSION_EFFECT",
+  EFFECT_SYNTHESIS = "HEAL_EFFECT",
+  EFFECT_TELEPORT = "SWITCH_AND_TELEPORT_EFFECT",
+  EFFECT_THIEF = "NO_ADDITIONAL_EFFECT",
+  EFFECT_THUNDER = "PARALYZE_SIDE_EFFECT2",
+  EFFECT_TOXIC = "POISON_EFFECT",
+  EFFECT_TRANSFORM = "TRANSFORM_EFFECT",
+  EFFECT_TRAP_TARGET = "TRAPPING_EFFECT",
+  EFFECT_TRIPLE_KICK = "NO_ADDITIONAL_EFFECT",
+  EFFECT_TRI_ATTACK = "NO_ADDITIONAL_EFFECT",
+  EFFECT_TWISTER = "FLINCH_SIDE_EFFECT1",
+}
+
+local FIXED_DAMAGE_MOVES = {
+  SONICBOOM = 20,
+  DRAGON_RAGE = 40,
+  SEISMIC_TOSS = "level",
+  NIGHT_SHADE = "level",
+  PSYWAVE = "half_level_rand",
+}
+
+function RomExtractorGen2:parseCrystalMoves()
+  local path = "roms/pokecrystal/data/moves/moves.asm"
+  local out = {}
+  local index = 0
+  for line in readTextFile(path):gmatch("[^\r\n]+") do
+    local id, effect, power, moveType, accuracy, pp, chance =
+      line:match("^%s*move%s+([A-Z0-9_]+),%s*(EFFECT_[A-Z0-9_]+),%s*(-?%d+),%s*([A-Z0-9_]+),%s*(%d+),%s*(%d+),%s*(%d+)")
+    if id then
+      index = index + 1
+      out[id] = {
+        id = id,
+        index = index,
+        name = id:gsub("_", " "),
+        type = moveType,
+        power = tonumber(power),
+        accuracy = tonumber(accuracy),
+        pp = tonumber(pp),
+        effect = CRYSTAL_EFFECT_MAP[effect] or "NO_ADDITIONAL_EFFECT",
+        effectChance = tonumber(chance),
+        originalEffect = effect,
+      }
+      if FIXED_DAMAGE_MOVES[id] ~= nil then
+        out[id].fixedDamage = FIXED_DAMAGE_MOVES[id]
       end
     end
   end
-  local walkable = {}
-  for tileId in pairs(walkableSet) do walkable[#walkable + 1] = tileId end
-  table.sort(walkable)
+  return out
+end
 
-  local out = {
-    TILESET_JOHTO = {
-      id = "TILESET_JOHTO", source = "ROM:TilesetJohtoGFX/Meta/Coll",
-      image = "assets/generated/tilesets/johto.png",
+function RomExtractorGen2:parseCrystalLearnsets()
+  local byLabel = {}
+  local out = {}
+  for _, species in ipairs(self.crystalSpeciesOrder or {}) do
+    byLabel[speciesLabelFromId(species)] = species
+  end
+  local current, inMoves = nil, false
+  for line in readTextFile("roms/pokecrystal/data/pokemon/evos_attacks.asm"):gmatch("[^\r\n]+") do
+    local label = line:match("^([A-Za-z0-9_]+)EvosAttacks:$")
+    if label then
+      current = byLabel[label]
+      inMoves = false
+      if current then out[current] = {} end
+    elseif current then
+      if line:match("^%s*db%s+0%s*;%s*no more evolutions") then
+        inMoves = true
+      elseif line:match("^%s*db%s+0%s*;%s*no more level%-up moves") then
+        current, inMoves = nil, false
+      elseif inMoves then
+        local level, move = line:match("^%s*db%s+(%d+),%s*([A-Z0-9_]+)")
+        if level and move then
+          out[current][#out[current] + 1] = { level = tonumber(level), move = move }
+        end
+      end
+    end
+  end
+  return out
+end
+
+function RomExtractorGen2:parseCrystalSpecies(moves)
+  local order = {}
+  for include in readTextFile("roms/pokecrystal/data/pokemon/base_stats.asm"):gmatch('INCLUDE%s+"data/pokemon/base_stats/([^"]+)"') do
+    local filePath = "roms/pokecrystal/data/pokemon/base_stats/" .. include
+    local text = readTextFile(filePath)
+    local species, dex = text:match("^%s*db%s+([A-Z0-9_]+)%s*;%s*(%d+)")
+    local hp, atk, def, spd, sat = text:match("db%s+(%d+),%s*(%d+),%s*(%d+),%s*(%d+),%s*(%d+),%s*(%d+)")
+    local type1, type2 = text:match("db%s+([A-Z0-9_]+),%s*([A-Z0-9_]+)%s*;%s*type")
+    local catchRate = text:match("db%s+(%-?%d+)%s*;%s*catch rate")
+    local baseExp = text:match("db%s+(%-?%d+)%s*;%s*base exp")
+    local frontStem = text:match('INCBIN%s+"gfx/pokemon/([^"]+)/front%.dimensions"')
+    local growthRate = text:match("db%s+(GROWTH_[A-Z0-9_]+)%s*;%s*growth rate")
+    assert(species and dex and hp and atk and def and spd and sat
+      and type1 and type2 and catchRate and growthRate and frontStem,
+      "could not parse Crystal species file " .. include)
+    order[#order + 1] = species
+  end
+  self.crystalSpeciesOrder = order
+  local learnsets = self:parseCrystalLearnsets()
+  local out = {}
+  for include in readTextFile("roms/pokecrystal/data/pokemon/base_stats.asm"):gmatch('INCLUDE%s+"data/pokemon/base_stats/([^"]+)"') do
+    local filePath = "roms/pokecrystal/data/pokemon/base_stats/" .. include
+    local text = readTextFile(filePath)
+    local species, dex = text:match("^%s*db%s+([A-Z0-9_]+)%s*;%s*(%d+)")
+    local hp, atk, def, spd, sat = text:match("db%s+(%d+),%s*(%d+),%s*(%d+),%s*(%d+),%s*(%d+),%s*(%d+)")
+    local type1, type2 = text:match("db%s+([A-Z0-9_]+),%s*([A-Z0-9_]+)%s*;%s*type")
+    local catchRate = text:match("db%s+(%-?%d+)%s*;%s*catch rate")
+    local baseExp = text:match("db%s+(%-?%d+)%s*;%s*base exp")
+    local frontStem = text:match('INCBIN%s+"gfx/pokemon/([^"]+)/front%.dimensions"')
+    local growthRate = text:match("db%s+(GROWTH_[A-Z0-9_]+)%s*;%s*growth rate")
+    local learnset = learnsets[species] or {}
+    local level1Moves = {}
+    for _, entry in ipairs(learnset) do
+      if entry.level == 1 then
+        local duplicate = false
+        for _, existing in ipairs(level1Moves) do
+          if existing == entry.move then
+            duplicate = true
+            break
+          end
+        end
+        if not duplicate then level1Moves[#level1Moves + 1] = entry.move end
+      end
+    end
+    local frontSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/front.png"
+    local backSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/back.png"
+    if fileExists(frontSource) then
+      self:save(love.image.newImageData(frontSource),
+        "pokemon/" .. frontStem .. "_front.png")
+    end
+    if fileExists(backSource) then
+      self:save(love.image.newImageData(backSource),
+        "pokemon/" .. frontStem .. "_back.png")
+    end
+    out[species] = {
+      id = species,
+      index = tonumber(dex),
+      dex = tonumber(dex),
+      name = species:gsub("_", " "),
+      source = "decomp:" .. filePath,
+      types = uniqueTypes(type1, type2),
+      baseStats = {
+        hp = tonumber(hp), attack = tonumber(atk), defense = tonumber(def),
+        speed = tonumber(spd), special = tonumber(sat),
+      },
+      catchRate = tonumber(catchRate),
+      baseExp = tonumber(baseExp),
+      growthRate = growthRate:gsub("^GROWTH_", ""),
+      learnset = learnset,
+      level1Moves = level1Moves,
+      spriteFront = fileExists(frontSource)
+        and ("assets/generated/pokemon/" .. frontStem .. "_front.png") or nil,
+      spriteBack = fileExists(backSource)
+        and ("assets/generated/pokemon/" .. frontStem .. "_back.png") or nil,
+      trueColor = true,
+    }
+  end
+  return out
+end
+
+function RomExtractorGen2:parseCrystalTypeChart()
+  local types = {
+    NORMAL = { name = "NORMAL", category = "physical" },
+    FIGHTING = { name = "FIGHTING", category = "physical" },
+    FLYING = { name = "FLYING", category = "physical" },
+    POISON = { name = "POISON", category = "physical" },
+    GROUND = { name = "GROUND", category = "physical" },
+    ROCK = { name = "ROCK", category = "physical" },
+    BUG = { name = "BUG", category = "physical" },
+    GHOST = { name = "GHOST", category = "physical" },
+    STEEL = { name = "STEEL", category = "physical" },
+    FIRE = { name = "FIRE", category = "special" },
+    WATER = { name = "WATER", category = "special" },
+    GRASS = { name = "GRASS", category = "special" },
+    ELECTRIC = { name = "ELECTRIC", category = "special" },
+    PSYCHIC_TYPE = { name = "PSYCHIC", category = "special" },
+    ICE = { name = "ICE", category = "special" },
+    DRAGON = { name = "DRAGON", category = "special" },
+    DARK = { name = "DARK", category = "special" },
+    CURSE_TYPE = { name = "CURSE", category = "physical" },
+  }
+  local multiplierByName = {
+    SUPER_EFFECTIVE = 20,
+    NOT_VERY_EFFECTIVE = 5,
+    NO_EFFECT = 0,
+  }
+  local matchups = {}
+  for line in readTextFile("roms/pokecrystal/data/types/type_matchups.asm"):gmatch("[^\r\n]+") do
+    local attacker, defender, multName =
+      line:match("^%s*db%s+([A-Z0-9_]+),%s*([A-Z0-9_]+),%s*([A-Z_]+)")
+    if attacker and defender and multiplierByName[multName] ~= nil then
+      matchups[#matchups + 1] = {
+        attacker = attacker,
+        defender = defender,
+        multiplier = multiplierByName[multName],
+      }
+    end
+  end
+  return { types = types, matchups = matchups }
+end
+
+function RomExtractorGen2:parseCrystalItems()
+  local constantsText = readTextFile("roms/pokecrystal/constants/item_constants.asm")
+  local namesText = readTextFile("roms/pokecrystal/data/items/names.asm")
+  local attrsText = readTextFile("roms/pokecrystal/data/items/attributes.asm")
+
+  local ids = {}
+  local baseIndex = 0
+  local inTmhm = false
+  local hmNumber = 0
+  local tmNumber = 0
+  for line in constantsText:gmatch("[^\r\n]+") do
+    if line:find("^DEF NUM_ITEMS EQU") then
+      inTmhm = true
+    elseif line:find("^DEF NUM_HMS EQU") then
+      -- keep parsing, HMs already handled by add_hm
+    elseif line:find("^DEF MT01 EQU") then
+      break
+    end
+    local constId = line:match("^const%s+([A-Z0-9_]+)")
+    if constId and constId ~= "NO_ITEM" then
+      if not inTmhm then
+        baseIndex = baseIndex + 1
+        ids[#ids + 1] = { id = constId, index = baseIndex, machine = nil }
+      else
+        ids[#ids + 1] = { id = constId, machine = nil }
+      end
+    end
+    local tmMove = line:match("^add_tm%s+([A-Z0-9_]+)")
+    if tmMove then
+      tmNumber = tmNumber + 1
+      ids[#ids + 1] = {
+        id = "TM_" .. tmMove,
+        machine = { kind = "TM", number = tmNumber, move = tmMove },
+      }
+    end
+    local hmMove = line:match("^add_hm%s+([A-Z0-9_]+)")
+    if hmMove then
+      hmNumber = hmNumber + 1
+      ids[#ids + 1] = {
+        id = "HM_" .. hmMove,
+        machine = { kind = "HM", number = hmNumber, move = hmMove },
+      }
+    end
+  end
+
+  local names = {}
+  for rawName in namesText:gmatch('li%s+"([^"]+)"') do
+    names[#names + 1] = crystalDisplayText(rawName)
+  end
+
+  local attrs = {}
+  local pendingId
+  for line in attrsText:gmatch("[^\r\n]+") do
+    local label = line:match("^;%s*([A-Z0-9_]+)")
+    if label then pendingId = trim(label) end
+    local price, heldEffect, param, property, pocket, fieldMenu, battleMenu =
+      line:match("^%s*item_attribute%s+([^,]+),%s*([^,]+),%s*([^,]+),%s*([^,]+),%s*([^,]+),%s*([^,]+),%s*([^,%s]+)")
+    if price and pendingId then
+      attrs[pendingId] = {
+        price = trim(price),
+        heldEffect = trim(heldEffect),
+        param = trim(param),
+        property = trim(property),
+        pocket = trim(pocket),
+        fieldMenu = trim(fieldMenu),
+        battleMenu = trim(battleMenu),
+      }
+      pendingId = nil
+    end
+  end
+
+  local out = {}
+  for i, meta in ipairs(ids) do
+    local attr = attrs[meta.id] or {}
+    local priceText = attr.price or "0"
+    if priceText:sub(1, 1) == "$" then
+      priceText = tostring(tonumber(priceText:sub(2), 16) or 0)
+    end
+    local keyItem = attr.pocket == "KEY_ITEM"
+      or (meta.machine and meta.machine.kind == "HM")
+    out[meta.id] = {
+      id = meta.id,
+      index = meta.index,
+      name = crystalDisplayText(names[i] or meta.id),
+      price = tonumber(priceText) or 0,
+      source = "decomp:data/items/{names,attributes}.asm",
+      machine = meta.machine,
+      keyItem = keyItem or nil,
+      tossable = attr.property and not attr.property:find("CANT_TOSS", 1, true) or not keyItem,
+    }
+  end
+  return out
+end
+
+function RomExtractorGen2:parseCrystalEncounters()
+  local out = {}
+  local grassBuckets = {
+    crystalBucket(30), crystalBucket(60), crystalBucket(80),
+    crystalBucket(90), crystalBucket(95), crystalBucket(99), 256,
+  }
+  local waterBuckets = {
+    crystalBucket(60), crystalBucket(90), 256,
+  }
+
+  local function parseGrassFile(path)
+    local current
+    local phase
+    local slotIndex = 0
+    for line in readTextFile(path):gmatch("[^\r\n]+") do
+      local mapId = line:match("^%s*def_grass_wildmons%s+([A-Z0-9_]+)")
+      if mapId then
+        current = { id = trim(mapId) }
+        phase = nil
+        slotIndex = 0
+      elseif current then
+        local morn, day, nite =
+          line:match("^%s*db%s+(%d+)%s+percent,%s*(%d+)%s+percent,%s*(%d+)%s+percent")
+        if morn then
+          current.grass = {
+            rate = crystalPercentToByte(day),
+            slots = {},
+            buckets = grassBuckets,
+          }
+        elseif line:find("^%s*;%s*day") then
+          phase = "day"
+          slotIndex = 0
+        elseif line:find("^%s*;%s*morn") or line:find("^%s*;%s*nite") then
+          phase = nil
+        elseif line:find("^%s*end_grass_wildmons") then
+          if current.grass and #current.grass.slots > 0 then
+            out[current.id] = {
+              source = "decomp:" .. path,
+              grass = current.grass,
+            }
+          end
+          current = nil
+          phase = nil
+        elseif phase == "day" then
+          local level, species = line:match("^%s*db%s+(%d+),%s*([A-Z0-9_]+)")
+          if level and species and slotIndex < 7 then
+            slotIndex = slotIndex + 1
+            current.grass.slots[#current.grass.slots + 1] = {
+              level = tonumber(level),
+              species = trim(species),
+            }
+          end
+        end
+      end
+    end
+  end
+
+  local function parseWaterFile(path)
+    local current
+    for line in readTextFile(path):gmatch("[^\r\n]+") do
+      local mapId = line:match("^%s*def_water_wildmons%s+([A-Z0-9_]+)")
+      if mapId then
+        current = {
+          id = trim(mapId),
+          water = { rate = 0, slots = {}, buckets = waterBuckets },
+        }
+      elseif current then
+        local rate = line:match("^%s*db%s+(%d+)%s+percent")
+        if rate then
+          current.water.rate = crystalPercentToByte(rate)
+        elseif line:find("^%s*end_water_wildmons") then
+          if #current.water.slots > 0 then
+            out[current.id] = out[current.id] or { source = "decomp:" .. path }
+            out[current.id].water = current.water
+          end
+          current = nil
+        else
+          local level, species = line:match("^%s*db%s+(%d+),%s*([A-Z0-9_]+)")
+          if level and species and #current.water.slots < 3 then
+            current.water.slots[#current.water.slots + 1] = {
+              level = tonumber(level),
+              species = trim(species),
+            }
+          end
+        end
+      end
+    end
+  end
+
+  parseGrassFile("roms/pokecrystal/data/wild/johto_grass.asm")
+  parseGrassFile("roms/pokecrystal/data/wild/kanto_grass.asm")
+  parseWaterFile("roms/pokecrystal/data/wild/johto_water.asm")
+  parseWaterFile("roms/pokecrystal/data/wild/kanto_water.asm")
+  return out
+end
+
+local TILESET_SPECS = {
+  TILESET_JOHTO = {
+    gfx = "TilesetJohtoGFX", meta = "TilesetJohtoMeta", coll = "TilesetJohtoColl",
+    image = "johto.png", source = "ROM:TilesetJohtoGFX/Meta/Coll",
+  },
+  TILESET_PLAYERS_HOUSE = {
+    gfx = "TilesetPlayersHouseGFX", meta = "TilesetPlayersHouseMeta",
+    coll = "TilesetPlayersHouseColl", image = "players_house.png",
+    source = "ROM:TilesetPlayersHouseGFX/Meta/Coll",
+  },
+  TILESET_PLAYERS_ROOM = {
+    gfx = "TilesetPlayersRoomGFX", meta = "TilesetPlayersRoomMeta",
+    coll = "TilesetPlayersRoomColl", image = "players_room.png",
+    source = "ROM:TilesetPlayersRoomGFX/Meta/Coll",
+  },
+  TILESET_LAB = {
+    gfx = "TilesetLabGFX", meta = "TilesetLabMeta",
+    coll = "TilesetLabColl", image = "lab.png",
+    source = "ROM:TilesetLabGFX/Meta/Coll",
+  },
+  TILESET_HOUSE = {
+    gfx = "TilesetHouseGFX", meta = "TilesetHouseMeta",
+    coll = "TilesetHouseColl", image = "house.png",
+    source = "ROM:TilesetHouseGFX/Meta/Coll",
+  },
+}
+
+local function decodeBlocks(raw)
+  local blocks = {}
+  for offset = 1, #raw, 16 do
+    local block = {}
+    for pos = offset, offset + 15 do block[#block + 1] = raw[pos] end
+    blocks[#blocks + 1] = block
+  end
+  return blocks
+end
+
+function RomExtractorGen2:extractTileset()
+  self:beginStage("Crystal start tilesets")
+  local out = {}
+  local total, index = 0, 0
+  for _ in pairs(TILESET_SPECS) do total = total + 1 end
+  for id, spec in pairs(TILESET_SPECS) do
+    local gfx = self:symbol(spec.gfx)
+    local meta = self:symbol(spec.meta)
+    local coll = self:symbol(spec.coll)
+
+    local compressed = self.rom:bytes(gfx.bank, gfx.address, 0x4000)
+    local raw = Lz3.decompress(compressed)
+    local widthTiles = 16
+    local width = widthTiles * 8
+    local height = #raw / 16 / widthTiles * 8
+    local image = ImageWriter.decode2bpp(raw, width, height)
+    self:save(image, "tilesets/" .. spec.image)
+
+    local blocks = decodeBlocks(self.rom:bytes(meta.bank, meta.address, 2048))
+    local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
+    local walkableSet = {}
+    for blockIndex, block in ipairs(blocks) do
+      for cellIndex = 0, 3 do
+        local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
+        local permission = COLLISION_PERMISSION[collValue]
+        assert(permission, "unknown COLL_* value " .. tostring(collValue))
+        if bit.band(permission, 0x0F) == LAND_TILE then
+          local row = cellIndex < 2 and 1 or 3
+          local col = (cellIndex % 2) * 2
+          local tileId = block[row * 4 + col + 1]
+          walkableSet[tileId] = true
+        end
+      end
+    end
+    local walkable = {}
+    for tileId in pairs(walkableSet) do walkable[#walkable + 1] = tileId end
+    table.sort(walkable)
+
+    out[id] = {
+      id = id, source = spec.source,
+      image = "assets/generated/tilesets/" .. spec.image,
       imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
       blocks = blocks, walkable = walkable,
       counterTiles = {}, grassTile = nil, doorTiles = {}, warpTiles = {},
       animation = nil,
-    },
-  }
+    }
+    index = index + 1
+    self:tick("Crystal start tilesets", index, total)
+  end
   self:write("tilesets", out)
-  self:tick("Johto tileset", 1, 1)
   return out
 end
 
@@ -274,71 +919,109 @@ function RomExtractorGen2:extractIntroPics()
   } }
   self:write("trainers", trainers)
 
-  local pokemon = { WOOPER = {
-    id = "WOOPER", source = "ROM:WooperFrontpic",
-    spriteFront = "assets/generated/pokemon/wooper_front.png",
-  } }
+  local moves = self:parseCrystalMoves()
+  local pokemon = self:parseCrystalSpecies(moves)
+  local typeChart = self:parseCrystalTypeChart()
+  local items = self:parseCrystalItems()
+  local encounters = self:parseCrystalEncounters()
+  pokemon.WOOPER = pokemon.WOOPER or {}
+  pokemon.WOOPER.id = "WOOPER"
+  pokemon.WOOPER.source = "ROM:WooperFrontpic"
+  pokemon.WOOPER.spriteFront = "assets/generated/pokemon/wooper_front.png"
+  pokemon.WOOPER.trueColor = true
   self:write("pokemon", pokemon)
+  self:write("moves", moves)
+  self:write("type_chart", typeChart)
+  self:write("items", items)
+  self:write("encounters", encounters)
 
-  return { trainers = trainers, pokemon = pokemon }
+  return {
+    trainers = trainers,
+    pokemon = pokemon,
+    moves = moves,
+    typeChart = typeChart,
+    items = items,
+    encounters = encounters,
+  }
+end
+
+local function mapCellTile(mapDef, tilesetDef, cx, cy)
+  local tx, ty = cx * 2, cy * 2 + 1
+  local bx, by = math.floor(tx / 4), math.floor(ty / 4)
+  local blockId
+  if bx < 0 or by < 0 or bx >= mapDef.width or by >= mapDef.height then
+    blockId = mapDef.borderBlock
+  else
+    blockId = mapDef.blocks[by * mapDef.width + bx + 1]
+  end
+  local block = tilesetDef.blocks[(blockId or 0) + 1]
+  return block and block[(ty % 4) * 4 + (tx % 4) + 1] or nil
 end
 
 function RomExtractorGen2:extractMap()
-  self:beginStage("New Bark Town")
-  local header = self:symbol("NewBarkTown_MapAttributes")
-  local expected = self.manifest.newBarkTown
+  self:beginStage("Crystal start maps")
+  local manifestMaps = self.manifest.maps or {}
+  local out = {}
+  local total, index = 0, 0
+  for _ in pairs(manifestMaps) do total = total + 1 end
+  for mapId, expected in pairs(manifestMaps) do
+    local header = self:symbol(expected.label .. "_MapAttributes")
+    local border = self.rom:byte(header.bank, header.address)
+    local height = self.rom:byte(header.bank, header.address + 1)
+    local width = self.rom:byte(header.bank, header.address + 2)
+    assert(width == expected.width and height == expected.height,
+      mapId .. " ROM dimensions do not match manifest")
+    local blocksBank = self.rom:byte(header.bank, header.address + 3)
+    local blocksPtr = self.rom:word(header.bank, header.address + 4)
+    local eventsBank = self.rom:byte(header.bank, header.address + 6)
+    local eventsPtr = self.rom:word(header.bank, header.address + 9)
+    local blocks = self.rom:bytes(blocksBank, blocksPtr, width * height)
 
-  local border = self.rom:byte(header.bank, header.address)
-  local height = self.rom:byte(header.bank, header.address + 1)
-  local width = self.rom:byte(header.bank, header.address + 2)
-  assert(width == expected.width and height == expected.height,
-    "NewBarkTown ROM dimensions do not match manifest")
-  local blocksBank = self.rom:byte(header.bank, header.address + 3)
-  local blocksPtr = self.rom:word(header.bank, header.address + 4)
-  local eventsBank = self.rom:byte(header.bank, header.address + 6)
-  local eventsPtr = self.rom:word(header.bank, header.address + 9)
+    local addr = eventsPtr + 2
+    local warpCount = self.rom:byte(eventsBank, addr)
+    addr = addr + 1
+    local warps = {}
+    for _ = 1, warpCount do
+      local row = self.rom:bytes(eventsBank, addr, 5)
+      local destMap = assert(
+        self.manifest.mapLookup[row[4] .. ":" .. row[5]],
+        ("unknown Crystal map destination %d:%d"):format(row[4], row[5]))
+      warps[#warps + 1] = {
+        y = row[1], x = row[2], destWarp = row[3], destMap = destMap,
+      }
+      addr = addr + 5
+    end
+    assert(warpCount == expected.warpCount, mapId .. " warp count mismatch")
 
-  local blocks = self.rom:bytes(blocksBank, blocksPtr, width * height)
+    local coordCount = self.rom:byte(eventsBank, addr)
+    addr = addr + 1 + coordCount * 8
+    assert(coordCount == expected.coordEventCount, mapId .. " coord event count mismatch")
 
-  local addr = eventsPtr + 2 -- "db 0, 0 ; filler" MapEvents header
+    local bgCount = self.rom:byte(eventsBank, addr)
+    addr = addr + 1 + bgCount * 5
+    assert(bgCount == expected.bgEventCount, mapId .. " bg event count mismatch")
 
-  local warpCount = self.rom:byte(eventsBank, addr)
-  addr = addr + 1
-  local warps = {}
-  for _ = 1, warpCount do
-    local row = self.rom:bytes(eventsBank, addr, 5)
-    warps[#warps + 1] = {
-      y = row[1], x = row[2], destWarp = row[3],
-      destMapGroup = row[4], destMapNumber = row[5],
-    }
-    addr = addr + 5
-  end
-  assert(warpCount == expected.warpCount, "NewBarkTown warp count mismatch")
+    local objectCount = self.rom:byte(eventsBank, addr)
+    addr = addr + 1 + objectCount * 13
+    assert(objectCount == expected.objectCount, mapId .. " object count mismatch")
 
-  local coordCount = self.rom:byte(eventsBank, addr)
-  addr = addr + 1 + coordCount * 8
-  assert(coordCount == expected.coordEventCount, "NewBarkTown coord event count mismatch")
+    local signs = expected.signs or {}
+    local objects = expected.objects or {}
 
-  local bgCount = self.rom:byte(eventsBank, addr)
-  addr = addr + 1 + bgCount * 5
-  assert(bgCount == expected.bgEventCount, "NewBarkTown bg event count mismatch")
-
-  local objectCount = self.rom:byte(eventsBank, addr)
-  addr = addr + 1 + objectCount * 13
-  assert(objectCount == expected.objectCount, "NewBarkTown object count mismatch")
-
-  local out = {
-    NEW_BARK_TOWN = {
-      id = "NEW_BARK_TOWN", label = "NewBarkTown", index = 1,
+    out[mapId] = {
+      id = mapId, label = expected.label,
+      index = expected.group * 100 + expected.number,
       source = ("ROM:%02X:%04X"):format(header.bank, header.address),
-      tileset = "TILESET_JOHTO",
+      tileset = expected.tileset,
       width = width, height = height, blocks = blocks,
-      borderBlock = border, connections = {},
-      warps = warps, signs = {}, objects = {},
-    },
-  }
+      borderBlock = border, connections = expected.connections or {},
+      warps = warps, signs = signs, objects = objects,
+      outdoor = mapId == "NEW_BARK_TOWN",
+    }
+    index = index + 1
+    self:tick("Crystal start maps", index, total)
+  end
   self:write("maps", out)
-  self:tick("New Bark Town", 1, 1)
   return out
 end
 
@@ -401,8 +1084,16 @@ end
 function RomExtractorGen2:extractPalettes()
   local data = self.manifest.palettes
   local tileGroups = {}
-  for tileId, group in pairs(data.tileGroups) do
-    tileGroups[tonumber(tileId)] = group
+  for tilesetId, groups in pairs(data.tileGroups or {}) do
+    if type(groups) == "table" then
+      tileGroups[tilesetId] = {}
+      for tileId, group in pairs(groups) do
+        tileGroups[tilesetId][tonumber(tileId)] = group
+      end
+    else
+      -- Back-compat with the older one-tileset Crystal cache shape.
+      tileGroups[tonumber(tilesetId)] = groups
+    end
   end
   local out = { tileGroups = tileGroups, byTime = data.byTime }
   self:write("palettes", out)
@@ -474,31 +1165,23 @@ function RomExtractorGen2:extractIntroText()
     out[label] = self:decodeTextCommands(self:symbol(label))
     self:tick("Intro text", index, #INTRO_TEXT_LABELS)
   end
+  -- Crystal's OakText3 is only a prompt/control beat between OakText2 and
+  -- OakText4, not player-visible copy. Older manifests do not carry the
+  -- symbol, so do not require it just to import the intro text set.
+  local oakText3 = self.symbols and rawget(self.symbols, "_OakText3")
+  if oakText3 then
+    out._OakText3 = self:decodeTextCommands(self:symbol("_OakText3"))
+  end
   self:write("text", out)
   return out
 end
 
--- field.boot spawns straight into New Bark Town instead of Gen1's
--- REDS_HOUSE_2F / Oak-speech opening: this skeleton has no starter roster
--- or dialogue text (spec non-goals), so NEW GAME has nowhere to run that
--- scene and must land the player standing somewhere walkable instead.
---
--- The spawn tile is newBarkTown.warps[1]'s own (x, y) rather than a
--- hand-picked literal: this sandbox has neither a love binary nor an
--- already-generated crystal/data/generated/maps.lua to check a guessed
--- coordinate against (Task 10 brief), but a warp tile is walkable by
--- construction -- it is a door/edge tile the ROM's own MapEvents table
--- names, and the player has to be able to walk onto it to trigger it, so
--- COLLISION_PERMISSION never marks one a wall.  Deriving the coordinate
--- from the map this extractor just decoded is verified against the real
--- ROM on every import, which a hardcoded guess could not be here.
-function RomExtractorGen2:extractField(newBarkTown, title)
-  local spawn = assert(newBarkTown.warps[1],
-    "NewBarkTown has no warps to derive a walkable spawn tile from")
+function RomExtractorGen2:extractField(title)
+  local spawn = assert(self.manifest.spawn, "Crystal spawn data missing from manifest")
   local out = {
     title = title,
     boot = {
-      startMap = "NEW_BARK_TOWN", startX = spawn.x, startY = spawn.y,
+      startMap = spawn.map, startX = spawn.x, startY = spawn.y,
       startFacing = "down",
       -- skip the Oak-speech-equivalent starter-selection screen (out of
       -- scope, no species data extracted); splash/title stay on the
@@ -589,6 +1272,27 @@ function RomExtractorGen2:extractField(newBarkTown, title)
   }
   self:write("field", out)
   return out
+end
+
+function RomExtractorGen2:stampWarpTiles(tilesets, maps)
+  local perTileset = {}
+  for mapId, mapDef in pairs(maps) do
+    local bucket = perTileset[mapDef.tileset] or {}
+    perTileset[mapDef.tileset] = bucket
+    local tileset = assert(tilesets[mapDef.tileset],
+      "missing tileset for " .. tostring(mapId))
+    for _, warp in ipairs(mapDef.warps or {}) do
+      local tileId = mapCellTile(mapDef, tileset, warp.x, warp.y)
+      if tileId ~= nil then bucket[tileId] = true end
+    end
+  end
+  for tilesetId, tileSet in pairs(perTileset) do
+    local list = {}
+    for tileId in pairs(tileSet) do list[#list + 1] = tileId end
+    table.sort(list)
+    tilesets[tilesetId].warpTiles = list
+  end
+  self:write("tilesets", tilesets)
 end
 
 -- Wooper's cry: Cry_Wooper_Ch5/_Ch6/_Ch8's three real channel programs
@@ -821,6 +1525,8 @@ function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
   end
+  -- Cache-generation marker for Crystal's expanded start-area extraction.
+  self:write("crystal_start_marker_v5", { version = 5 })
 end
 
 function RomExtractorGen2:run()
@@ -830,12 +1536,17 @@ function RomExtractorGen2:run()
   local intro = self:extractIntroPics()
   results.trainers = intro.trainers
   results.pokemon = intro.pokemon
+  results.moves = intro.moves
+  results.type_chart = intro.typeChart
+  results.items = intro.items
+  results.encounters = intro.encounters
   results.maps = self:extractMap()
+  self:stampWarpTiles(results.tilesets, results.maps)
   results.font = self:extractFont()
   results.palettes = self:extractPalettes()
   results.text = self:extractIntroText()
   local title = self:extractTitle()
-  results.field = self:extractField(results.maps.NEW_BARK_TOWN, title)
+  results.field = self:extractField(title)
   local cries = self:extractCry()
   local titleSong = self:extractTitleMusic()
   results.audio = { cries = cries.cries, songs = { Music_TitleScreen = titleSong } }

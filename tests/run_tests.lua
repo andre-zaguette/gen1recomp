@@ -3679,6 +3679,14 @@ do
   local Data = require("src.core.Data")
   GameVersion.set("crystal")
 
+  local missing = {
+    constants = {}, pokemon = {}, maps = {}, trainer_headers = {},
+    field = { boot = { screens = { splash = "IntroMovie", title = "TitleState" } } },
+  }
+  Data.seedDefaults(missing)
+  eq(missing.field.boot.screens.newGame, "CrystalIntro",
+    "Crystal boot defaults: partial screens table still gets CrystalIntro")
+
   local fake = {
     constants = {}, pokemon = {}, maps = {}, trainer_headers = {},
     field = { boot = { screens = { splash = "IntroMovie", title = "TitleState",
@@ -3698,6 +3706,27 @@ do
     "Crystal boot defaults: explicit newGame screen override still wins")
 
   GameVersion.set("red")
+end
+
+-- Crystal's real spawn is the player's bedroom in PlayersHouse2F at (3,3).
+-- Keep the extractor's field boot target pinned there so NEW GAME does not
+-- regress back to New Bark Town when the minimal Gen2 import grows.
+do
+  local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+  local written = nil
+  local fakeSelf = {
+    manifest = { spawn = { map = "PLAYERS_HOUSE_2F", x = 3, y = 3 } },
+    write = function(self, name, value) written = value end,
+  }
+  local field = RomExtractorGen2.extractField(fakeSelf, {})
+  eq(field.boot.startMap, "PLAYERS_HOUSE_2F",
+    "Crystal field boot: new game starts in the player's room map")
+  eq(field.boot.startX, 3,
+    "Crystal field boot: new game start X matches spawn_points.asm")
+  eq(field.boot.startY, 3,
+    "Crystal field boot: new game start Y matches spawn_points.asm")
+  eq(written.boot.startMap, "PLAYERS_HOUSE_2F",
+    "Crystal field boot: extracted field writes the same room spawn")
 end
 
 -- Regression test for the string-vs-numeric tileGroups key bug Task 4's

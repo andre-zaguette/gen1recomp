@@ -73,7 +73,19 @@ local VERSION_REQUIRED_FILES = {
     "assets/generated/battle/profoakb.png",
     "assets/generated/pikachu/pikapic_1.png",
   },
-  crystal = { "assets/generated/fonts/font.png" },
+  crystal = {
+    "assets/generated/fonts/font.png",
+    -- Crystal's intro/start flow now requires the player's bedroom/house
+    -- tilesets and maps. Older one-map caches imported before that work
+    -- landed only carry Johto, so force a one-time reimport by requiring
+    -- a new file that those stale caches cannot have.
+    "assets/generated/tilesets/players_room.png",
+    -- Crystal interiors now need the expanded per-tileset palette import.
+    -- Older caches can have the start-area maps/tilesets but still carry
+    -- the old Johto-only palette shape, so stamp a marker file with that
+    -- import revision and require it here to force one clean reimport.
+    "data/generated/crystal_start_marker_v5.lua",
+  },
 }
 
 -- "Split-screen ROM selector" first-run palette (matches the FirstRun mockup):

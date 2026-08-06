@@ -39,8 +39,19 @@ end
 -- (same rule TileRenderer's getColor0KeyShader documents for tall grass).
 local obpCache = {}
 
+local function obpGroupKey(colors, group)
+  if group ~= nil then return tostring(group) end
+  if not colors then return "default" end
+  local parts = { "rgb" }
+  for i = 1, #colors do
+    local c = colors[i]
+    parts[#parts + 1] = table.concat(c or {}, ",")
+  end
+  return table.concat(parts, ":")
+end
+
 local function getObpImage(path, colors, group)
-  local key = path .. "#obp" .. group
+  local key = path .. "#obp" .. obpGroupKey(colors, group)
   if not obpCache[key] then
     local img
     if love.image and love.image.newImageData then
