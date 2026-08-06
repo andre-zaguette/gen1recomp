@@ -53,20 +53,11 @@ REQUIRED_SYMBOLS = (
     "TilesetHouseGFX",
     "TilesetHouseMeta",
     "TilesetHouseColl",
-    # data/maps/attributes.asm: `map_attributes Route29Route46Gate,
-    # ROUTE_29_ROUTE_46_GATE, $00` -- tileset id 0. Unlike every other
-    # tileset id here, id 0 has no TILESET_* constant of its own
-    # (constants/tileset_constants.asm's `const_def 1` starts numbering at
-    # TILESET_JOHTO = 1), so data/tilesets.asm's first `tileset Tileset0`
-    # entry is the real -- and only -- name for it. This project invents
-    # its own "TILESET_0" label (mirroring the ROM's own "Tileset0") to
-    # stand in for the missing constant; it must NOT be confused with, or
-    # merged into, any already-registered TILESET_* (FightingDojo/
-    # SaffronGym/SaffronMart also share id $00 in the ROM but are not
-    # registered here, so this is its own tileset entry, not a reuse).
-    "Tileset0GFX",
-    "Tileset0Meta",
-    "Tileset0Coll",
+    # data/maps/maps.asm: `map Route29Route46Gate, TILESET_GATE, GATE, ...`
+    # -- this map's real tileset (id 8 in constants/tileset_constants.asm).
+    "TilesetGateGFX",
+    "TilesetGateMeta",
+    "TilesetGateColl",
     "ChrisSpriteGFX",
     "KrisSpriteGFX",
     "Font",
@@ -230,12 +221,11 @@ MAP_SPECS = {
     "ROUTE_29_ROUTE_46_GATE": {
         "label": "Route29Route46Gate",
         "asm": "Route29Route46Gate.asm",
-        # data/maps/attributes.asm: `map_attributes Route29Route46Gate,
-        # ROUTE_29_ROUTE_46_GATE, $00` -- tileset id 0 ("Tileset0" in
-        # data/tilesets.asm's own table, with no TILESET_* constant of its
-        # own; see the REQUIRED_SYMBOLS comment above this map's Tileset0*
-        # symbols for why).
-        "tileset": "TILESET_0",
+        # data/maps/maps.asm line 503: `map Route29Route46Gate, TILESET_GATE,
+        # GATE, ...`. attributes.asm's `map_attributes` third field ($00) is
+        # the border block, not the tileset id -- the real tileset comes from
+        # the `map` macro's 2nd field in maps.asm.
+        "tileset": "TILESET_GATE",
     },
 }
 

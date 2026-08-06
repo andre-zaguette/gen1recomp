@@ -1951,7 +1951,7 @@
         }
       ],
       "signs": [],
-      "tileset": "TILESET_0",
+      "tileset": "TILESET_GATE",
       "warpCount": 4,
       "width": 5
     }
@@ -6365,17 +6365,17 @@
       104,
       21988
     ],
-    "Tileset0Coll": [
-      6,
-      25614
+    "TilesetGateColl": [
+      45,
+      24032
     ],
-    "Tileset0GFX": [
-      6,
-      20486
+    "TilesetGateGFX": [
+      45,
+      21984
     ],
-    "Tileset0Meta": [
-      6,
-      23566
+    "TilesetGateMeta": [
+      45,
+      23008
     ],
     "TilesetHouseColl": [
       55,
