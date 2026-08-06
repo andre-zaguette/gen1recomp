@@ -1371,22 +1371,22 @@
         {
           "index": 1,
           "movement": "WALK",
-          "name": null,
+          "name": "ELMSHOUSE_ELMS_WIFE",
           "range": "UP_DOWN",
           "script": "ElmsWife",
           "sprite": "SPRITE_TEACHER",
-          "text": "Hi, {PLAYER}! My\nhusband's always\fso busy--I hope\nhe's OK.\fWhen he's caught\nup in his POKéMON\u000bresearch, he even\nforgets to eat.",
+          "text": "TEXT_ELMSHOUSE_ELMS_WIFE",
           "x": 1,
           "y": 5
         },
         {
           "index": 2,
           "movement": "STAY",
-          "name": null,
+          "name": "ELMSHOUSE_ELMS_SON",
           "range": "UP",
           "script": "ElmsSon",
           "sprite": "SPRITE_BUG_CATCHER",
-          "text": "When I grow up,\nI'm going to help\nmy dad!\fI'm going to be a\ngreat POKéMON\nprofessor!",
+          "text": "TEXT_ELMSHOUSE_ELMS_SON",
           "x": 5,
           "y": 4
         }
@@ -1469,6 +1469,7 @@
           "y": 3
         },
         {
+          "hidden": true,
           "index": 6,
           "movement": "STAY",
           "name": "ELMSLAB_OFFICER",
@@ -1556,33 +1557,34 @@
         {
           "index": 1,
           "movement": "WALK",
-          "name": null,
+          "name": "NEWBARKTOWN_TEACHER",
           "range": "ANY_DIR",
           "script": "NewBarkTownTeacherScript",
           "sprite": "SPRITE_TEACHER",
-          "text": "Wow, your POKéGEAR\nis impressive!\fDid your mom get\nit for you?",
+          "text": "TEXT_NEWBARKTOWN_TEACHER",
           "x": 6,
           "y": 8
         },
         {
           "index": 2,
           "movement": "WALK",
-          "name": null,
+          "name": "NEWBARKTOWN_FISHER",
           "range": "UP_DOWN",
           "script": "NewBarkTownFisherScript",
           "sprite": "SPRITE_FISHER",
-          "text": "Yo, {PLAYER}!\fI hear PROF.ELM\ndiscovered some\u000bnew POKéMON.",
+          "text": "TEXT_NEWBARKTOWN_FISHER",
           "x": 12,
           "y": 9
         },
         {
+          "hidden": true,
           "index": 3,
           "movement": "STAY",
-          "name": null,
+          "name": "NEWBARKTOWN_RIVAL",
           "range": "RIGHT",
           "script": "NewBarkTownRivalScript",
           "sprite": "SPRITE_RIVAL",
-          "text": "...\fSo this is the\nfamous ELM POKéMON\u000bLAB...",
+          "text": "TEXT_NEWBARKTOWN_RIVAL",
           "x": 3,
           "y": 2
         }
@@ -1708,22 +1710,22 @@
         {
           "index": 1,
           "movement": "STAY",
-          "name": null,
+          "name": "PLAYERSNEIGHBORSHOUSE_COOLTRAINER_F",
           "range": "RIGHT",
           "script": "PlayersNeighborsDaughterScript",
           "sprite": "SPRITE_COOLTRAINER_F",
-          "text": "PIKACHU is an\nevolved POKéMON.\fI was amazed by\nPROF.ELM's find-\u000bings.\fHe's so famous for\nhis research on\u000bPOKéMON evolution.\f...sigh...\fI wish I could be\na researcher like\nhim...",
+          "text": "TEXT_PLAYERSNEIGHBORSHOUSE_COOLTRAINER_F",
           "x": 2,
           "y": 3
         },
         {
           "index": 2,
           "movement": "STAY",
-          "name": null,
+          "name": "PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
           "range": "LEFT",
           "script": "PlayersNeighborScript",
           "sprite": "SPRITE_POKEFAN_F",
-          "text": "My daughter is\nadamant about\fbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!\fBut then, so do I!",
+          "text": "TEXT_PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
           "x": 5,
           "y": 3
         }

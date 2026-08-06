@@ -32,6 +32,10 @@ end
 
 if GameVersion.isCrystal() then
   MapScripts.attachBase("ELMS_LAB", require("data.scripts.crystal_elms_lab"))
+  MapScripts.attachBase("NEW_BARK_TOWN", require("data.scripts.crystal_new_bark_town"))
+  MapScripts.attachBase("ELMS_HOUSE", require("data.scripts.crystal_elms_house"))
+  MapScripts.attachBase("PLAYERS_NEIGHBORS_HOUSE",
+    require("data.scripts.crystal_players_neighbors_house"))
 end
 
 -- story-critical scripts, one table per map, in the order the old merge

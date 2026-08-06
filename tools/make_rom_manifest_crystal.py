@@ -214,13 +214,22 @@ START_MAP_CONTENT = {
         ],
         "objects": [
             {
-                "text": "Wow, your POKéGEAR\nis impressive!\fDid your mom get\nit for you?",
+                "name": "NEWBARKTOWN_TEACHER",
+                "text": "TEXT_NEWBARKTOWN_TEACHER",
             },
             {
-                "text": "Yo, {PLAYER}!\fI hear PROF.ELM\ndiscovered some\vnew POKéMON.",
+                "name": "NEWBARKTOWN_FISHER",
+                "text": "TEXT_NEWBARKTOWN_FISHER",
             },
             {
-                "text": "...\fSo this is the\nfamous ELM POKéMON\vLAB...",
+                "name": "NEWBARKTOWN_RIVAL",
+                "text": "TEXT_NEWBARKTOWN_RIVAL",
+                # ROM: object_event's trailing flag is
+                # EVENT_RIVAL_NEW_BARK_TOWN, only set by
+                # MrPokemonsHouse.asm's errand-return script -- not built
+                # in this project yet, so the rival stays hidden like
+                # ELMSLAB_OFFICER above.
+                "hidden": True,
             },
         ],
     },
@@ -248,10 +257,12 @@ START_MAP_CONTENT = {
         "signs": [],
         "objects": [
             {
-                "text": "PIKACHU is an\nevolved POKéMON.\fI was amazed by\nPROF.ELM's find-\vings.\fHe's so famous for\nhis research on\vPOKéMON evolution.\f...sigh...\fI wish I could be\na researcher like\nhim...",
+                "name": "PLAYERSNEIGHBORSHOUSE_COOLTRAINER_F",
+                "text": "TEXT_PLAYERSNEIGHBORSHOUSE_COOLTRAINER_F",
             },
             {
-                "text": "My daughter is\nadamant about\fbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!\fBut then, so do I!",
+                "name": "PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
+                "text": "TEXT_PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
             },
         ],
     },
@@ -263,10 +274,12 @@ START_MAP_CONTENT = {
         ],
         "objects": [
             {
-                "text": "Hi, {PLAYER}! My\nhusband's always\fso busy--I hope\nhe's OK.\fWhen he's caught\nup in his POKéMON\vresearch, he even\nforgets to eat.",
+                "name": "ELMSHOUSE_ELMS_WIFE",
+                "text": "TEXT_ELMSHOUSE_ELMS_WIFE",
             },
             {
-                "text": "When I grow up,\nI'm going to help\nmy dad!\fI'm going to be a\ngreat POKéMON\nprofessor!",
+                "name": "ELMSHOUSE_ELMS_SON",
+                "text": "TEXT_ELMSHOUSE_ELMS_SON",
             },
         ],
     },
@@ -305,6 +318,19 @@ START_MAP_CONTENT = {
             {
                 "name": "ELMSLAB_OFFICER",
                 "text": "TEXT_ELMSLAB_OFFICER",
+                # ROM: object_event's trailing flag is EVENT_COP_IN_ELMS_LAB,
+                # which InitializeEventsScript (engine/events/std_scripts.asm,
+                # run once from the player's bedroom on a new game) sets
+                # before the player ever reaches the lab -- and a set flag
+                # hides the object (macros/scripts/maps.asm's object_event
+                # doc: "-1 to always appear", confirmed against
+                # MrPokemonsHouse.asm's `clearevent EVENT_COP_IN_ELMS_LAB`,
+                # which is what makes him visible, after the rival-theft
+                # phone call). That reveal path (Mr. Pokémon's house, the
+                # theft phone call) doesn't exist in this project yet, so
+                # for now the officer just stays hidden rather than always
+                # showing with no trigger at all.
+                "hidden": True,
             },
         ],
     },
@@ -425,7 +451,7 @@ def parse_maps(pokecrystal):
                 if object_index < len(START_MAP_CONTENT[const_name]["objects"]):
                     content = START_MAP_CONTENT[const_name]["objects"][object_index]
                     movement, roam = MOVEMENT_MAP.get(m.group(4), ("STAY", "DOWN"))
-                    objects.append({
+                    obj = {
                         "index": object_index + 1,
                         "name": content.get("name"),
                         "x": int(m.group(1)),
@@ -435,7 +461,10 @@ def parse_maps(pokecrystal):
                         "range": roam,
                         "script": m.group(12),
                         "text": content["text"],
-                    })
+                    }
+                    if content.get("hidden"):
+                        obj["hidden"] = True
+                    objects.append(obj)
                 object_index += 1
                 continue
         if sign_index < len(START_MAP_CONTENT[const_name]["signs"]):
