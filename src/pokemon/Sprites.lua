@@ -49,6 +49,9 @@ end
 -- opts.oakDemo: the Yellow variant of that demo (BATTLE_TYPE_PIKACHU), where
 --            PROF.OAK fights in the player's place behind his own back pic
 -- opts.battle: the live battle, for kind == "battle"
+-- opts.gender: save.player.gender ("girl" swaps in playerPics.backAlt when
+--            present -- Crystal's Kris; Gen1 versions have no such gender
+--            and no backAlt entry, so this is a no-op for them)
 -- Returns path, trueColor.
 function Sprites.playerPath(data, side, opts)
   opts = opts or {}
@@ -59,6 +62,14 @@ function Sprites.playerPath(data, side, opts)
   local key = side == "front" and "front"
               or (opts.oakDemo and "oakBack")
               or (opts.demo and "demoBack" or "back")
+  -- backAlt (this project's own addition, alongside playerSprites.walkAlt)
+  -- only applies to the plain "back" key -- the demo/oakDemo pics already
+  -- name a specific stand-in character, unrelated to the player's own
+  -- gender.
+  if key == "back" and opts.gender == "girl"
+     and FieldDefaults.fieldValue(data, "playerPics", "backAlt") then
+    key = "backAlt"
+  end
   local path = FieldDefaults.fieldValue(data, "playerPics", key)
   -- ProfOakPicBack is a Yellow-only rip, so a cache imported before it
   -- existed has no file there; fall back to the old man rather than hand a

@@ -200,12 +200,6 @@ return {
   -- happened by the time onEnter runs -- see OverworldController.lua's
   -- setMap/enter ordering).
   --
-  -- ROM also runs ElmsLabMeetElmScene (`sdefer ElmsLabWalkUpToElmScript`)
-  -- automatically on entry while the scene is still SCENE_ELMSLAB_MEET_ELM
-  -- -- the player doesn't talk to Elm to start this, walking into the room
-  -- is enough. queueScript here is that same auto-trigger (the applymovement
-  -- walk-up itself is skipped -- purely cosmetic, and the player is already
-  -- close by the time they'd reach him at (3,4) next to the entrance).
   onEnter = function(game, ow)
     if game.save.flags and game.save.flags.EVENT_FOLLOWED_OAK_INTO_LAB then
       return
@@ -215,6 +209,23 @@ return {
       elm.cellX, elm.cellY = 3, 4
       elm.px, elm.py = 3 * 16, 4 * 16
     end
+  end,
+
+  -- ROM also runs ElmsLabMeetElmScene (`sdefer ElmsLabWalkUpToElmScript`)
+  -- automatically on entry while the scene is still SCENE_ELMSLAB_MEET_ELM,
+  -- which opens with `applymovement PLAYER, ElmsLab_WalkUpToElmMovement` --
+  -- the game auto-walks the player right next to Elm before the intro
+  -- starts, rather than firing the instant the room loads. That walk
+  -- animation itself isn't ported (purely cosmetic), but the "next to him"
+  -- timing matters, so this triggers on proximity instead of on entry: any
+  -- of the four cells touching (3,4), where onEnter above keeps him
+  -- parked, counts as walked up to him.
+  onStep = function(game, ow, x, y)
+    if game.save.flags and game.save.flags.EVENT_FOLLOWED_OAK_INTO_LAB then
+      return
+    end
+    if math.abs(x - 3) + math.abs(y - 4) ~= 1 then return end
     ow:queueScript(elmIntroRows())
+    return true
   end,
 }

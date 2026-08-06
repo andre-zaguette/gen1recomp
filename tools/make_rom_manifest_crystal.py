@@ -34,6 +34,8 @@ REQUIRED_SYMBOLS = (
     "PlayersNeighborsHouse_MapEvents",
     "ElmsHouse_MapAttributes",
     "ElmsHouse_MapEvents",
+    "Route29_MapAttributes",
+    "Route29_MapEvents",
     "TilesetJohtoGFX",
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
@@ -201,6 +203,13 @@ MAP_SPECS = {
         "label": "ElmsHouse",
         "asm": "ElmsHouse.asm",
         "tileset": "TILESET_PLAYERS_HOUSE",
+    },
+    "ROUTE_29": {
+        "label": "Route29",
+        "asm": "Route29.asm",
+        # data/maps/attributes.asm: `map_attributes Route29, ROUTE_29, $05`
+        # -- same tileset id as NewBarkTown's own `$05`.
+        "tileset": "TILESET_JOHTO",
     },
 }
 
@@ -379,6 +388,72 @@ START_MAP_CONTENT = {
                 # for now the officer just stays hidden rather than always
                 # showing with no trigger at all.
                 "hidden": True,
+            },
+        ],
+    },
+    "ROUTE_29": {
+        "signs": [
+            {"text": "Route29Sign1"},
+            {"text": "Route29Sign2"},
+        ],
+        "objects": [
+            {
+                # ROM: CatchingTutorialDudeScript's own gate,
+                # EVENT_GAVE_MYSTERY_EGG_TO_ELM, is part of the mystery-egg
+                # chain this project hasn't built, so the only branch that
+                # can ever be reached right now (CatchingTutorialBoxFullText)
+                # is the only one ported.
+                "name": "ROUTE29_COOLTRAINER_M1",
+                "text": "TEXT_ROUTE29_COOLTRAINER_M1",
+            },
+            {
+                "name": "ROUTE29_YOUNGSTER",
+                "text": "TEXT_ROUTE29_YOUNGSTER",
+            },
+            {
+                "name": "ROUTE29_TEACHER1",
+                "text": "TEXT_ROUTE29_TEACHER1",
+            },
+            {
+                # ROM: Route29FruitTree (`fruittree FRUITTREE_ROUTE_29`) --
+                # the once-a-day shake-for-an-item mechanic doesn't exist in
+                # this project, so this stays hidden rather than standing
+                # there doing nothing on interact.
+                "name": "ROUTE29_FRUIT_TREE",
+                "text": "ROUTE29_FRUIT_TREE",
+                "hidden": True,
+            },
+            {
+                "name": "ROUTE29_FISHER",
+                "text": "TEXT_ROUTE29_FISHER",
+            },
+            {
+                # ROM: Route29CooltrainerMScript branches on checktime
+                # DAY/NITE, both leading to a "waiting for POKéMON" line --
+                # no time-of-day script command exists yet (same gap noted
+                # elsewhere, e.g. crystal_players_house_1f.lua), so this
+                # always shows the DAY branch's text.
+                "name": "ROUTE29_COOLTRAINER_M2",
+                "text": "TEXT_ROUTE29_COOLTRAINER_M2",
+            },
+            {
+                # ROM: TuscanyScript -- gated on VAR_WEEKDAY == TUESDAY
+                # (Route29TuscanyCallback also disappears her every other
+                # day), the same day-of-week gap as above. Stays hidden
+                # rather than showing every day of the week.
+                "name": "ROUTE29_TUSCANY",
+                "text": "ROUTE29_TUSCANY",
+                "hidden": True,
+            },
+            {
+                # ROM: Route29Potion (`itemball POTION`). Its own trailing
+                # flag, EVENT_ROUTE_29_POTION, is not in
+                # InitializeEventsScript's force-set list, so it starts
+                # clear -- visible -- and the talk script sets it after
+                # pickup to hide the ball for good, the same SET=hidden
+                # convention as every other flagged object in this file.
+                "name": "ROUTE29_POKE_BALL",
+                "text": "TEXT_ROUTE29_POTION",
             },
         ],
     },

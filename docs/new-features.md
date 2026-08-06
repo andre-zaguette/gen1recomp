@@ -519,3 +519,15 @@ them (no Gen1 move or Pokémon uses these types), so this is additive only:
 no existing matchup changes. It does shift the link fingerprint, since the
 digest covers the whole type chart table regardless of version, which is
 why the fixture golden was re-pinned alongside this change.
+
+## Crystal: New Bark Town won't let you wander off without a POKéMON
+
+Vanilla Crystal never actually stops the player from leaving New Bark Town
+without a starter -- there is no coord_event or event-flag check anywhere
+near the town's map edges in `maps/NewBarkTown.asm` or `maps/Route29.asm`.
+This project adds one anyway, at the boundary into Route 29 specifically
+(the story path toward Cherrygrove City, with wild encounters -- Route 27
+stays open): until `EVENT_GOT_A_POKEMON_FROM_ELM` is set, stepping onto
+the town's west edge shows a warning and pushes the player back, the same
+`onStep`-boundary-guard shape Gen1's own `data/scripts/oaks_lab.lua` uses
+for its "don't leave without a starter" beat.

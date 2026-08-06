@@ -1350,6 +1350,7 @@
     }
   ],
   "mapLookup": {
+    "24:3": "ROUTE_29",
     "24:4": "NEW_BARK_TOWN",
     "24:5": "ELMS_LAB",
     "24:6": "PLAYERS_HOUSE_1F",
@@ -1782,6 +1783,138 @@
       "tileset": "TILESET_HOUSE",
       "warpCount": 2,
       "width": 4
+    },
+    "ROUTE_29": {
+      "bgEventCount": 2,
+      "connections": {
+        "east": {
+          "map": "NEW_BARK_TOWN",
+          "offset": 0
+        },
+        "north": {
+          "map": "ROUTE_46",
+          "offset": 10
+        },
+        "west": {
+          "map": "CHERRYGROVE_CITY",
+          "offset": 0
+        }
+      },
+      "coordEventCount": 2,
+      "group": 24,
+      "height": 9,
+      "label": "Route29",
+      "number": 3,
+      "objectCount": 8,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "WALK",
+          "name": "ROUTE29_COOLTRAINER_M1",
+          "range": "ANY_DIR",
+          "script": "CatchingTutorialDudeScript",
+          "sprite": "SPRITE_COOLTRAINER_M",
+          "text": "TEXT_ROUTE29_COOLTRAINER_M1",
+          "x": 50,
+          "y": 12
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "ROUTE29_YOUNGSTER",
+          "range": "UP_DOWN",
+          "script": "Route29YoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_ROUTE29_YOUNGSTER",
+          "x": 27,
+          "y": 16
+        },
+        {
+          "index": 3,
+          "movement": "WALK",
+          "name": "ROUTE29_TEACHER1",
+          "range": "LEFT_RIGHT",
+          "script": "Route29TeacherScript",
+          "sprite": "SPRITE_TEACHER",
+          "text": "TEXT_ROUTE29_TEACHER1",
+          "x": 15,
+          "y": 11
+        },
+        {
+          "hidden": true,
+          "index": 4,
+          "movement": "STAY",
+          "name": "ROUTE29_FRUIT_TREE",
+          "range": "NONE",
+          "script": "Route29FruitTree",
+          "sprite": "SPRITE_FRUIT_TREE",
+          "text": "ROUTE29_FRUIT_TREE",
+          "x": 12,
+          "y": 2
+        },
+        {
+          "index": 5,
+          "movement": "STAY",
+          "name": "ROUTE29_FISHER",
+          "range": "UP",
+          "script": "Route29FisherScript",
+          "sprite": "SPRITE_FISHER",
+          "text": "TEXT_ROUTE29_FISHER",
+          "x": 25,
+          "y": 3
+        },
+        {
+          "index": 6,
+          "movement": "STAY",
+          "name": "ROUTE29_COOLTRAINER_M2",
+          "range": "DOWN",
+          "script": "Route29CooltrainerMScript",
+          "sprite": "SPRITE_COOLTRAINER_M",
+          "text": "TEXT_ROUTE29_COOLTRAINER_M2",
+          "x": 13,
+          "y": 4
+        },
+        {
+          "hidden": true,
+          "index": 7,
+          "movement": "WALK",
+          "name": "ROUTE29_TUSCANY",
+          "range": "ANY_DIR",
+          "script": "TuscanyScript",
+          "sprite": "SPRITE_TEACHER",
+          "text": "ROUTE29_TUSCANY",
+          "x": 29,
+          "y": 12
+        },
+        {
+          "index": 8,
+          "movement": "STAY",
+          "name": "ROUTE29_POKE_BALL",
+          "range": "NONE",
+          "script": "Route29Potion",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ROUTE29_POTION",
+          "x": 48,
+          "y": 2
+        }
+      ],
+      "signs": [
+        {
+          "script": "Route29Sign1",
+          "text": "Route29Sign1",
+          "x": 51,
+          "y": 7
+        },
+        {
+          "script": "Route29Sign2",
+          "text": "Route29Sign2",
+          "x": 3,
+          "y": 5
+        }
+      ],
+      "tileset": "TILESET_JOHTO",
+      "warpCount": 1,
+      "width": 30
     }
   },
   "palettes": {
@@ -6176,6 +6309,14 @@
     "PokemonProfPic": [
       86,
       16734
+    ],
+    "Route29_MapAttributes": [
+      37,
+      20444
+    ],
+    "Route29_MapEvents": [
+      104,
+      21988
     ],
     "TilesetHouseColl": [
       55,

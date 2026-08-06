@@ -15,6 +15,7 @@ local CrystalCryTranscoder = require("src.audio.CrystalCryTranscoder")
 local CrystalMusicTranscoder = require("src.audio.CrystalMusicTranscoder")
 local ImageWriter = require("src.import.ImageWriter")
 local LuaWriter = require("src.import.LuaWriter")
+local Logger = require("src.core.Logger")
 local Lz3 = require("src.import.Lz3")
 local Rom = require("src.import.Rom")
 
@@ -42,6 +43,13 @@ local STUB_MODULES = {
 -- byte-for-byte identical. Source: pret/pokecrystal
 -- constants/collision_constants.asm + data/collision/collision_permissions.asm
 local LAND_TILE, WATER_TILE, WALL_TILE, TALK = 0x00, 0x01, 0x0F, 0x10
+-- Not a pokecrystal COLL_* base value -- an extra flag bit this project
+-- adds on the LAND_TILE base, the same way TALK flags a WALL/WATER tile.
+-- constants/collision_constants.asm's COLL_LONG_GRASS ($14) and
+-- COLL_TALL_GRASS ($18) are the two real wild-encounter grass values; both
+-- stay walkable (bits 0-3 are still LAND_TILE) once flagged, matching
+-- src/world/Map.lua's isGrassCell needing "walkable AND grass" together.
+local GRASS = 0x20
 local COLLISION_PERMISSION = {}
 for i = 0, 255 do COLLISION_PERMISSION[i] = LAND_TILE end
 local WALL = {
@@ -56,10 +64,12 @@ local WATER = { 0x20, 0x21, 0x25, 0x26, 0x28, 0x29, 0x2D, 0x2E }
 for i = 0x30, 0x3F do WATER[#WATER + 1] = i end
 for i = 0xC0, 0xCF do WATER[#WATER + 1] = i end
 local WATER_TALK = { 0x22, 0x24, 0x2A, 0x2C }
+local GRASS_TILES = { 0x14, 0x18 }
 for _, i in ipairs(WALL) do COLLISION_PERMISSION[i] = WALL_TILE end
 for _, i in ipairs(WALL_TALK) do COLLISION_PERMISSION[i] = bit.bor(WALL_TILE, TALK) end
 for _, i in ipairs(WATER) do COLLISION_PERMISSION[i] = WATER_TILE end
 for _, i in ipairs(WATER_TALK) do COLLISION_PERMISSION[i] = bit.bor(WATER_TILE, TALK) end
+for _, i in ipairs(GRASS_TILES) do COLLISION_PERMISSION[i] = bit.bor(LAND_TILE, GRASS) end
 
 function RomExtractorGen2.new(romData, manifest, progress)
   return setmetatable({
@@ -108,6 +118,8 @@ local START_NPC_SPRITES = {
   SPRITE_SCIENTIST = { file = "scientist.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_OFFICER = { file = "officer.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_POKE_BALL = { file = "poke_ball.png", frames = 1, walker = false, palette = "red" },
+  SPRITE_COOLTRAINER_M = { file = "cooltrainer_m.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_YOUNGSTER = { file = "youngster.png", frames = 6, walker = true, palette = "green" },
 }
 
 function RomExtractorGen2:extractSprite()
@@ -126,6 +138,18 @@ function RomExtractorGen2:extractSprite()
   local krisRaw = self.rom:bytes(kris.bank, kris.address, 16 * 96 / 4)
   local krisImage = ImageWriter.decode2bpp(krisRaw, 16, 96, true)
   self:save(krisImage, "sprites/kris.png")
+
+  -- The player's own battle back pic (field.playerPics, Sprites.playerPath)
+  -- -- separate from the overworld walk sheets above. gfx/player/*_back.png
+  -- are pret's own single-frame rips (48x48, no animation sheet to crop,
+  -- unlike the Pokémon front sprites), same matte-needed shape as those:
+  -- palette-indexed, no alpha channel.
+  self:save(ImageWriter.matteColor0(
+    love.image.newImageData("roms/pokecrystal/gfx/player/chris_back.png")),
+    "battle/chris_back.png")
+  self:save(ImageWriter.matteColor0(
+    love.image.newImageData("roms/pokecrystal/gfx/player/kris_back.png")),
+    "battle/kris_back.png")
 
   local out = {
     SPRITE_CHRIS = {
@@ -860,7 +884,7 @@ function RomExtractorGen2:extractTileset()
 
     local blocks = decodeBlocks(self.rom:bytes(meta.bank, meta.address, 2048))
     local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
-    local walkableSet = {}
+    local walkableSet, grassSet = {}, {}
     for blockIndex, block in ipairs(blocks) do
       for cellIndex = 0, 3 do
         local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
@@ -871,19 +895,26 @@ function RomExtractorGen2:extractTileset()
           local col = (cellIndex % 2) * 2
           local tileId = block[row * 4 + col + 1]
           walkableSet[tileId] = true
+          if bit.band(permission, GRASS) == GRASS then grassSet[tileId] = true end
         end
       end
     end
     local walkable = {}
     for tileId in pairs(walkableSet) do walkable[#walkable + 1] = tileId end
     table.sort(walkable)
+    -- src/world/Map.lua's isGrassCell accepts either a single number
+    -- (Gen1's tilesets, one grass tile each) or a set table like this one
+    -- (Gen2 tilesets can have more than one, e.g. long vs. tall grass) --
+    -- nil, same as Gen1, when a tileset has no grass tile at all (indoor
+    -- tilesets).
+    local grassTile = next(grassSet) and grassSet or nil
 
     out[id] = {
       id = id, source = spec.source,
       image = "assets/generated/tilesets/" .. spec.image,
       imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
       blocks = blocks, walkable = walkable,
-      counterTiles = {}, grassTile = nil, doorTiles = {}, warpTiles = {},
+      counterTiles = {}, grassTile = grassTile, doorTiles = {}, warpTiles = {},
       animation = nil,
     }
     index = index + 1
@@ -1047,12 +1078,21 @@ function RomExtractorGen2:extractMap()
     local warps = {}
     for _ = 1, warpCount do
       local row = self.rom:bytes(eventsBank, addr, 5)
-      local destMap = assert(
-        self.manifest.mapLookup[row[4] .. ":" .. row[5]],
-        ("unknown Crystal map destination %d:%d"):format(row[4], row[5]))
-      warps[#warps + 1] = {
-        y = row[1], x = row[2], destWarp = row[3], destMap = destMap,
-      }
+      local destMap = self.manifest.mapLookup[row[4] .. ":" .. row[5]]
+      if destMap then
+        warps[#warps + 1] = {
+          y = row[1], x = row[2], destWarp = row[3], destMap = destMap,
+        }
+      else
+        -- A warp into a map this slice doesn't extract yet (e.g. Route
+        -- 29's gate to Route 46) -- skip it rather than failing the whole
+        -- import; the tile just sits inert until that destination map is
+        -- registered too. Not asserted: unlike a dimension/count mismatch,
+        -- this is an expected, incremental-coverage gap, not a sign the
+        -- ROM read something wrong.
+        Logger.warn("%s: skipping warp to unregistered map %d:%d",
+          mapId, row[4], row[5])
+      end
       addr = addr + 5
     end
     assert(warpCount == expected.warpCount, mapId .. " warp count mismatch")
@@ -1305,6 +1345,20 @@ function RomExtractorGen2:extractField(title)
     -- on the Gen1 defaults deliberately: this skeleton extracts no sprite
     -- for them, so their guards correctly no-op instead of crashing.
     playerSprites = { walk = "SPRITE_CHRIS", walkAlt = "SPRITE_KRIS" },
+    -- Sprites.playerPath (src/pokemon/Sprites.lua) reads field.playerPics
+    -- .back for the battle back pic (BattleState.lua:1435, unguarded on the
+    -- very first wild encounter) -- FieldDefaults.FIELD's default there is
+    -- Gen1's "assets/generated/battle/redb.png", which extractSprite
+    -- (above) never writes into Crystal's cache, so it crashed getImage
+    -- the moment a wild battle actually started (grass encounters were
+    -- unreachable before the grassTile fix, so nothing hit this path
+    -- until now). backAlt is this project's own addition (see
+    -- Sprites.playerPath's gender check), the same "Alt" naming
+    -- playerSprites.walkAlt above already established for Kris.
+    playerPics = {
+      back = "assets/generated/battle/chris_back.png",
+      backAlt = "assets/generated/battle/kris_back.png",
+    },
     -- tryCardKeyDoor (OverworldController.lua:2002-2005) reads
     -- Game.data.field.cardKeyDoors.maps unguarded (`ipairs(ck.maps)`) on
     -- every interact-button press, on any map -- unlike closedDoors/

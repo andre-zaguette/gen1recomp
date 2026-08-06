@@ -61,4 +61,27 @@ return {
       { "show_text", "ELM'S HOUSE" },
     },
   },
+
+  -- Not a ROM behavior: vanilla Crystal never stops the player from
+  -- leaving New Bark Town without a starter (checked -- no coord_event or
+  -- EVENT_GOT_A_POKEMON_FROM_ELM check exists anywhere near the Route
+  -- 27/29 boundary in maps/NewBarkTown.asm or maps/Route29.asm). This
+  -- project adds one anyway, at the west edge into Route 29 (the story
+  -- path with wild encounters -- Route 27 stays open), the same shape
+  -- Gen1's own data/scripts/oaks_lab.lua onStep guard already uses for the
+  -- equivalent "don't wander off with an empty party" beat there: watch
+  -- the boundary coordinate and push back one step before the connection
+  -- crossing would actually fire, rather than reacting after the fact.
+  onStep = function(game, ow, x, y)
+    if game.save.flags and game.save.flags.EVENT_GOT_A_POKEMON_FROM_ELM then
+      return
+    end
+    if x > 0 then return end
+    ow.runner:run({
+      { "show_text",
+        "You shouldn't wan-\nder around without\va POKéMON!\fGo see PROF.ELM at\nhis lab!" },
+      { "move_player", "right", 1 },
+    }, {})
+    return true
+  end,
 }

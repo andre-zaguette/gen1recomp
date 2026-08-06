@@ -215,7 +215,14 @@ function Map:isGrassCell(cx, cy)
   -- only ever reads $52 from loaded map tiles, not the border filler.
   if not self:inBounds(cx, cy) then return false end
   local grass = self.tileset.grassTile
-  return grass ~= nil and self:cellTile(cx, cy) == grass
+  if grass == nil then return false end
+  local tile = self:cellTile(cx, cy)
+  -- Gen1 tilesets carry one grass tile id (a plain number); Gen2 tilesets
+  -- can carry more than one (long vs. tall grass share the same
+  -- encounter behavior but different tile ids), extracted as a set table
+  -- keyed by tile id -- see RomExtractorGen2.lua's extractTileset.
+  if type(grass) == "table" then return grass[tile] == true end
+  return tile == grass
 end
 
 -- Water and eastern-shore tiles, from the tileset's waterTiles/shoreTiles

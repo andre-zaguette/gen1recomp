@@ -1434,7 +1434,8 @@ function BattleState:enter()
   local backPath, backTrueColor =
     require("src.pokemon.Sprites").playerPath(self.data, "back",
       { kind = "battle", demo = self.demo, oakDemo = self.oakDemo,
-        battle = self })
+        battle = self,
+        gender = self.game.save.player and self.game.save.player.gender })
   self.playerBackPic = getImage(backPath,
     namedPalette(self.data, "MEWMON"), backTrueColor)
   self.showPlayerBack = self.playerBackPic ~= nil
@@ -5039,8 +5040,20 @@ end
 -- pinned at any scale -- is unit-tested directly.
 -- ------------------------------------------------------------------
 
--- the vanilla scale for a side: enemy front 1x, player back 2x
+-- the vanilla scale for a side: enemy front 1x, player back 2x. The 2x
+-- compensates for Red/Blue/Yellow's own back pics (gfx/red.png et al, via
+-- RomExtractor.lua) being stored -- and extracted -- at literal half
+-- resolution (redb.png is 32x32; ScaleSpriteByTwo doubles it in the real
+-- ROM too). Crystal's back pics (gfx/player/chris_back.png, Pokémon's own
+-- .../back.png) are pret's own already-full-resolution rips -- 48x48,
+-- already the size that should land on screen -- so doubling them on top
+-- filled a large fraction of the battle screen with an oversized, tiled-
+-- looking sprite. No per-species/per-image override exists for any of
+-- this (parseCrystalSpecies never had a reason to write one, and the
+-- trainer pic has no species to key one off), so the default itself has
+-- to know the difference.
 BattleState.BATTLE_SCALE_DEFAULT = { front = 1, back = 2 }
+BattleState.BATTLE_SCALE_DEFAULT_CRYSTAL = { front = 1, back = 1 }
 
 -- image-level override for an asset path, or nil.  scales is the merged
 -- data.battle_sprite_scales table (record id -> { path, scale }).
@@ -5065,7 +5078,9 @@ function BattleState.resolveBattleScale(data, side, path, species)
   local field = side == "back" and "battleScaleBack" or "battleScaleFront"
   local override = def and def[field]
   if override then return override end
-  return BattleState.BATTLE_SCALE_DEFAULT[side] or 1
+  local defaults = require("src.core.GameVersion").isCrystal()
+    and BattleState.BATTLE_SCALE_DEFAULT_CRYSTAL or BattleState.BATTLE_SCALE_DEFAULT
+  return defaults[side] or 1
 end
 
 -- Player (back) placement: feet flush on the text-box top (y=96) at any

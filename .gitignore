@@ -12,6 +12,12 @@ assets/generated/
 # shipped (not data/generated/, which is the runtime-importer path).
 tools/gen2_dev_data/
 
+# Regenerate with: python3 tools/crystal_index.py --pokecrystal roms/pokecrystal
+# A dev-session lookup aid derived from the (gitignored, /roms/) pokecrystal
+# checkout -- unlike rom_manifest_crystal.json, nothing at runtime reads
+# this, so it isn't committed the way that manifest is.
+tools/crystal_index.json
+
 # LÖVE packages
 *.love
 
@@ -52,3 +58,4 @@ mobile/dist/
 
 # per-machine iOS bundle-id pin (see scripts/build_ios.sh)
 mobile/ios/bundle_id.local
+/graphify-out
