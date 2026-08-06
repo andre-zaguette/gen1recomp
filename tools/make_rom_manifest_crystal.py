@@ -42,6 +42,14 @@ REQUIRED_SYMBOLS = (
     "CherrygroveCity_MapEvents",
     "MrPokemonsHouse_MapAttributes",
     "MrPokemonsHouse_MapEvents",
+    # Route 30 -- data/maps/maps.asm: `map Route30, TILESET_JOHTO, ROUTE,
+    # ...` (same TILESET_JOHTO already required below, no new tileset
+    # symbols needed). Registering this map is what makes
+    # CherrygroveCity's own `connection north, Route30, ROUTE_30, 5` and
+    # MrPokemonsHouse's `warp_event ..., ROUTE_30, 2` incoming warps
+    # resolve for real instead of silently skipping.
+    "Route30_MapAttributes",
+    "Route30_MapEvents",
     "TilesetJohtoGFX",
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
@@ -259,6 +267,20 @@ MAP_SPECS = {
         # (border block, $00 here) -- the exact caveat Route29Route46Gate's
         # own registration task got wrong the first time.
         "tileset": "TILESET_FACILITY",
+    },
+    "ROUTE_30": {
+        "label": "Route30",
+        "asm": "Route30.asm",
+        # data/maps/maps.asm line 527: `map Route30, TILESET_JOHTO, ROUTE,
+        # LANDMARK_ROUTE_30, MUSIC_ROUTE_30, FALSE, PALETTE_AUTO,
+        # FISHGROUP_POND` -- 2nd field is the real tileset id (`map`
+        # macro), same TILESET_JOHTO as NewBarkTown/Route29/CherrygroveCity
+        # (already required above). data/maps/attributes.asm's own
+        # `map_attributes Route30, ROUTE_30, $05` third field is the
+        # border block, not the tileset id -- the exact caveat
+        # Route29Route46Gate's own registration task got wrong the first
+        # time, re-confirmed correctly here via maps.asm directly.
+        "tileset": "TILESET_JOHTO",
     },
 }
 
@@ -647,6 +669,132 @@ START_MAP_CONTENT = {
                 # completion script calls hide_object on him directly.
                 "name": "MRPOKEMONSHOUSE_OAK",
                 "text": "TEXT_MRPOKEMONSHOUSE_OAK",
+            },
+        ],
+    },
+    "ROUTE_30": {
+        "signs": [
+            {"text": "Route30Sign"},
+            {"text": "MrPokemonsHouseDirectionsSign"},
+            {"text": "MrPokemonsHouseSign"},
+            {"text": "Route30TrainerTips"},
+            # BGEVENT_ITEM, not BGEVENT_READ -- a hidden-item bg_event, not
+            # a real sign. parse_maps's bg_event loop below doesn't
+            # distinguish the two (it only counts/labels bg_events
+            # generically), so this still needs a slot here to keep
+            # bgEventCount's real ROM count (5) accurate; see
+            # crystal_route30.lua for how it's actually scripted
+            # (give_item + set_flag, same shape as Route 29's Potion ball,
+            # not a plain show_text sign).
+            {"text": "Route30HiddenPotion"},
+        ],
+        "objects": [
+            {
+                # ROM: YoungsterJoey_ImportantBattleScript, object_const_def
+                # name ROUTE30_YOUNGSTER1. Its trailing object_event flag is
+                # EVENT_ROUTE_30_BATTLE, only ever setevent'd by
+                # ElmsLab.asm's (unbuilt) errand-completion scene -- this is
+                # NOT one of the brief's stated "5 blocked objects" (it's
+                # OBJECTTYPE_SCRIPT, not OBJECTTYPE_TRAINER, and never calls
+                # `startbattle`), but reading its script body confirms it's
+                # purely a scripted, non-interactive "watch Joey and Mikey's
+                # Rattata fight" cutscene (applymovement + playsound only)
+                # gated on the same unbuilt scene-state flag as
+                # CHERRYGROVECITY_RIVAL. Stays hidden alongside its two
+                # MONSTER companions below rather than standing there inert
+                # (this project has no per-object ROM-flag visibility gate
+                # at all -- see CHERRYGROVECITY_GRAMPS/_RIVAL precedent --
+                # so leaving this unhidden would make it a normal always
+                # -visible NPC with no working interaction).
+                "name": "ROUTE30_YOUNGSTER1",
+                "text": "ROUTE30_YOUNGSTER1",
+                "hidden": True,
+            },
+            {
+                # ROM: TrainerYoungsterJoey. Real OBJECTTYPE_TRAINER --
+                # blocked on both gaps confirmed this session: no
+                # OBJECTTYPE_TRAINER sight-triggered auto-battle wiring in
+                # src/world/OverworldController.lua, and no Gen2
+                # trainer-party data extracted at all (RomExtractorGen2.lua
+                # has no trainer/party table). Not attempting either as
+                # part of this task -- future work once the ROM first needs
+                # it, per this plan's own sequencing principle.
+                "name": "ROUTE30_YOUNGSTER2",
+                "text": "ROUTE30_YOUNGSTER2",
+                "hidden": True,
+            },
+            {
+                # ROM: TrainerYoungsterMikey. Same trainer-battle gap.
+                "name": "ROUTE30_YOUNGSTER3",
+                "text": "ROUTE30_YOUNGSTER3",
+                "hidden": True,
+            },
+            {
+                # ROM: TrainerBugCatcherDon. Same trainer-battle gap.
+                "name": "ROUTE30_BUG_CATCHER",
+                "text": "ROUTE30_BUG_CATCHER",
+                "hidden": True,
+            },
+            {
+                # ROM: Route30YoungsterScript. OBJECTTYPE_SCRIPT, not a
+                # trainer -- `faceplayer`/`opentext`/checkevent
+                # EVENT_GAVE_MYSTERY_EGG_TO_ELM/writetext/closetext. That
+                # flag is never set anywhere in this project (the mystery-
+                # egg-to-Elm handoff hasn't been built -- same gap Task 5
+                # confirmed for Route 29's own catch tutorial), so only the
+                # "directions to Mr. Pokémon's house" branch is currently
+                # reachable; both branches ported anyway, matching the
+                # ROUTE29_COOLTRAINER_M1/CHERRYGROVECITY_TEACHER precedent
+                # of porting dead branches too.
+                "name": "ROUTE30_YOUNGSTER4",
+                "text": "TEXT_ROUTE30_YOUNGSTER",
+            },
+            {
+                # ROM: ObjectEvent (SPRITE_MONSTER, a Rattata stand-in),
+                # one of YoungsterJoey_ImportantBattleScript's pair --
+                # EVENT_ROUTE_30_BATTLE-gated, same unbuilt scene-state gap
+                # as ROUTE30_YOUNGSTER1 above. This is the brief's own
+                # explicitly-anticipated deferral.
+                "name": "ROUTE30_MONSTER1",
+                "text": "ROUTE30_MONSTER1",
+                "hidden": True,
+            },
+            {
+                # ROM: ObjectEvent, the second SPRITE_MONSTER of the pair.
+                "name": "ROUTE30_MONSTER2",
+                "text": "ROUTE30_MONSTER2",
+                "hidden": True,
+            },
+            {
+                # ROM: Route30FruitTree1 (`fruittree FRUITTREE_ROUTE_30_1`)
+                # -- same "no shake-a-tree mechanic exists" gap
+                # crystal_route29.lua's ROUTE29_FRUIT_TREE already
+                # documented; matching that precedent rather than inventing
+                # new fruit-tree behavior here.
+                "name": "ROUTE30_FRUIT_TREE1",
+                "text": "ROUTE30_FRUIT_TREE1",
+                "hidden": True,
+            },
+            {
+                # ROM: Route30FruitTree2 (`fruittree FRUITTREE_ROUTE_30_2`).
+                # Same gap as ROUTE30_FRUIT_TREE1.
+                "name": "ROUTE30_FRUIT_TREE2",
+                "text": "ROUTE30_FRUIT_TREE2",
+                "hidden": True,
+            },
+            {
+                # ROM: Route30CooltrainerFScript -- `jumptextfaceplayer`,
+                # no unbuilt system involved.
+                "name": "ROUTE30_COOLTRAINER_F",
+                "text": "TEXT_ROUTE30_COOLTRAINER_F",
+            },
+            {
+                # ROM: Route30Antidote (`itemball ANTIDOTE`). Trailing flag
+                # EVENT_ROUTE_30_ANTIDOTE is not in InitializeEventsScript's
+                # force-set list, so it starts clear -- visible -- same
+                # give_item/set_flag shape as Route 29's Potion ball.
+                "name": "ROUTE30_POKE_BALL",
+                "text": "TEXT_ROUTE30_ANTIDOTE",
             },
         ],
     },

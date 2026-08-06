@@ -1358,6 +1358,7 @@
     "24:7": "PLAYERS_HOUSE_2F",
     "24:8": "PLAYERS_NEIGHBORS_HOUSE",
     "24:9": "ELMS_HOUSE",
+    "26:1": "ROUTE_30",
     "26:10": "MR_POKEMONS_HOUSE",
     "26:3": "CHERRYGROVE_CITY"
   },
@@ -2132,6 +2133,191 @@
       "tileset": "TILESET_GATE",
       "warpCount": 4,
       "width": 5
+    },
+    "ROUTE_30": {
+      "bgEventCount": 5,
+      "connections": {
+        "north": {
+          "map": "ROUTE_31",
+          "offset": -10
+        },
+        "south": {
+          "map": "CHERRYGROVE_CITY",
+          "offset": -5
+        }
+      },
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 27,
+      "label": "Route30",
+      "number": 1,
+      "objectCount": 11,
+      "objects": [
+        {
+          "hidden": true,
+          "index": 1,
+          "movement": "STAY",
+          "name": "ROUTE30_YOUNGSTER1",
+          "range": "UP",
+          "script": "YoungsterJoey_ImportantBattleScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "ROUTE30_YOUNGSTER1",
+          "x": 5,
+          "y": 26
+        },
+        {
+          "hidden": true,
+          "index": 2,
+          "movement": "STAY",
+          "name": "ROUTE30_YOUNGSTER2",
+          "range": "RIGHT",
+          "script": "TrainerYoungsterJoey",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "ROUTE30_YOUNGSTER2",
+          "x": 2,
+          "y": 28
+        },
+        {
+          "hidden": true,
+          "index": 3,
+          "movement": "STAY",
+          "name": "ROUTE30_YOUNGSTER3",
+          "range": "DOWN",
+          "script": "TrainerYoungsterMikey",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "ROUTE30_YOUNGSTER3",
+          "x": 5,
+          "y": 23
+        },
+        {
+          "hidden": true,
+          "index": 4,
+          "movement": "STAY",
+          "name": "ROUTE30_BUG_CATCHER",
+          "range": "DOWN",
+          "script": "TrainerBugCatcherDon",
+          "sprite": "SPRITE_BUG_CATCHER",
+          "text": "ROUTE30_BUG_CATCHER",
+          "x": 1,
+          "y": 7
+        },
+        {
+          "index": 5,
+          "movement": "WALK",
+          "name": "ROUTE30_YOUNGSTER4",
+          "range": "LEFT_RIGHT",
+          "script": "Route30YoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_ROUTE30_YOUNGSTER",
+          "x": 7,
+          "y": 30
+        },
+        {
+          "hidden": true,
+          "index": 6,
+          "movement": "STAY",
+          "name": "ROUTE30_MONSTER1",
+          "range": "DOWN",
+          "script": "ObjectEvent",
+          "sprite": "SPRITE_MONSTER",
+          "text": "ROUTE30_MONSTER1",
+          "x": 5,
+          "y": 24
+        },
+        {
+          "hidden": true,
+          "index": 7,
+          "movement": "STAY",
+          "name": "ROUTE30_MONSTER2",
+          "range": "UP",
+          "script": "ObjectEvent",
+          "sprite": "SPRITE_MONSTER",
+          "text": "ROUTE30_MONSTER2",
+          "x": 5,
+          "y": 25
+        },
+        {
+          "hidden": true,
+          "index": 8,
+          "movement": "STAY",
+          "name": "ROUTE30_FRUIT_TREE1",
+          "range": "NONE",
+          "script": "Route30FruitTree1",
+          "sprite": "SPRITE_FRUIT_TREE",
+          "text": "ROUTE30_FRUIT_TREE1",
+          "x": 5,
+          "y": 39
+        },
+        {
+          "hidden": true,
+          "index": 9,
+          "movement": "STAY",
+          "name": "ROUTE30_FRUIT_TREE2",
+          "range": "NONE",
+          "script": "Route30FruitTree2",
+          "sprite": "SPRITE_FRUIT_TREE",
+          "text": "ROUTE30_FRUIT_TREE2",
+          "x": 11,
+          "y": 5
+        },
+        {
+          "index": 10,
+          "movement": "STAY",
+          "name": "ROUTE30_COOLTRAINER_F",
+          "range": "DOWN",
+          "script": "Route30CooltrainerFScript",
+          "sprite": "SPRITE_COOLTRAINER_F",
+          "text": "TEXT_ROUTE30_COOLTRAINER_F",
+          "x": 2,
+          "y": 13
+        },
+        {
+          "index": 11,
+          "movement": "STAY",
+          "name": "ROUTE30_POKE_BALL",
+          "range": "NONE",
+          "script": "Route30Antidote",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ROUTE30_ANTIDOTE",
+          "x": 8,
+          "y": 35
+        }
+      ],
+      "signs": [
+        {
+          "script": "Route30Sign",
+          "text": "Route30Sign",
+          "x": 9,
+          "y": 43
+        },
+        {
+          "script": "MrPokemonsHouseDirectionsSign",
+          "text": "MrPokemonsHouseDirectionsSign",
+          "x": 13,
+          "y": 29
+        },
+        {
+          "script": "MrPokemonsHouseSign",
+          "text": "MrPokemonsHouseSign",
+          "x": 15,
+          "y": 5
+        },
+        {
+          "script": "Route30TrainerTips",
+          "text": "Route30TrainerTips",
+          "x": 3,
+          "y": 21
+        },
+        {
+          "script": "Route30HiddenPotion",
+          "text": "Route30HiddenPotion",
+          "x": 14,
+          "y": 9
+        }
+      ],
+      "tileset": "TILESET_JOHTO",
+      "warpCount": 2,
+      "width": 10
     }
   },
   "palettes": {
@@ -6558,6 +6744,14 @@
     "Route29_MapEvents": [
       104,
       21988
+    ],
+    "Route30_MapAttributes": [
+      37,
+      20492
+    ],
+    "Route30_MapEvents": [
+      104,
+      23636
     ],
     "TilesetFacilityColl": [
       55,
