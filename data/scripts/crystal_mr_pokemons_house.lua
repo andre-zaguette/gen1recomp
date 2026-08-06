@@ -47,7 +47,7 @@ return {
       { "show_text", "Hello, hello! You\nmust be {PLAYER}.\fPROF.ELM said that\nyou would visit." },
       { "move_player", "right", 1 },
       { "move_player", "up", 1 },
-      { "show_text", "This is what I\nwant PROF.ELM to\nexamine." },
+      { "show_text", "This is what I\nwant PROF.ELM to\vexamine." },
       { "play_sound", "Get_Key_Item" },
       { "show_text", "{PLAYER} received\nMYSTERY EGG." },
       { "give_item", "MYSTERY_EGG", 1, false },
