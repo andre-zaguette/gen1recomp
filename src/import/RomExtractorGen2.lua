@@ -852,6 +852,18 @@ local TILESET_SPECS = {
     coll = "TilesetHouseColl", image = "house.png",
     source = "ROM:TilesetHouseGFX/Meta/Coll",
   },
+  -- Route29Route46Gate's tileset ($00 in data/maps/attributes.asm). Unlike
+  -- every other entry here, ROM id 0 has no TILESET_* constant of its own
+  -- (tools/make_rom_manifest_crystal.py's REQUIRED_SYMBOLS comment on
+  -- Tileset0GFX explains why) -- data/tilesets.asm's first `tileset
+  -- Tileset0` entry is the real name, and this project's own invented
+  -- "TILESET_0" label (matching MAP_SPECS["ROUTE_29_ROUTE_46_GATE"]'s
+  -- "tileset" field) stands in for it.
+  TILESET_0 = {
+    gfx = "Tileset0GFX", meta = "Tileset0Meta",
+    coll = "Tileset0Coll", image = "tileset0.png",
+    source = "ROM:Tileset0GFX/Meta/Coll",
+  },
 }
 
 local function decodeBlocks(raw)

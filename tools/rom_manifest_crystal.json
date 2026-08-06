@@ -1350,6 +1350,7 @@
     }
   ],
   "mapLookup": {
+    "24:13": "ROUTE_29_ROUTE_46_GATE",
     "24:3": "ROUTE_29",
     "24:4": "NEW_BARK_TOWN",
     "24:5": "ELMS_LAB",
@@ -1915,6 +1916,44 @@
       "tileset": "TILESET_JOHTO",
       "warpCount": 1,
       "width": 30
+    },
+    "ROUTE_29_ROUTE_46_GATE": {
+      "bgEventCount": 0,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 24,
+      "height": 4,
+      "label": "Route29Route46Gate",
+      "number": 13,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "ROUTE29ROUTE46GATE_OFFICER",
+          "range": "RIGHT",
+          "script": "Route29Route46GateOfficerScript",
+          "sprite": "SPRITE_OFFICER",
+          "text": "TEXT_ROUTE29ROUTE46GATE_OFFICER",
+          "x": 0,
+          "y": 4
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "ROUTE29ROUTE46GATE_YOUNGSTER",
+          "range": "UP_DOWN",
+          "script": "Route29Route46GateYoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_ROUTE29ROUTE46GATE_YOUNGSTER",
+          "x": 6,
+          "y": 4
+        }
+      ],
+      "signs": [],
+      "tileset": "TILESET_0",
+      "warpCount": 4,
+      "width": 5
     }
   },
   "palettes": {
@@ -6310,6 +6349,14 @@
       86,
       16734
     ],
+    "Route29Route46Gate_MapAttributes": [
+      37,
+      26024
+    ],
+    "Route29Route46Gate_MapEvents": [
+      30,
+      30324
+    ],
     "Route29_MapAttributes": [
       37,
       20444
@@ -6317,6 +6364,18 @@
     "Route29_MapEvents": [
       104,
       21988
+    ],
+    "Tileset0Coll": [
+      6,
+      25614
+    ],
+    "Tileset0GFX": [
+      6,
+      20486
+    ],
+    "Tileset0Meta": [
+      6,
+      23566
     ],
     "TilesetHouseColl": [
       55,
