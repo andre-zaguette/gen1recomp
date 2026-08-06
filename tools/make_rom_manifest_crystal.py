@@ -38,6 +38,8 @@ REQUIRED_SYMBOLS = (
     "Route29_MapEvents",
     "Route29Route46Gate_MapAttributes",
     "Route29Route46Gate_MapEvents",
+    "CherrygroveCity_MapAttributes",
+    "CherrygroveCity_MapEvents",
     "TilesetJohtoGFX",
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
@@ -226,6 +228,16 @@ MAP_SPECS = {
         # the border block, not the tileset id -- the real tileset comes from
         # the `map` macro's 2nd field in maps.asm.
         "tileset": "TILESET_GATE",
+    },
+    "CHERRYGROVE_CITY": {
+        "label": "CherrygroveCity",
+        "asm": "CherrygroveCity.asm",
+        # data/maps/maps.asm: `map CherrygroveCity, TILESET_JOHTO, TOWN, ...`
+        # -- same tileset as NewBarkTown/Route29 (already required below).
+        # attributes.asm's own `map_attributes CherrygroveCity,
+        # CHERRYGROVE_CITY, $35` third field is the border block, not the
+        # tileset id, same caveat as Route29Route46Gate above.
+        "tileset": "TILESET_JOHTO",
     },
 }
 
@@ -483,6 +495,92 @@ START_MAP_CONTENT = {
             {
                 "name": "ROUTE29ROUTE46GATE_YOUNGSTER",
                 "text": "TEXT_ROUTE29ROUTE46GATE_YOUNGSTER",
+            },
+        ],
+    },
+    "CHERRYGROVE_CITY": {
+        "signs": [
+            {"text": "CherrygroveCitySign"},
+            {"text": "GuideGentsHouseSign"},
+            # jumpstd MartSignScript / PokecenterSignScript -- the
+            # generic std_text.asm sign text shared by every town's
+            # mart/pokecenter sign, not map-specific flavor text.
+            {"text": "CherrygroveCityMartSign"},
+            {"text": "CherrygroveCityPokecenterSign"},
+        ],
+        "objects": [
+            {
+                # ROM: CherrygroveCityGuideGent (object_const_def order:
+                # CHERRYGROVECITY_GRAMPS). A `yesorno`-gated guided tour:
+                # `follow`+multi-stop `applymovement` walks the player
+                # around town narrating the PokéCenter/Mart/Route 30/sea,
+                # then `verbosegiveitem`-equivalents a MAP CARD into the
+                # player's PokéGear and sets the engine flag ENGINE_MAP_CARD.
+                # None of the systems this depends on exist here: no
+                # PokéGear/Town Map item system at all (checked -- no
+                # "MAP_CARD" or PokéGear-map reference anywhere in src/,
+                # unlike ENGINE_POKEGEAR itself which crystal_players_
+                # house_1f.lua already sets), and no "one NPC leads, player
+                # follows" scripted-walk primitive (src/script/Commands.lua
+                # has move_npc/move_npc_to/walk_npc/move_player, but nothing
+                # shaped like the ROM's `follow` opcode). Stays hidden
+                # rather than faking a tour that can't pay off with a real
+                # map card. His trailing flag, EVENT_GUIDE_GENT_IN_HIS_HOUSE,
+                # is irrelevant here since "hidden" overrides ROM flag state
+                # entirely, same convention as ROUTE29_FRUIT_TREE/TUSCANY.
+                "name": "CHERRYGROVECITY_GRAMPS",
+                "text": "CHERRYGROVECITY_GRAMPS",
+                "hidden": True,
+            },
+            {
+                # ROM: SPRITE_RIVAL, object index CHERRYGROVECITY_RIVAL,
+                # triggered by CherrygroveRivalSceneNorth/South
+                # (def_coord_events at 33,6 / 33,7), both gated on
+                # `SCENE_CHERRYGROVECITY_MEET_RIVAL` (set elsewhere by
+                # MrPokemonsHouse.asm's errand-return script, which this
+                # project hasn't built) and EVENT_RIVAL_CHERRYGROVE_CITY.
+                # This engine has no scene-state mechanism at all (see
+                # crystal_elms_lab.lua's onEnter/onStep comments -- same gap
+                # noted there) and no coord_event mechanism either. Even if
+                # both existed, the actual rival fight needs real Crystal
+                # RIVAL1 trainer party data keyed to which starter the
+                # player chose vs. which the rival counter-picked
+                # (RIVAL1_1_TOTODILE/_CHIKORITA/_CYNDAQUIL) -- src/script/
+                # Commands.lua's rival_battle is Gen1/Yellow-shaped only
+                # (checks GameVersion.isYellow(), falls back to Gen1's
+                # EVENT_CHOSE_SQUIRTLE/BULBASAUR offsets and RBY trainer
+                # tables otherwise -- no isCrystal() branch and no Crystal
+                # rival-party data exists to feed one). Stays hidden.
+                "name": "CHERRYGROVECITY_RIVAL",
+                "text": "CHERRYGROVECITY_RIVAL",
+                "hidden": True,
+            },
+            {
+                # ROM: CherrygroveTeacherScript. Both branches (checkflag
+                # ENGINE_MAP_CARD) are ported even though only the "no map
+                # card" one is currently reachable -- ENGINE_MAP_CARD is
+                # only ever set by the Guide Gent above, which stays
+                # hidden -- same "port both branches even though one is
+                # dead for now" precedent as ROUTE29_COOLTRAINER_M1's
+                # sibling entries.
+                "name": "CHERRYGROVECITY_TEACHER",
+                "text": "TEXT_CHERRYGROVECITY_TEACHER",
+            },
+            {
+                # ROM: CherrygroveYoungsterScript, checkflag ENGINE_POKEDEX
+                # -- not yet set anywhere in this project's Crystal flow
+                # (only Gen1's EVENT_GOT_POKEDEX exists), so only the "no
+                # pokedex" branch is currently reachable; both ported.
+                "name": "CHERRYGROVECITY_YOUNGSTER",
+                "text": "TEXT_CHERRYGROVECITY_YOUNGSTER",
+            },
+            {
+                # ROM: MysticWaterGuy. Straightforward one-time item gift
+                # (MYSTIC_WATER) gated on EVENT_GOT_MYSTIC_WATER_IN_
+                # CHERRYGROVE, same give_item/set_flag shape as Route 29's
+                # Potion ball -- no unbuilt system involved.
+                "name": "CHERRYGROVECITY_FISHER",
+                "text": "TEXT_CHERRYGROVECITY_FISHER",
             },
         ],
     },
