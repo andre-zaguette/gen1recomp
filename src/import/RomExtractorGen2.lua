@@ -477,8 +477,21 @@ function RomExtractorGen2:parseCrystalSpecies(moves)
     local frontSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/front.png"
     local backSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/back.png"
     if fileExists(frontSource) then
-      self:save(love.image.newImageData(frontSource),
-        "pokemon/" .. frontStem .. "_front.png")
+      -- gfx/pokemon/*/front.png is pret's own rip of every animation frame
+      -- stacked vertically (front.animated.tilemap/bitmask.asm/frames.asm
+      -- describe a tile-substitution animation, not simple cels), always
+      -- an exact multiple of the sprite's own width tall -- e.g.
+      -- cyndaquil is 40x200 (5 frames), snorlax 56x336 (6 frames).  This
+      -- project has no battle-sprite animation player yet (Gen1's own
+      -- pics are single-frame), so drawing the whole sheet stacked every
+      -- copy of the sprite on screen.  Crop to the top width x width
+      -- square -- frame 1, bitmask $00, i.e. the unmodified base pose --
+      -- until real animation playback exists.
+      local full = love.image.newImageData(frontSource)
+      local size = full:getWidth()
+      local frame = ImageWriter.blank(size, size, 0, 0, 0, 0)
+      ImageWriter.blit(frame, full, 0, 0, 0, 0, size, size)
+      self:save(frame, "pokemon/" .. frontStem .. "_front.png")
     end
     if fileExists(backSource) then
       self:save(love.image.newImageData(backSource),

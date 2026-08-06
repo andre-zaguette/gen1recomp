@@ -242,10 +242,34 @@ START_MAP_CONTENT = {
         ],
         "objects": [
             {
-                "text": "PROF.ELM is wait-\ning for you.\fHurry up, baby!",
+                # ROM: object_event 7,4, h1/h2 -1/-1 ("always"), flag
+                # EVENT_PLAYERS_HOUSE_MOM_1. The one Mom instance this
+                # project renders. Two more ROM object_events place a
+                # second Mom sprite for MORN/DAY/NITE (flag
+                # EVENT_PLAYERS_HOUSE_MOM_2) -- parse_maps's object_event
+                # regex requires numeric hour fields and does not match
+                # those (h2 is a MORN/DAY/NITE constant there, not a
+                # number), so they never reach this content list at all.
+                # This project has no per-object time-of-day gate anyway
+                # (unlike PaletteFX.timeOfDay(), which only rebakes
+                # colors), so nothing is lost by that gap for now.
+                "name": "PLAYERSHOUSE1F_MOM1",
+                "text": "TEXT_PLAYERSHOUSE1F_MOM1",
             },
             {
-                "text": "Hello, {PLAYER}!\nI'm visiting!\f{PLAYER}, have you\nheard?\fMy daughter is\nadamant about\vbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!",
+                # ROM: object_event's flag is EVENT_PLAYERS_HOUSE_1F_NEIGHBOR,
+                # which InitializeEventsScript does NOT force-set (unlike
+                # ELMSLAB_OFFICER/NEWBARKTOWN_RIVAL/
+                # PLAYERSNEIGHBORSHOUSE_POKEFAN_F below), so on a fresh
+                # save it reads clear -- visible by the same SET=hidden
+                # convention -- confirmed by MrPokemonsHouse.asm pairing
+                # `setevent EVENT_PLAYERS_HOUSE_1F_NEIGHBOR` with
+                # `clearevent EVENT_PLAYERS_NEIGHBORS_HOUSE_NEIGHBOR`: it's
+                # the same neighbor lady, visiting here until that errand
+                # (not built yet), then home in
+                # PLAYERSNEIGHBORSHOUSE_POKEFAN_F's own house instead.
+                "name": "PLAYERSHOUSE1F_POKEFAN_F",
+                "text": "TEXT_PLAYERSHOUSE1F_POKEFAN_F",
             },
         ],
     },
@@ -261,8 +285,14 @@ START_MAP_CONTENT = {
                 "text": "TEXT_PLAYERSNEIGHBORSHOUSE_COOLTRAINER_F",
             },
             {
+                # ROM: flag EVENT_PLAYERS_NEIGHBORS_HOUSE_NEIGHBOR IS in
+                # InitializeEventsScript's force-set list (SET=hidden), so
+                # she starts absent from her own house -- she's the
+                # PLAYERSHOUSE1F_POKEFAN_F visiting the player's house
+                # instead, until an errand (not built yet) swaps her back.
                 "name": "PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
                 "text": "TEXT_PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
+                "hidden": True,
             },
         ],
     },

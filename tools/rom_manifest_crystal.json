@@ -1632,22 +1632,22 @@
         {
           "index": 1,
           "movement": "STAY",
-          "name": null,
+          "name": "PLAYERSHOUSE1F_MOM1",
           "range": "LEFT",
           "script": "MomScript",
           "sprite": "SPRITE_MOM",
-          "text": "PROF.ELM is wait-\ning for you.\fHurry up, baby!",
+          "text": "TEXT_PLAYERSHOUSE1F_MOM1",
           "x": 7,
           "y": 4
         },
         {
           "index": 2,
           "movement": "STAY",
-          "name": null,
+          "name": "PLAYERSHOUSE1F_POKEFAN_F",
           "range": "RIGHT",
           "script": "NeighborScript",
           "sprite": "SPRITE_POKEFAN_F",
-          "text": "Hello, {PLAYER}!\nI'm visiting!\f{PLAYER}, have you\nheard?\fMy daughter is\nadamant about\u000bbecoming PROF.\nELM's assistant.\fShe really loves\nPOKéMON!",
+          "text": "TEXT_PLAYERSHOUSE1F_POKEFAN_F",
           "x": 4,
           "y": 4
         }
@@ -1719,6 +1719,7 @@
           "y": 3
         },
         {
+          "hidden": true,
           "index": 2,
           "movement": "STAY",
           "name": "PLAYERSNEIGHBORSHOUSE_POKEFAN_F",
