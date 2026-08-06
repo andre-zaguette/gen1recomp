@@ -162,6 +162,14 @@ local function bootGame(version)
   local GameVersion = require("src.core.GameVersion")
   GameVersion.set(version or os.getenv("POKEPORT_VERSION") or "red")
   require("src.import.CacheFs").mountVersion(GameVersion.get())
+  -- A same-session ROM reimport (RomImporter:reimport, e.g. re-picking a
+  -- ROM or picking a different one without restarting the app) writes new
+  -- bytes under the same assets/generated/* paths. Every Assets.image()
+  -- cache is keyed by path, not content, so without this it would keep
+  -- showing whatever it decoded on the previous boot -- go through the
+  -- same flush() dev-mode hot reload already uses to drop it and every
+  -- registered downstream cache (tiles, fonts, sprites, HUD, ...).
+  require("src.render.Assets").invalidate()
   if love.window and love.window.setTitle then
     local Version = require("src.core.Version")
     love.window.setTitle(Version.title(

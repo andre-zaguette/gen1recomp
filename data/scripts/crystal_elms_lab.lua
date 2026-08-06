@@ -2,6 +2,44 @@
 -- talk to Elm, unlock the three starter balls, choose one, then continue.
 -- This intentionally scopes to the starter handoff path only.
 
+local function concatRows(...)
+  local out = {}
+  for _, rows in ipairs({ ... }) do
+    for _, row in ipairs(rows) do out[#out + 1] = row end
+  end
+  return out
+end
+
+-- ROM: ElmsLabWalkUpToElmScript, the full first-conversation text this
+-- project's earlier pass skipped past. `yesorno`/.MustSayYes is a forced
+-- loop -- refusing just re-shows the same prompt, there is no way out but
+-- yes -- so `ask` (which shows its own multi-page text, then pops the
+-- yes/no choice once the last page has typed out) loops right back to
+-- itself on a "no". Ends by setting EVENT_FOLLOWED_OAK_INTO_LAB, the same
+-- flag ElmsLabMoveElmCallback's stand-in (this file's onEnter, below) reads
+-- to know whether Elm is still supposed to be waiting at the PC.
+local function elmIntroRows()
+  return {
+    { "label", "elm_ask_loop" },
+    { "ask",
+      "ELM: {PLAYER}!\nThere you are!\fI needed to ask\nyou a favor.\fI'm conducting new\nPOKéMON research\fright now. I was\nwondering if you\fcould help me with\nit, {PLAYER}.\fYou see…\fI'm writing a\npaper that I want\fto present at a\nconference.\fBut there are some\nthings I don't\fquite understand\nyet.\fSo!\fI'd like you to\nraise a POKéMON\fthat I recently\ncaught." },
+    { "jump_if_true", "elm_gets_email" },
+    { "show_text", "But… Please, I\nneed your help!" },
+    { "jump", "elm_ask_loop" },
+
+    { "label", "elm_gets_email" },
+    { "show_text", "Thanks, {PLAYER}!\fYou're a great\nhelp!" },
+    { "show_text",
+      "When I announce my\nfindings, I'm sure\fwe'll delve a bit\ndeeper into the\fmany mysteries of\nPOKéMON.\fYou can count on\nit!" },
+    { "show_text", "Oh, hey! I got an\ne-mail!\f………\nHm… Uh-huh…\fOkay…" },
+    { "show_text",
+      "Hey, listen.\fI have an acquain-\ntance called MR.\vPOKéMON.\fHe keeps finding\nweird things and\fraving about his\ndiscoveries.\fAnyway, I just got\nan e-mail from him\fsaying that this\ntime it's real.\fIt is intriguing,\nbut we're busy\fwith our POKéMON\nresearch…\fWait!\fI know!\f{PLAYER}, can you\ngo in our place?" },
+    { "show_text",
+      "I want you to\nraise one of the\fPOKéMON contained\nin these BALLS.\fYou'll be that\nPOKéMON's first\vpartner, {PLAYER}!\fGo on. Pick one!" },
+    { "set_flag", "EVENT_FOLLOWED_OAK_INTO_LAB" },
+  }
+end
+
 local function starterBall(species, askText, choseFlag, ownBall)
   return {
     { "face_player" },
@@ -34,30 +72,32 @@ end
 
 return {
   talk = {
-    TEXT_ELMSLAB_ELM = {
-      { "face_player" },
-      { "check_flag", "EVENT_GOT_A_POKEMON_FROM_ELM" },
-      { "jump_if_true", "after_starter" },
-      { "check_flag", "EVENT_FOLLOWED_OAK_INTO_LAB" },
-      { "jump_if_true", "repeat_intro" },
-      { "show_text",
-        "So this is it!\nMy latest experi-\nment.\fThanks to you, I\nmay finally solve\nthe mystery of\nPOKéMON!" },
-      { "show_text",
-        "Will you raise one\nof these POKéMON\nfor me?" },
-      { "show_text",
-        "You'll find one in\neach of those\nPOKé BALLS.\fGo ahead. Choose\none!" },
-      { "set_flag", "EVENT_FOLLOWED_OAK_INTO_LAB" },
-      { "jump", "end" },
+    -- The auto-trigger below (onEnter) handles the very first meeting on
+    -- its own -- this is the fallback for a save that reaches Elm by
+    -- talking to him directly instead (e.g. the queued script hasn't run
+    -- yet), plus the ordinary repeat/after-starter branches.
+    TEXT_ELMSLAB_ELM = concatRows(
+      {
+        { "face_player" },
+        { "check_flag", "EVENT_GOT_A_POKEMON_FROM_ELM" },
+        { "jump_if_true", "after_starter" },
+        { "check_flag", "EVENT_FOLLOWED_OAK_INTO_LAB" },
+        { "jump_if_true", "repeat_intro" },
+      },
+      elmIntroRows(),
+      {
+        { "jump", "end" },
 
-      { "label", "repeat_intro" },
-      { "show_text",
-        "Go ahead. Choose\none of the POKéMON\nin the POKé BALLS." },
-      { "jump", "end" },
+        { "label", "repeat_intro" },
+        { "show_text",
+          "Go ahead. Choose\none of the POKéMON\nin the POKé BALLS." },
+        { "jump", "end" },
 
-      { "label", "after_starter" },
-      { "show_text",
-        "How is your POKéMON?\fIf it is hurt, you\nshould heal it with\nthe machine." },
-    },
+        { "label", "after_starter" },
+        { "show_text",
+          "How is your POKéMON?\fIf it is hurt, you\nshould heal it with\nthe machine." },
+      }
+    ),
 
     TEXT_ELMSLAB_ELMS_AIDE = {
       { "face_player" },
@@ -77,6 +117,65 @@ return {
       { "show_text", "..." },
     },
 
+    -- ROM: ElmsLabHealingMachine / ElmsLabHealingMachine_HealParty
+    -- (maps/ElmsLab.asm). The real script also fades to black, plays
+    -- MUSIC_HEAL and runs HealMachineAnim before fading back in -- none of
+    -- that exists for Crystal yet (no Crystal heal jingle has been
+    -- extracted), so this keeps the yes/no gate and the actual heal, just
+    -- without the animation/music beat.
+    ElmsLabHealingMachine = {
+      { "check_flag", "EVENT_GOT_A_POKEMON_FROM_ELM" },
+      { "jump_if_false", "not_yet" },
+      { "ask", "Would you like to\nheal your POKéMON?" },
+      { "jump_if_false", "end" },
+      { "heal_party" },
+      { "show_text", "Your POKéMON are\nfully healed!" },
+      { "jump", "end" },
+
+      { "label", "not_yet" },
+      { "show_text", "I wonder what this\ndoes?" },
+    },
+
+    -- ROM: ElmsLabBookshelf -> jumpstd DifficultBookshelfScript, shared by
+    -- all 8 bookshelf tiles (both rows) -- the ROM shows the same generic
+    -- line for every one of them, not per-shelf flavor text.
+    ElmsLabBookshelf = {
+      { "show_text", "It's full of\ndifficult books." },
+    },
+
+    ElmsLabTravelTip1 = {
+      { "show_text",
+        "{PLAYER} opened a\nbook.\fTravel Tip 1:\fPress START to\nopen the MENU." },
+    },
+    ElmsLabTravelTip2 = {
+      { "show_text",
+        "{PLAYER} opened a\nbook.\fTravel Tip 2:\fRecord your trip\nwith SAVE!" },
+    },
+    ElmsLabTravelTip3 = {
+      { "show_text",
+        "{PLAYER} opened a\nbook.\fTravel Tip 3:\fOpen your PACK and\npress SELECT to\vmove items." },
+    },
+    ElmsLabTravelTip4 = {
+      { "show_text",
+        "{PLAYER} opened a\nbook.\fTravel Tip 4:\fCheck your POKéMON\nmoves. Press the\fA Button to switch\nmoves." },
+    },
+
+    ElmsLabTrashcan = {
+      { "show_text", "The wrapper from\nthe snack PROF.ELM\vate is in there…" },
+    },
+
+    -- ROM: ElmsLabWindow branches on EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON
+    -- (Elm's phone call about the break-in) for a "He broke in through
+    -- here!" variant -- that call is part of the mystery-egg/theft chain
+    -- this project hasn't built, so only the normal line is reachable.
+    ElmsLabWindow = {
+      { "show_text", "The window's open.\fA pleasant breeze\nis blowing in." },
+    },
+
+    ElmsLabPC = {
+      { "show_text", "OBSERVATIONS ON\nPOKéMON EVOLUTION\f…It says on the\nscreen…" },
+    },
+
     TEXT_ELMSLAB_CYNDAQUIL_POKE_BALL =
       starterBall("CYNDAQUIL", "Do you want\nCYNDAQUIL?", "EVENT_GOT_CYNDAQUIL_FROM_ELM",
         "ELMSLAB_POKE_BALL1"),
@@ -87,4 +186,35 @@ return {
       starterBall("CHIKORITA", "Do you want\nCHIKORITA?", "EVENT_GOT_CHIKORITA_FROM_ELM",
         "ELMSLAB_POKE_BALL3"),
   },
+
+  -- ROM: ElmsLabMoveElmCallback (a MAPCALLBACK_OBJECTS, reapplied on every
+  -- load) moves ELMSLAB_ELM from his object_event default (5,2) to (3,4,
+  -- right by the PC) for as long as the scene is still SCENE_ELMSLAB_MEET_ELM
+  -- -- i.e. before the player has been through the "will you raise one of
+  -- these POKéMON" conversation once. This engine's objects have no scene
+  -- state or per-map callback, so the same "before the first real talk"
+  -- condition is approximated with the flag TEXT_ELMSLAB_ELM itself sets at
+  -- the end of that conversation (EVENT_FOLLOWED_OAK_INTO_LAB), and the
+  -- reposition is done directly on the pooled NPC instance rather than
+  -- object.x/y (that field is read once at NPC construction, which already
+  -- happened by the time onEnter runs -- see OverworldController.lua's
+  -- setMap/enter ordering).
+  --
+  -- ROM also runs ElmsLabMeetElmScene (`sdefer ElmsLabWalkUpToElmScript`)
+  -- automatically on entry while the scene is still SCENE_ELMSLAB_MEET_ELM
+  -- -- the player doesn't talk to Elm to start this, walking into the room
+  -- is enough. queueScript here is that same auto-trigger (the applymovement
+  -- walk-up itself is skipped -- purely cosmetic, and the player is already
+  -- close by the time they'd reach him at (3,4) next to the entrance).
+  onEnter = function(game, ow)
+    if game.save.flags and game.save.flags.EVENT_FOLLOWED_OAK_INTO_LAB then
+      return
+    end
+    local elm = ow:npcByIndex(1) -- ELMSLAB_ELM
+    if elm then
+      elm.cellX, elm.cellY = 3, 4
+      elm.px, elm.py = 3 * 16, 4 * 16
+    end
+    ow:queueScript(elmIntroRows())
+  end,
 }

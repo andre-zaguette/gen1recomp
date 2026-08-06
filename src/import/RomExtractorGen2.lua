@@ -491,10 +491,15 @@ function RomExtractorGen2:parseCrystalSpecies(moves)
       local size = full:getWidth()
       local frame = ImageWriter.blank(size, size, 0, 0, 0, 0)
       ImageWriter.blit(frame, full, 0, 0, 0, 0, size, size)
-      self:save(frame, "pokemon/" .. frontStem .. "_front.png")
+      -- pret's front.png/back.png are palette-indexed PNGs with no alpha
+      -- channel -- solid white behind the pose, not transparent -- so
+      -- matte it the same way RomExtractor.lua already does for every
+      -- Gen1 pic (flood-fills white in from the four edges only, so it
+      -- cannot eat a legitimately white patch fully inside the sprite).
+      self:save(ImageWriter.matteColor0(frame), "pokemon/" .. frontStem .. "_front.png")
     end
     if fileExists(backSource) then
-      self:save(love.image.newImageData(backSource),
+      self:save(ImageWriter.matteColor0(love.image.newImageData(backSource)),
         "pokemon/" .. frontStem .. "_back.png")
     end
     out[species] = {
@@ -521,6 +526,50 @@ function RomExtractorGen2:parseCrystalSpecies(moves)
     }
   end
   return out
+end
+
+-- Party-menu icons (Data.icons, consumed by PartyMenu.lua's drawIcon /
+-- src.pokemon.Sprites.iconPath). Same shape as Gen1's own icons table
+-- (RomExtractor.lua:extractIcons): byDex[dex] names a shared shape, icons[
+-- name] is that shape's image path -- Crystal reuses the mechanism as-is,
+-- it just fills it from data/pokemon/menu_icons.asm's ICON_* column instead
+-- of decoding MonPartyData nybbles from ROM bytes.
+function RomExtractorGen2:extractIcons(pokemon)
+  self:beginStage("Party icons")
+  local entries = {}
+  for line in readTextFile("roms/pokecrystal/data/pokemon/menu_icons.asm"):gmatch("[^\r\n]+") do
+    local shape, species = line:match("db%s+ICON_([A-Z0-9_]+)%s*;%s*([A-Z0-9_]+)")
+    if shape and species then entries[#entries + 1] = { shape = shape, species = species } end
+  end
+  local byDex, shapesSeen = {}, {}
+  for index, entry in ipairs(entries) do
+    local def = pokemon[entry.species]
+    if def and def.dex then
+      byDex[def.dex] = entry.shape
+      shapesSeen[entry.shape] = true
+    end
+    self:tick("Party icons", index, #entries)
+  end
+  local icons = {}
+  for shape in pairs(shapesSeen) do
+    -- gfx/icons/<shape>.png is pret's own rip, 16x32: two 16x16
+    -- animation frames (the party-menu wiggle) stacked vertically, same
+    -- shape as the front-sprite sheets above -- crop to the top frame
+    -- and matte its white background the same way, for the same reason
+    -- (no icon animation player exists yet).
+    local sourcePath = "roms/pokecrystal/gfx/icons/" .. shape:lower() .. ".png"
+    if fileExists(sourcePath) then
+      local full = love.image.newImageData(sourcePath)
+      local size = full:getWidth()
+      local frame = ImageWriter.blank(size, size, 0, 0, 0, 0)
+      ImageWriter.blit(frame, full, 0, 0, 0, 0, size, size)
+      self:save(ImageWriter.matteColor0(frame), "icons/" .. shape:lower() .. ".png")
+      icons[shape] = "assets/generated/icons/" .. shape:lower() .. ".png"
+    end
+  end
+  local data = { source = "ROM:MonMenuIcons", byDex = byDex, icons = icons }
+  self:write("icons", data)
+  return data
 end
 
 function RomExtractorGen2:parseCrystalTypeChart()
@@ -942,6 +991,7 @@ function RomExtractorGen2:extractIntroPics()
   pokemon.WOOPER.source = "ROM:WooperFrontpic"
   pokemon.WOOPER.spriteFront = "assets/generated/pokemon/wooper_front.png"
   pokemon.WOOPER.trueColor = true
+  local icons = self:extractIcons(pokemon)
   self:write("pokemon", pokemon)
   self:write("moves", moves)
   self:write("type_chart", typeChart)
@@ -955,6 +1005,7 @@ function RomExtractorGen2:extractIntroPics()
     typeChart = typeChart,
     items = items,
     encounters = encounters,
+    icons = icons,
   }
 end
 

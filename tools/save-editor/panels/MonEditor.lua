@@ -31,20 +31,18 @@ local STAT_KEYS = {
   { key = "SPC", field = "special" },
 }
 
--- Front sprites are read straight off the generated cache.  One image per
--- species, cached for the process: the old panel called newImage every frame,
--- which re-decoded a PNG sixty times a second.
-local spriteCache = {}
+-- Front sprites are read straight off the generated cache, through
+-- src.render.Assets so a same-session ROM reimport (RomImporter:reimport,
+-- e.g. re-picking a ROM without restarting the app) invalidates this panel's
+-- copy the same way it already does for every other Assets.image() caller --
+-- Assets keys its own cache by resolved path, so this also keeps the old
+-- panel's fix of not re-decoding a PNG sixty times a second.
+local Assets = require("src.render.Assets")
 function MonEditor.sprite(S, species)
-  if spriteCache[species] ~= nil then return spriteCache[species] or nil end
   local def = S.data.pokemon[species]
   local path = def and def.spriteFront
-  if not path or not love.graphics.newImage then
-    spriteCache[species] = false
-    return nil
-  end
-  local ok, img = pcall(love.graphics.newImage, path)
-  spriteCache[species] = ok and img or false
+  if not path or not love.graphics.newImage then return nil end
+  local ok, img = pcall(Assets.image, path)
   return ok and img or nil
 end
 

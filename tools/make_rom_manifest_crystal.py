@@ -222,14 +222,18 @@ START_MAP_CONTENT = {
                 "text": "TEXT_NEWBARKTOWN_FISHER",
             },
             {
+                # ROM: object_event's trailing flag is
+                # EVENT_RIVAL_NEW_BARK_TOWN. Unlike ELMSLAB_OFFICER's flag,
+                # this one is NOT in InitializeEventsScript's force-set
+                # list, so a fresh save reads it clear -- visible, by the
+                # same SET=hidden convention -- from the very start of the
+                # game. MrPokemonsHouse.asm's errand-return script (setevent
+                # EVENT_RIVAL_NEW_BARK_TOWN, not built in this project) is
+                # what later hides him here once he crosses paths with the
+                # player elsewhere instead, so for now he simply never
+                # leaves.
                 "name": "NEWBARKTOWN_RIVAL",
                 "text": "TEXT_NEWBARKTOWN_RIVAL",
-                # ROM: object_event's trailing flag is
-                # EVENT_RIVAL_NEW_BARK_TOWN, only set by
-                # MrPokemonsHouse.asm's errand-return script -- not built
-                # in this project yet, so the rival stays hidden like
-                # ELMSLAB_OFFICER above.
-                "hidden": True,
             },
         ],
     },
@@ -314,15 +318,29 @@ START_MAP_CONTENT = {
         ],
     },
     "ELMS_LAB": {
+        # "text" here is just documentation of the ROM source now (see the
+        # bg_event loop below: a sign's real "text" is its own "script"
+        # label, the same fix objects already got) -- this list only needs
+        # to be as long as ElmsLab.asm's real bg_event count (16) so every
+        # one of them survives into the manifest, in the same order as
+        # ElmsLab_MapEvents' def_bg_events.
         "signs": [
-            {"text": "I wonder what this\ndoes?"},
-            {"text": "There's an e-mail\nmessage here!"},
-            {"text": "PROF.ELM's re-\nsearch journals...\fIt's so complicated..."},
-            {"text": "The wrapper is\neasy to tear.\fOpen the package and\neat."},
-            {"text": "It's full of all\nsorts of difficult\nbooks."},
-            {"text": "It's full of all\nsorts of difficult\nbooks."},
-            {"text": "It's full of all\nsorts of difficult\nbooks."},
-            {"text": "It's full of all\nsorts of difficult\nbooks."},
+            {"text": "ElmsLabHealingMachine: I wonder what this\\ndoes?"},
+            {"text": "ElmsLabBookshelf (6,1): It's full of\\ndifficult books."},
+            {"text": "ElmsLabBookshelf (7,1)"},
+            {"text": "ElmsLabBookshelf (8,1)"},
+            {"text": "ElmsLabBookshelf (9,1)"},
+            {"text": "ElmsLabTravelTip1: Press START to\\nopen the MENU."},
+            {"text": "ElmsLabTravelTip2: Record your trip\\nwith SAVE!"},
+            {"text": "ElmsLabTravelTip3: Open your PACK..."},
+            {"text": "ElmsLabTravelTip4: Check your POKéMON moves..."},
+            {"text": "ElmsLabBookshelf (6,7)"},
+            {"text": "ElmsLabBookshelf (7,7)"},
+            {"text": "ElmsLabBookshelf (8,7)"},
+            {"text": "ElmsLabBookshelf (9,7)"},
+            {"text": "ElmsLabTrashcan: The wrapper from\\nthe snack PROF.ELM..."},
+            {"text": "ElmsLabWindow: The window's open."},
+            {"text": "ElmsLabPC: OBSERVATIONS ON\\nPOKéMON EVOLUTION"},
         ],
         "objects": [
             {
@@ -463,12 +481,23 @@ def parse_maps(pokecrystal):
             m = re.match(r"bg_event\s+(-?\d+),\s+(-?\d+),\s+\w+,\s+(\w+)", s)
             if m:
                 if sign_index < len(START_MAP_CONTENT[const_name]["signs"]):
-                    text = START_MAP_CONTENT[const_name]["signs"][sign_index]["text"]
+                    # "text" used to be the sign's baked English literal,
+                    # but nothing ever routed that through the talk-script
+                    # system (mapScripts.talkScript keys off this field,
+                    # same as an object's TEXT_* constant -- see
+                    # OverworldState:showMapText's callers), so every sign
+                    # in every Crystal map silently fell through to "no
+                    # text for ...".  The sign's own ROM script label
+                    # (already captured below as "script", e.g.
+                    # "ElmsLabHealingMachine") is a stable, already-unique
+                    # key with no need to invent a TEXT_* name -- reuse it
+                    # here too, matching what an object's "text" already
+                    # points at.
                     signs.append({
                         "x": int(m.group(1)),
                         "y": int(m.group(2)),
                         "script": m.group(3),
-                        "text": text,
+                        "text": m.group(3),
                     })
                 sign_index += 1
                 continue

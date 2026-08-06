@@ -1394,7 +1394,7 @@
       "signs": [
         {
           "script": "ElmsHousePC",
-          "text": "POKéMON. Where do\nthey come from? \fWhere are they\ngoing?\fWhy has no one\never witnessed a\u000bPOKéMON's birth?\fI want to know! I\nwill dedicate my\u000blife to the study\nof POKéMON!\f...\fIt's a part of\nPROF.ELM's re-\u000bsearch papers.",
+          "text": "ElmsHousePC",
           "x": 0,
           "y": 1
         }
@@ -1484,51 +1484,99 @@
       "signs": [
         {
           "script": "ElmsLabHealingMachine",
-          "text": "I wonder what this\ndoes?",
+          "text": "ElmsLabHealingMachine",
           "x": 2,
           "y": 1
         },
         {
           "script": "ElmsLabBookshelf",
-          "text": "There's an e-mail\nmessage here!",
+          "text": "ElmsLabBookshelf",
           "x": 6,
           "y": 1
         },
         {
           "script": "ElmsLabBookshelf",
-          "text": "PROF.ELM's re-\nsearch journals...\fIt's so complicated...",
+          "text": "ElmsLabBookshelf",
           "x": 7,
           "y": 1
         },
         {
           "script": "ElmsLabBookshelf",
-          "text": "The wrapper is\neasy to tear.\fOpen the package and\neat.",
+          "text": "ElmsLabBookshelf",
           "x": 8,
           "y": 1
         },
         {
           "script": "ElmsLabBookshelf",
-          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "text": "ElmsLabBookshelf",
           "x": 9,
           "y": 1
         },
         {
           "script": "ElmsLabTravelTip1",
-          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "text": "ElmsLabTravelTip1",
           "x": 0,
           "y": 7
         },
         {
           "script": "ElmsLabTravelTip2",
-          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "text": "ElmsLabTravelTip2",
           "x": 1,
           "y": 7
         },
         {
           "script": "ElmsLabTravelTip3",
-          "text": "It's full of all\nsorts of difficult\nbooks.",
+          "text": "ElmsLabTravelTip3",
           "x": 2,
           "y": 7
+        },
+        {
+          "script": "ElmsLabTravelTip4",
+          "text": "ElmsLabTravelTip4",
+          "x": 3,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "ElmsLabBookshelf",
+          "x": 6,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "ElmsLabBookshelf",
+          "x": 7,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "ElmsLabBookshelf",
+          "x": 8,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabBookshelf",
+          "text": "ElmsLabBookshelf",
+          "x": 9,
+          "y": 7
+        },
+        {
+          "script": "ElmsLabTrashcan",
+          "text": "ElmsLabTrashcan",
+          "x": 9,
+          "y": 3
+        },
+        {
+          "script": "ElmsLabWindow",
+          "text": "ElmsLabWindow",
+          "x": 5,
+          "y": 0
+        },
+        {
+          "script": "ElmsLabPC",
+          "text": "ElmsLabPC",
+          "x": 3,
+          "y": 5
         }
       ],
       "tileset": "TILESET_LAB",
@@ -1577,7 +1625,6 @@
           "y": 9
         },
         {
-          "hidden": true,
           "index": 3,
           "movement": "STAY",
           "name": "NEWBARKTOWN_RIVAL",
@@ -1592,25 +1639,25 @@
       "signs": [
         {
           "script": "NewBarkTownSign",
-          "text": "NEW BARK TOWN\nThe Town Where\nThe Winds of a New\nBeginning Blow",
+          "text": "NewBarkTownSign",
           "x": 8,
           "y": 8
         },
         {
           "script": "NewBarkTownPlayersHouseSign",
-          "text": "{PLAYER}'s House",
+          "text": "NewBarkTownPlayersHouseSign",
           "x": 11,
           "y": 5
         },
         {
           "script": "NewBarkTownElmsLabSign",
-          "text": "ELM POKéMON LAB",
+          "text": "NewBarkTownElmsLabSign",
           "x": 3,
           "y": 3
         },
         {
           "script": "NewBarkTownElmsHouseSign",
-          "text": "ELM'S HOUSE",
+          "text": "NewBarkTownElmsHouseSign",
           "x": 9,
           "y": 13
         }
@@ -1655,25 +1702,25 @@
       "signs": [
         {
           "script": "PlayersHouse1FStoveScript",
-          "text": "Mom's specialty!\fCINNABAR VOLCANO\nBURGER!",
+          "text": "PlayersHouse1FStoveScript",
           "x": 0,
           "y": 1
         },
         {
           "script": "PlayersHouse1FSinkScript",
-          "text": "The sink is spot-\nless. Mom likes it\nclean.",
+          "text": "PlayersHouse1FSinkScript",
           "x": 1,
           "y": 1
         },
         {
           "script": "PlayersHouse1FFridgeScript",
-          "text": "Let's see what's\nin the fridge...\fFRESH WATER and\ntasty LEMONADE!",
+          "text": "PlayersHouse1FFridgeScript",
           "x": 2,
           "y": 1
         },
         {
           "script": "PlayersHouse1FTVScript",
-          "text": "There's a movie on\nTV: Stars dot the\fsky as two boys\nride on a train...\fI'd better get\nrolling too!",
+          "text": "PlayersHouse1FTVScript",
           "x": 4,
           "y": 1
         }
