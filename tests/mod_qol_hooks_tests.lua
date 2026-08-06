@@ -124,6 +124,16 @@ end
 
 do
   Zoom.reset()
+  -- BUGS.md 2026-08-05: "vanilla" means no performance-tier override, but
+  -- allowSurvey is a global singleton flag -- an earlier dofile'd suite in
+  -- this same process (mod_loader_tests.lua does a real Game:load(), which
+  -- calls applyOptions -> Performance.detect(); under the headless test
+  -- stub with no love.system, an arm64 dev machine misdetects as a weak ARM
+  -- handheld and resolves to the "low" tier) can leave allowSurvey=false
+  -- long before this file ever runs. Zoom.reset() only clears offset, not
+  -- this flag, so establish the actual vanilla baseline explicitly rather
+  -- than trust ambient global state.
+  Zoom.allowSurvey = true
   local lo, hi = Zoom.offsetRange(4)
   check(lo == -3 and hi == 4, "vanilla zoom.range is (1-S, S)")
   local unsub = wrap("zoom.range", function(next, a, b, S)

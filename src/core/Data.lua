@@ -122,6 +122,16 @@ function Data:seedDefaults()
      and require("src.core.GameVersion").isYellow() then
     boot.screens.splash = "YellowIntro"
   end
+  -- Crystal's first working imports predated its own intro screen and so
+  -- either omitted field.boot.screens.newGame entirely or inherited the
+  -- vanilla OakSpeech default through the seed path above. Keep those stale
+  -- caches on Crystal's own intro without requiring a re-import: same
+  -- contract as the Yellow splash fix just above -- only the untouched
+  -- default flips, and an explicit mod / extracted override still wins.
+  if boot.screens.newGame == BOOT_DEFAULTS.screens.newGame
+     and require("src.core.GameVersion").isCrystal() then
+    boot.screens.newGame = "CrystalIntro"
+  end
   -- the naming screen presets the importer already extracts but nothing
   -- ever read (field.presetNames)
   if boot.namePresets == nil then

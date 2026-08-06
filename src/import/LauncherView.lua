@@ -37,6 +37,7 @@ local PAL = {
   red       = { 255, 60, 72 },
   blue      = { 70, 150, 255 },
   gold      = { 255, 203, 5 },
+  crystal   = { 125, 224, 224 },
   green     = { 62, 224, 138 },
   greenDark = { 22, 163, 90 },
   greenInk  = { 6, 32, 18 },
@@ -567,6 +568,7 @@ local function buildHeader(imp, root, m)
     { id = "red", letter = "R", col = "red", ink = "white", labelText = Strings("RED") },
     { id = "blue", letter = "B", col = "blue", ink = "white", labelText = Strings("BLUE") },
     { id = "yellow", letter = "Y", col = "gold", ink = "bg", labelText = Strings("YELLOW") },
+    { id = "crystal", letter = "C", col = "crystal", ink = "bg", labelText = Strings("CRYSTAL") },
     { id = "mods", icon = imp._modsIcon, col = "chipModTop", ink = "white", labelText = Strings("MODS") },
     { id = "find", icon = imp._findIcon, col = "chipModTop", ink = "white", labelText = Strings("FIND MODS") },
   }
@@ -630,7 +632,8 @@ local function buildHeader(imp, root, m)
     if imp.ready[v] then ready = ready + 1 end
   end
   mk({ parent = bar, flex = 1 })
-  label(bar, Strings("%d of 3 ready", ready), 12 * m.s + 2, C("gray"),
+  local totalVersions = #GameVersion.ORDER
+  label(bar, Strings("%d of %d ready", ready, totalVersions), 12 * m.s + 2, C("gray"),
     { textWrap = false })
   mk({ parent = root, width = "100%", height = 1,
     backgroundColor = C("border", 0.22) })

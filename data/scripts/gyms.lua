@@ -135,13 +135,17 @@ M.VIRIDIAN_GYM.talk = {
     "Let us meet again\nsome day!\nFarewell!",
     function(game, ow, npc, done)
       local Transition = require("src.render.Transition")
+      -- "black_fade", not the default "warp_fade": this is a scripted
+      -- GBFadeOutToBlack -> HideObject -> GBFadeInFromBlack cutscene, and
+      -- unlike an ordinary warp it genuinely fades back in (see
+      -- src/render/Transition.lua's Transition.STYLES.black_fade).
       game.stack:push(Transition.new(game, function()
         local ok, Commands = pcall(require, "src.script.Commands")
         if ok and Commands.hide_object then
           Commands.hide_object({ game = game, save = game.save, overworld = ow },
             "VIRIDIAN_GYM", "VIRIDIANGYM_GIOVANNI")
         end
-      end, done))
+      end, done, "black_fade"))
     end),
 }
 

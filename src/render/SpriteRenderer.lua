@@ -155,6 +155,13 @@ function SpriteRenderer:draw(px, py, camX, camY, facing, walkPhase, stepFlip, to
     local colors, group = PaletteFX.spriteObp(self.def, self.seed)
     if colors then
       image = getObpImage(self.def.image, colors, group)
+    else
+      -- No palette resolved for this sprite (e.g. Crystal's ROM-extracted
+      -- pack not ready yet) -- fall back to the same DMG bake
+      -- resolveImage() falls through to below, rather than leaving `image`
+      -- as self.image, the raw sheet with no real alpha (an opaque box
+      -- behind the character) -- see resolveImage's own comment.
+      image = getObpImage(self.def.image, PaletteFX.dmgObj())
     end
   elseif PaletteFX.usesSpriteObp() and PaletteFX.spriteRedrawPassActive() then
     -- OG RED (GBC boot-ROM look): every OBJ wears the one global object
@@ -215,7 +222,13 @@ function SpriteRenderer:drawTile(path, x, y, flip)
     PaletteFX.markTrueColor(x, y, 16, 8)
   elseif PaletteFX.usesGbcPack() then
     local colors, group = PaletteFX.spriteObp(self.def, self.seed)
-    if colors then image = getObpImage(path, colors, group) end
+    if colors then
+      image = getObpImage(path, colors, group)
+    else
+      -- see :draw's identical fallback above -- no resolved palette must
+      -- not leave `image` as the raw, opaque, un-color-keyed sheet
+      image = getObpImage(path, PaletteFX.dmgObj())
+    end
   elseif PaletteFX.usesSpriteObp() and PaletteFX.spriteRedrawPassActive() then
     image, redraw = getObpImage(path, PaletteFX.ogObj()), true
   else

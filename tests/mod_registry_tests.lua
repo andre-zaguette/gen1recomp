@@ -470,8 +470,20 @@ local vanillaSets = {
   { "trainers", require("data.generated.trainers") },
   { "sprites", require("data.generated.sprites") },
   { "text", require("data.generated.text") },
-  { "music", require("data.generated.audio").songs },
 }
+-- audio is listed in src/core/Data.lua's OPTIONAL modules: tools/build_data.py
+-- (the Python dev-tool that built this fixture dataset) never implemented
+-- audio extraction, so data/generated/audio.lua does not exist in this
+-- checkout and only a real ROM import (RomExtractor:extractAudio) can
+-- produce it.  Mirror Data.lua's own pcall-guarded loadModule instead of a
+-- bare require, which would crash this whole suite before any check runs.
+local audioOk, audioMod = pcall(require, "data.generated.audio")
+if audioOk then
+  vanillaSets[#vanillaSets + 1] = { "music", audioMod.songs }
+else
+  print("skip: vanilla record validation for 'music' -- requires " ..
+        "data/generated/audio.lua, not available in this environment")
+end
 for _, pair in ipairs(vanillaSets) do
   local name, records = pair[1], pair[2]
   local spec = Schemas.REGISTRIES[name]

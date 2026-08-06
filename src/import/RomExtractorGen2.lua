@@ -1,0 +1,850 @@
+-- src/import/RomExtractorGen2.lua
+-- Gen2 (Crystal) runtime extractor, scoped to New Bark Town: map, the
+-- TILESET_JOHTO tileset, the player (Chris) overworld sprite, and the
+-- font (glyphs + charmap) used to draw the engine's own hardcoded UI
+-- strings (title screen, menus).
+-- Mirrors src/import/RomExtractor.lua's shape and helper usage; the
+-- sprite/tileset/map extraction was ported from tools/build_rom_data_gen2.py
+-- (Task 4) -- keep those three in sync if either changes; extractFont()
+-- (below) has no counterpart in that Python dev-tool script. See
+-- docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
+
+local bit = require("bit")
+local CrystalCryTranscoder = require("src.audio.CrystalCryTranscoder")
+local CrystalMusicTranscoder = require("src.audio.CrystalMusicTranscoder")
+local ImageWriter = require("src.import.ImageWriter")
+local LuaWriter = require("src.import.LuaWriter")
+local Lz3 = require("src.import.Lz3")
+local Rom = require("src.import.Rom")
+
+local RomExtractorGen2 = {}
+RomExtractorGen2.__index = RomExtractorGen2
+
+local STAGE_COUNT = 9
+
+-- The other 11 modules Data:load()'s MODULES gate requires that this
+-- skeleton's scope (New Bark Town's map/tileset/player sprite/font
+-- only, see the spec's non-goals) never populates.  `field` gets real
+-- boot content (extractField, below); `text` gets real boot content too
+-- (extractIntroText, above -- the intro's ~8 narration/prompt labels);
+-- the rest are bare empty tables -- confirmed by reading Data:seedDefaults,
+-- FieldDefaults.seed, SsAnneLayout.apply and Font.load directly that every
+-- one of them tolerates emptiness (Task 10 brief).  Not invented
+-- placeholder content: an empty table is the honest "not extracted yet".
+local STUB_MODULES = {
+  "constants", "text_pointers", "trainer_headers",
+  "moves", "items", "type_chart", "encounters",
+  "battle_anims",
+}
+
+-- COLL_* -> CollisionPermissionTable base permission, ported verbatim from
+-- tools/extract_gen2/collision.py (Task 4 Step 1b) -- keep the two
+-- byte-for-byte identical. Source: pret/pokecrystal
+-- constants/collision_constants.asm + data/collision/collision_permissions.asm
+local LAND_TILE, WATER_TILE, WALL_TILE, TALK = 0x00, 0x01, 0x0F, 0x10
+local COLLISION_PERMISSION = {}
+for i = 0, 255 do COLLISION_PERMISSION[i] = LAND_TILE end
+local WALL = {
+  0x07, 0x0F, 0x27, 0x2F, 0x62, 0x6A,
+  0x80, 0x81, 0x82, 0x83, 0x84,
+  0x88, 0x89, 0x8A, 0x8B, 0x8C,
+  0xFF,
+}
+for i = 0x90, 0x9F do WALL[#WALL + 1] = i end
+local WALL_TALK = { 0x12, 0x15, 0x1A, 0x1D }
+local WATER = { 0x20, 0x21, 0x25, 0x26, 0x28, 0x29, 0x2D, 0x2E }
+for i = 0x30, 0x3F do WATER[#WATER + 1] = i end
+for i = 0xC0, 0xCF do WATER[#WATER + 1] = i end
+local WATER_TALK = { 0x22, 0x24, 0x2A, 0x2C }
+for _, i in ipairs(WALL) do COLLISION_PERMISSION[i] = WALL_TILE end
+for _, i in ipairs(WALL_TALK) do COLLISION_PERMISSION[i] = bit.bor(WALL_TILE, TALK) end
+for _, i in ipairs(WATER) do COLLISION_PERMISSION[i] = WATER_TILE end
+for _, i in ipairs(WATER_TALK) do COLLISION_PERMISSION[i] = bit.bor(WATER_TILE, TALK) end
+
+function RomExtractorGen2.new(romData, manifest, progress)
+  return setmetatable({
+    rom = Rom.new(romData),
+    manifest = manifest,
+    symbols = manifest.symbols,
+    progress = progress,
+    stage = 0,
+  }, RomExtractorGen2)
+end
+
+function RomExtractorGen2:symbol(name)
+  local location = self.symbols[name]
+  if not location then error("required symbol is missing: " .. tostring(name)) end
+  return { bank = location[1], address = location[2], name = name }
+end
+
+function RomExtractorGen2:beginStage(name)
+  self.stage = self.stage + 1
+  if self.progress then self.progress(self.stage - 1, STAGE_COUNT, name, 0, 1) end
+end
+
+function RomExtractorGen2:tick(name, current, total)
+  if self.progress then
+    self.progress(self.stage - 1 + current / total, STAGE_COUNT, name, current, total)
+  end
+end
+
+function RomExtractorGen2:write(name, value)
+  LuaWriter.write("data/generated/" .. name .. ".lua", value)
+end
+
+function RomExtractorGen2:save(image, relative)
+  ImageWriter.save(image, "assets/generated/" .. relative)
+end
+
+function RomExtractorGen2:extractSprite()
+  self:beginStage("Player sprite")
+  local chris = self:symbol("ChrisSpriteGFX")
+  local chrisRaw = self.rom:bytes(chris.bank, chris.address, 16 * 96 / 4)
+  local chrisImage = ImageWriter.decode2bpp(chrisRaw, 16, 96, true)
+  self:save(chrisImage, "sprites/chris.png")
+
+  -- Kris: the girl protagonist, identical sheet shape to Chris (same
+  -- overworld_sprite macro, 12 tiles, 2bpp) -- only her default in-ROM
+  -- palette differs (PAL_OW_BLUE vs PAL_OW_RED), which this project's own
+  -- real-color palette work already resolves independently of the ROM's
+  -- own default, so it needs no special handling here.
+  local kris = self:symbol("KrisSpriteGFX")
+  local krisRaw = self.rom:bytes(kris.bank, kris.address, 16 * 96 / 4)
+  local krisImage = ImageWriter.decode2bpp(krisRaw, 16, 96, true)
+  self:save(krisImage, "sprites/kris.png")
+
+  local out = {
+    SPRITE_CHRIS = {
+      id = "SPRITE_CHRIS", source = "ROM:ChrisSpriteGFX",
+      image = "assets/generated/sprites/chris.png",
+      frames = 96 / 16, walker = true,
+    },
+    SPRITE_KRIS = {
+      id = "SPRITE_KRIS", source = "ROM:KrisSpriteGFX",
+      image = "assets/generated/sprites/kris.png",
+      frames = 96 / 16, walker = true,
+    },
+  }
+  self:write("sprites", out)
+  self:tick("Player sprite", 1, 1)
+  return out
+end
+
+function RomExtractorGen2:extractTileset()
+  self:beginStage("Johto tileset")
+  local gfx = self:symbol("TilesetJohtoGFX")
+  local meta = self:symbol("TilesetJohtoMeta")
+  local coll = self:symbol("TilesetJohtoColl")
+
+  local compressed = self.rom:bytes(gfx.bank, gfx.address, 0x4000)
+  local raw = Lz3.decompress(compressed)
+  local widthTiles = 16
+  local width = widthTiles * 8
+  local height = #raw / 16 / widthTiles * 8
+  local image = ImageWriter.decode2bpp(raw, width, height)
+  self:save(image, "tilesets/johto.png")
+
+  local blocksRaw = self.rom:bytes(meta.bank, meta.address, 2048)
+  local blocks = {}
+  for offset = 1, #blocksRaw, 16 do
+    local block = {}
+    for pos = offset, offset + 15 do block[#block + 1] = blocksRaw[pos] end
+    blocks[#blocks + 1] = block
+  end
+
+  local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
+  local walkableSet = {}
+  for blockIndex, block in ipairs(blocks) do
+    for cellIndex = 0, 3 do
+      local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
+      local permission = COLLISION_PERMISSION[collValue]
+      assert(permission, "unknown COLL_* value " .. tostring(collValue))
+      if bit.band(permission, 0x0F) == LAND_TILE then
+        local row = cellIndex < 2 and 1 or 3
+        local col = (cellIndex % 2) * 2
+        local tileId = block[row * 4 + col + 1]
+        walkableSet[tileId] = true
+      end
+    end
+  end
+  local walkable = {}
+  for tileId in pairs(walkableSet) do walkable[#walkable + 1] = tileId end
+  table.sort(walkable)
+
+  local out = {
+    TILESET_JOHTO = {
+      id = "TILESET_JOHTO", source = "ROM:TilesetJohtoGFX/Meta/Coll",
+      image = "assets/generated/tilesets/johto.png",
+      imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
+      blocks = blocks, walkable = walkable,
+      counterTiles = {}, grassTile = nil, doorTiles = {}, warpTiles = {},
+      animation = nil,
+    },
+  }
+  self:write("tilesets", out)
+  self:tick("Johto tileset", 1, 1)
+  return out
+end
+
+-- Ported verbatim from src/import/Rom.lua's (private, unexported)
+-- transposePicTiles -- Gen1's Pokemon-pic decompressor has its own copy for
+-- the same reason: Pokemon/trainer PIC tile data (unlike tileset gfx) is
+-- stored column-major in ROM, so decode2bpp's row-major tile walk needs the
+-- width x width tile grid transposed first. Confirmed empirically during
+-- planning: decoding PokemonProfPic's raw LZ3 output straight through
+-- decode2bpp the same way extractTileset does (no transpose) produced a
+-- diagonally-scrambled portrait, not Oak; adding this fixed it and produced
+-- a recognizable portrait. Operates on a 1-indexed flat byte array in place.
+local function transposePicTiles(data, width)
+  local tileCount = width * width
+  for index = 0, tileCount - 1 do
+    local other = (index * width + math.floor(index / width)) % tileCount
+    if index < other then
+      for offset = 1, 16 do
+        local left = index * 16 + offset
+        local right = other * 16 + offset
+        data[left], data[right] = data[right], data[left]
+      end
+    end
+  end
+end
+
+-- Oak's trainer portrait and Wooper's front sprite, both LZ3-compressed
+-- 2bpp pics -- same decompress-then-decode2bpp shape extractTileset already
+-- uses for TilesetJohtoGFX, plus the transpose step above that PIC data
+-- (unlike tileset gfx) needs.
+--
+-- PokemonProfPic decompresses to exactly 49 tiles (784 bytes, confirmed
+-- against the real ROM during planning) -- trainer pics always fill the
+-- full 7x7/56x56 box and aren't animated in Gen2 (only Pokemon pics are,
+-- confirmed by reading engine/gfx/load_pics.asm's GetTrainerPic, which
+-- decompresses straight into the display buffer with no dimension lookup
+-- or padding step, unlike _GetFrontpic below), so it's a plain
+-- transpose+decode after decompression.
+--
+-- WooperFrontpic decompresses to 34 tiles (544 bytes, confirmed against the
+-- real ROM) -- more than a static sprite needs. Gen2 Pokemon frontpics
+-- support two-frame animation (pokecrystal's engine/gfx/pic_animation.asm),
+-- and WooperFrontpic's compressed data is pointed at by
+-- data/pokemon/pic_pointers.asm the same way for both the animated and
+-- non-animated call paths -- there's no separate "static-only" symbol.
+-- Reading engine/gfx/load_pics.asm's _GetFrontpic (the non-animated path
+-- GetMonFrontpic uses) shows it decompresses that same blob but only ever
+-- copies out wBasePicSize's b*b tiles (via PadFrontpic) -- b = 5 for
+-- Wooper, confirmed against gfx/pokemon/wooper/front.dimensions in the
+-- pokecrystal source (single byte $55, i.e. 5x5). The trailing 9 tiles are
+-- delta/blend tiles only pic_animation.asm's frame table
+-- (gfx/pokemon/wooper/frames.asm) references, via GetAnimatedFrontpic's
+-- separate GetAnimatedEnemyFrontpic call that _GetFrontpic's own
+-- (non-animated) path never makes. So a plain static decode slices to the
+-- first 25 tiles (400 bytes, 40x40px) before transposing/decoding, matching
+-- what _GetFrontpic itself renders for a non-animated frontpic request.
+function RomExtractorGen2:extractIntroPics()
+  self:beginStage("Intro portraits")
+  local oakWidth = 7
+  local oak = self:symbol("PokemonProfPic")
+  local oakCompressed = self.rom:bytes(oak.bank, oak.address, 0x1000)
+  local oakRaw = Lz3.decompress(oakCompressed)
+  assert(#oakRaw == oakWidth * oakWidth * 16,
+    "PokemonProfPic: unexpected decompressed size " .. #oakRaw)
+  transposePicTiles(oakRaw, oakWidth)
+  local oakImage = ImageWriter.decode2bpp(oakRaw, oakWidth * 8, oakWidth * 8)
+  self:save(oakImage, "trainers/oak.png")
+  self:tick("Intro portraits", 1, 2)
+
+  local wooperWidth = 5
+  local wooper = self:symbol("WooperFrontpic")
+  local wooperCompressed = self.rom:bytes(wooper.bank, wooper.address, 0x1000)
+  local wooperDecompressed = Lz3.decompress(wooperCompressed)
+  assert(#wooperDecompressed >= wooperWidth * wooperWidth * 16,
+    "WooperFrontpic: decompressed data shorter than its base frame")
+  local wooperRaw = {}
+  for i = 1, wooperWidth * wooperWidth * 16 do
+    wooperRaw[i] = wooperDecompressed[i]
+  end
+  transposePicTiles(wooperRaw, wooperWidth)
+  local wooperImage =
+    ImageWriter.decode2bpp(wooperRaw, wooperWidth * 8, wooperWidth * 8)
+  self:save(wooperImage, "pokemon/wooper_front.png")
+  self:tick("Intro portraits", 2, 2)
+
+  local trainers = { OPP_PROF_OAK = {
+    id = "OPP_PROF_OAK", source = "ROM:PokemonProfPic",
+    pic = "assets/generated/trainers/oak.png",
+  } }
+  self:write("trainers", trainers)
+
+  local pokemon = { WOOPER = {
+    id = "WOOPER", source = "ROM:WooperFrontpic",
+    spriteFront = "assets/generated/pokemon/wooper_front.png",
+  } }
+  self:write("pokemon", pokemon)
+
+  return { trainers = trainers, pokemon = pokemon }
+end
+
+function RomExtractorGen2:extractMap()
+  self:beginStage("New Bark Town")
+  local header = self:symbol("NewBarkTown_MapAttributes")
+  local expected = self.manifest.newBarkTown
+
+  local border = self.rom:byte(header.bank, header.address)
+  local height = self.rom:byte(header.bank, header.address + 1)
+  local width = self.rom:byte(header.bank, header.address + 2)
+  assert(width == expected.width and height == expected.height,
+    "NewBarkTown ROM dimensions do not match manifest")
+  local blocksBank = self.rom:byte(header.bank, header.address + 3)
+  local blocksPtr = self.rom:word(header.bank, header.address + 4)
+  local eventsBank = self.rom:byte(header.bank, header.address + 6)
+  local eventsPtr = self.rom:word(header.bank, header.address + 9)
+
+  local blocks = self.rom:bytes(blocksBank, blocksPtr, width * height)
+
+  local addr = eventsPtr + 2 -- "db 0, 0 ; filler" MapEvents header
+
+  local warpCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1
+  local warps = {}
+  for _ = 1, warpCount do
+    local row = self.rom:bytes(eventsBank, addr, 5)
+    warps[#warps + 1] = {
+      y = row[1], x = row[2], destWarp = row[3],
+      destMapGroup = row[4], destMapNumber = row[5],
+    }
+    addr = addr + 5
+  end
+  assert(warpCount == expected.warpCount, "NewBarkTown warp count mismatch")
+
+  local coordCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + coordCount * 8
+  assert(coordCount == expected.coordEventCount, "NewBarkTown coord event count mismatch")
+
+  local bgCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + bgCount * 5
+  assert(bgCount == expected.bgEventCount, "NewBarkTown bg event count mismatch")
+
+  local objectCount = self.rom:byte(eventsBank, addr)
+  addr = addr + 1 + objectCount * 13
+  assert(objectCount == expected.objectCount, "NewBarkTown object count mismatch")
+
+  local out = {
+    NEW_BARK_TOWN = {
+      id = "NEW_BARK_TOWN", label = "NewBarkTown", index = 1,
+      source = ("ROM:%02X:%04X"):format(header.bank, header.address),
+      tileset = "TILESET_JOHTO",
+      width = width, height = height, blocks = blocks,
+      borderBlock = border, connections = {},
+      warps = warps, signs = {}, objects = {},
+    },
+  }
+  self:write("maps", out)
+  self:tick("New Bark Town", 1, 1)
+  return out
+end
+
+-- Font: 128 tiles, 128x64px, 1bpp -- codes $80-$FF (both cases + digits,
+-- confirmed against constants/charmap.asm during planning). FontExtra: 32
+-- tiles, 128x16px, 2bpp -- codes $60-$7F (space, quotes, the box-drawing
+-- border glyphs Font.DEFAULT_BORDER already expects at $79-$7E). Unlike
+-- Gen1 (whose font_extra.png is TextBoxGraphics plus a separate
+-- Pokedex-tile patch), Crystal ships this whole range as one INCBIN, so
+-- there is no patch step.
+function RomExtractorGen2:extractFont()
+  self:beginStage("Font")
+  local main = self:symbol("Font")
+  local raw = self.rom:bytes(main.bank, main.address, 128 * 8)
+  local image = ImageWriter.decode1bpp(raw, 128, 64, true)
+  self:save(image, "fonts/font.png")
+  self:tick("Font", 1, 2)
+
+  local extra = self:symbol("FontExtra")
+  local shaded = ImageWriter.decode2bpp(
+    self.rom:bytes(extra.bank, extra.address, 32 * 16), 128, 16)
+  local extraImage = ImageWriter.blank(128, 16, 0, 0, 0, 0)
+  for y = 0, 15 do
+    for x = 0, 127 do
+      local r = shaded:getPixel(x, y)
+      if r < 0.5 then extraImage:setPixel(x, y, 0, 0, 0, 1) end
+    end
+  end
+  self:save(extraImage, "fonts/font_extra.png")
+  self:tick("Font", 2, 2)
+
+  local data = {
+    source = "ROM:Font, FontExtra",
+    image = "assets/generated/fonts/font.png",
+    imageExtra = "assets/generated/fonts/font_extra.png",
+    mainBase = 0x80, extraBase = 0x60, glyphsPerRow = 16,
+    charmap = self.manifest.fontCharmap,
+  }
+  self:write("font", data)
+  return data
+end
+
+-- Fully resolved by tools/extract_gen2/palettes.py at manifest-build time
+-- (see that file's docstring for why this is source-derived rather than a
+-- ROM-byte read, unlike every other extractX here) -- nothing left to
+-- decode, just forward it into the generated cache under the same
+-- "palettes" name Data.lua already treats as optional for Gen1.
+--
+-- tileGroups crosses a JSON boundary (Python dict with int keys ->
+-- tools/rom_manifest_crystal.json -> JSON always stringifies object keys
+-- -> src/link/Json.lua does not convert them back), so
+-- self.manifest.palettes.tileGroups arrives keyed by STRING tile ids
+-- ("59" = 5, ...).  PaletteFX.worldGroupAt indexes it with a numeric tile
+-- id (groups[tileId]), which always misses against a string key, so every
+-- tile silently fell back to the group-7 TEXT default.  Re-key to numbers
+-- once here, at import time, rather than on every render-time lookup.
+-- byTime's groupColors/spriteColor are real 1-indexed Lua arrays (not
+-- JSON-object-keyed), so they do not have this problem and pass through
+-- untouched.
+function RomExtractorGen2:extractPalettes()
+  local data = self.manifest.palettes
+  local tileGroups = {}
+  for tileId, group in pairs(data.tileGroups) do
+    tileGroups[tonumber(tileId)] = group
+  end
+  local out = { tileGroups = tileGroups, byTime = data.byTime }
+  self:write("palettes", out)
+  return out
+end
+
+-- Ported from src/import/RomExtractor.lua's textGlyph/decodeTextCommands
+-- (Task 10-era "parallel pipeline, not shared abstraction" precedent --
+-- see the walking skeleton's own spec for why this project doesn't
+-- factor Gen1/Gen2 text decoding through one shared function). Crystal's
+-- text opcode set is confirmed byte-identical to Gen1's (same TX_*
+-- values, no compression, verified during planning against
+-- home/text.asm's PrintText/PlaceNextChar), and reading a label's real
+-- string body directly (rather than through its OakTextN-style TX_FAR
+-- wrapper) never needs the TX_FAR opcode this port omits.
+local TEXT_GLYPH_OVERRIDES = {
+  [0x4B] = "{_CONT}", [0x4C] = "{SCROLL}",
+  [0x6D] = "{COLON}", [0xF0] = "¥",
+}
+
+function RomExtractorGen2:textGlyph(value)
+  if TEXT_GLYPH_OVERRIDES[value] then return TEXT_GLYPH_OVERRIDES[value] end
+  local glyph = self.manifest.charmap[tostring(value)]
+    or ("{BYTE:%02X}"):format(value)
+  if glyph:sub(1, 1) == "<" and glyph:sub(-1) == ">" then
+    return "{" .. glyph:sub(2, -2) .. "}"
+  end
+  return glyph
+end
+
+function RomExtractorGen2:decodeTextCommands(symbol)
+  local address = symbol.address
+  local out = {}
+  for _ = 1, 4096 do
+    local command = self.rom:byte(symbol.bank, address)
+    address = address + 1
+    if command == 0x50 then
+      return table.concat(out)
+    elseif command == 0 then
+      while true do
+        local value = self.rom:byte(symbol.bank, address)
+        address = address + 1
+        if value == 0x50 or value == 0x57 or value == 0x58 or value == 0x5F then
+          return table.concat(out)
+        end
+        out[#out + 1] = self:textGlyph(value)
+      end
+    else
+      error(("%s: unsupported text command $%02X, this port only reads " ..
+        "plain-body labels directly (no TX_FAR)"):format(symbol.name, command))
+    end
+  end
+  error(symbol.name .. ": text command stream is too long")
+end
+
+-- The intro's narration + gender-prompt text. Direct symbol reads (see
+-- decodeTextCommands's doc comment above) -- no pointer-table sweep, the
+-- same "read exactly what's needed, by name" pattern font/palette
+-- extraction already established for Gen2.
+local INTRO_TEXT_LABELS = {
+  "_OakText1", "_OakText2", "_OakText4", "_OakText5", "_OakText6",
+  "_OakText7", "_AreYouABoyOrAreYouAGirlText",
+}
+
+function RomExtractorGen2:extractIntroText()
+  self:beginStage("Intro text")
+  local out = {}
+  for index, label in ipairs(INTRO_TEXT_LABELS) do
+    out[label] = self:decodeTextCommands(self:symbol(label))
+    self:tick("Intro text", index, #INTRO_TEXT_LABELS)
+  end
+  self:write("text", out)
+  return out
+end
+
+-- field.boot spawns straight into New Bark Town instead of Gen1's
+-- REDS_HOUSE_2F / Oak-speech opening: this skeleton has no starter roster
+-- or dialogue text (spec non-goals), so NEW GAME has nowhere to run that
+-- scene and must land the player standing somewhere walkable instead.
+--
+-- The spawn tile is newBarkTown.warps[1]'s own (x, y) rather than a
+-- hand-picked literal: this sandbox has neither a love binary nor an
+-- already-generated crystal/data/generated/maps.lua to check a guessed
+-- coordinate against (Task 10 brief), but a warp tile is walkable by
+-- construction -- it is a door/edge tile the ROM's own MapEvents table
+-- names, and the player has to be able to walk onto it to trigger it, so
+-- COLLISION_PERMISSION never marks one a wall.  Deriving the coordinate
+-- from the map this extractor just decoded is verified against the real
+-- ROM on every import, which a hardcoded guess could not be here.
+function RomExtractorGen2:extractField(newBarkTown, title)
+  local spawn = assert(newBarkTown.warps[1],
+    "NewBarkTown has no warps to derive a walkable spawn tile from")
+  local out = {
+    title = title,
+    boot = {
+      startMap = "NEW_BARK_TOWN", startX = spawn.x, startY = spawn.y,
+      startFacing = "down",
+      -- skip the Oak-speech-equivalent starter-selection screen (out of
+      -- scope, no species data extracted); splash/title stay on the
+      -- BOOT_DEFAULTS fallback (Game.lua's bootScreens(self).X or
+      -- <default> reads), confirmed to need no Crystal-specific data.
+      screens = { newGame = "CrystalIntro" },
+    },
+    -- These three data.field.* keys are read with no nil-guard on the
+    -- boot -> walk path (unlike everything FieldDefaults.FIELD already
+    -- covers, which is all defensively guarded) -- confirmed by reading
+    -- every data.field.<key> access site in src/world, src/render and
+    -- src/ui directly, not by inspection of this list alone:
+    --   * flyWarps: OverworldController.lua:341, `if
+    --     Game.data.field.flyWarps[mapId] then` inside setMap, which
+    --     runs on every map load including the very first one
+    --     (OverworldState:enter -> setMap(..., {via="boot"})) -- this is
+    --     the crash the human partner hit (self.stack traced through to
+    --     setMap/onNewGame).
+    --   * waterTilesets: OverworldController.lua:2263's
+    --     `ipairs(Game.data.field.waterTilesets)` inside
+    --     tilesetHasWater(), called from setMap's boot-only surf-state
+    --     restore (line ~397) on every fresh save (a new save's
+    --     save.player carries no `surfing` key yet) -- the very next
+    --     unguarded read after flyWarps in the same boot call.
+    --   * ledges: OverworldController.lua:1275's
+    --     `ipairs(Game.data.field.ledges)` inside checkLedgeHop(),
+    --     called from handleInput on the second press of any held
+    --     direction (once facing it and not already moving) -- hit by
+    --     the first deliberate step the player takes.
+    -- Empty tables are the correct "not extracted" value at each read
+    -- site (dictionary keyed by map id, and two flat lists respectively)
+    -- -- verified by reading each guarded sibling call site (e.g.
+    -- OverworldController.lua:3838's `(Game.data.field.flyWarps or
+    -- {})[out.id]`) that already treats absence the same way.
+    flyWarps = {},
+    waterTilesets = {},
+    ledges = {},
+    -- checkForcedMovement (OverworldController.lua:3506) reads
+    -- Game.data.field.forcedMovement.tiles unguarded (`fm.tiles[mapId]`,
+    -- indexed before its own `or {}`) on every setMap, including boot.
+    -- FieldDefaults.FIELD.forcedMovement only carries `clearMaps` (Route
+    -- 16/18 gate cleanup, unrelated) -- it was never meant to double as a
+    -- `tiles` fallback, since every real Gen1 extraction always stamps
+    -- its own `tiles`. Crystal doesn't, so FieldDefaults.seed's fill()
+    -- deep-copied the incomplete default in wholesale, leaving `.tiles`
+    -- permanently nil. Stub `tiles = {}` here so fill() merges it
+    -- in alongside the inherited (harmless, no Crystal map matches it)
+    -- `clearMaps` default instead of leaving the key out entirely.
+    forcedMovement = { tiles = {} },
+    -- Player.new:46 reads field.playerSprites.walk unguarded (unlike
+    -- surf/bike/surfPikachu, each gated behind `data.sprites[id] and`) to
+    -- build the player's on-foot SpriteRenderer -- FieldDefaults.FIELD's
+    -- default there is Gen1's "SPRITE_RED", which extractSprite (above)
+    -- never writes into Crystal's sprites table (only "SPRITE_CHRIS" is),
+    -- so it resolved to a nil spriteDef and crashed
+    -- SpriteRenderer.new:85 on the very first setMap. surf/bike/fly stay
+    -- on the Gen1 defaults deliberately: this skeleton extracts no sprite
+    -- for them, so their guards correctly no-op instead of crashing.
+    playerSprites = { walk = "SPRITE_CHRIS", walkAlt = "SPRITE_KRIS" },
+    -- tryCardKeyDoor (OverworldController.lua:2002-2005) reads
+    -- Game.data.field.cardKeyDoors.maps unguarded (`ipairs(ck.maps)`) on
+    -- every interact-button press, on any map -- unlike closedDoors/
+    -- skipMaps (both read safely through FieldDefaults.fieldValue's
+    -- per-leaf fallback elsewhere in this file), .maps/.doorTiles/
+    -- .openBlock/.silphCo11F only ever exist in a real Gen1 extraction
+    -- (data/events/card_key_maps.asm et al, Silph Co-only) and were never
+    -- added to FieldDefaults.FIELD.cardKeyDoors, which only carries
+    -- closedDoors/skipMaps. Crystal doesn't stamp cardKeyDoors at all, so
+    -- fill() deep-copied that incomplete default in, leaving .maps
+    -- permanently nil and crashing the very first interact press anywhere
+    -- in the game. maps = {} alone is enough: the onList loop finds no
+    -- match and returns false before touching doorTiles/openBlock/
+    -- silphCo11F, which stay correctly unreachable (Crystal has no Silph
+    -- Co, and its own equivalent is out of this skeleton's scope).
+    cardKeyDoors = { maps = {} },
+    -- tryHiddenObject (OverworldController.lua:1839), reached from the same
+    -- interact() chain as tryCardKeyDoor, reads three more
+    -- Game.data.field.hiddenExtras.* keys unguarded (`ipairs(extras.X[mapId])`,
+    -- indexed before their own `or {}`): pcTiles (1919), benchGuys (1947),
+    -- gymStatues (1961). FieldDefaults.FIELD.hiddenExtras only carries
+    -- printTrash/trashCans (both read safely elsewhere, `extras.printTrash
+    -- and ...`) -- pcTiles/benchGuys/gymStatues have no default at all, so
+    -- with Crystal never stamping hiddenExtras, fill() deep-copied the
+    -- incomplete default in and left all three permanently nil. Empty
+    -- tables here merge in alongside the inherited printTrash/trashCans,
+    -- same shape as every other stub above.
+    hiddenExtras = { pcTiles = {}, benchGuys = {}, gymStatues = {} },
+  }
+  self:write("field", out)
+  return out
+end
+
+-- Wooper's cry: Cry_Wooper_Ch5/_Ch6/_Ch8's three real channel programs
+-- (ROM bank $3c) translated from Crystal's opcode dialect into Gen1's via
+-- CrystalCryTranscoder, then assembled into a self-contained chip blob by
+-- src/audio/ChipAsm.lua -- the same pseudo-bank-0 mechanism mod-authored
+-- ChipAsm songs/sfx already use, so no ROM bank dump or wave-sample table
+-- is needed (Engine.new only reads WaveSamples when a header lacks a
+-- `chip` field; ours always has one). See
+-- docs/superpowers/plans/2026-08-04-gen2-crystal-cry-transcoder.md.
+function RomExtractorGen2:extractCry()
+  self:beginStage("Wooper cry")
+  local ch5 = self:symbol("Cry_Wooper_Ch5")
+  local ch6 = self:symbol("Cry_Wooper_Ch6")
+  local ch8 = self:symbol("Cry_Wooper_Ch8")
+  local cry = CrystalCryTranscoder.buildCry({
+    { hw = 1, bytes = self.rom:bytes(ch5.bank, ch5.address, 40) },
+    { hw = 2, bytes = self.rom:bytes(ch6.bank, ch6.address, 40) },
+    { hw = 4, bytes = self.rom:bytes(ch8.bank, ch8.address, 20) },
+  })
+  -- These feed into Gen1-engine conventions elsewhere (ChipSynth.lua's
+  -- bit.band(register + frequencyOffset, 0x7FF) and frameTicks = 0x80 +
+  -- cryLength), which were designed around Gen1's own byte-range
+  -- semantics, not Crystal's. Wooper's values (147/175) happen to land in
+  -- range and were confirmed correct by a human listening to the real
+  -- rendered output -- this cross-engine scaling is verified for Wooper
+  -- specifically, not structurally guaranteed for any future species. A
+  -- future species with very different pitch/length values should
+  -- re-verify by ear, not assume the scaling holds.
+  cry.pitch = self.manifest.cryPitch
+  cry.length = self.manifest.cryLength
+  local audio = { cries = { WOOPER = cry } }
+  self:tick("Wooper cry", 1, 1)
+  return audio
+end
+
+-- Title screen art (engine/movie/title.asm): the Pokemon logo (with
+-- "CRYSTAL VERSION" baked into its own pixels -- Crystal has no separate
+-- ribbon asset, unlike Red/Blue/Yellow), the running-Suicune tile sheet,
+-- the falling crystal ornament, and the title's 16 GBC palettes (8 BG + 8
+-- OBJ). See docs/superpowers/plans/2026-08-05-gen2-crystal-title-screen.md.
+function RomExtractorGen2:extractTitle()
+  self:beginStage("Title screen")
+
+  local suicune = self:symbol("TitleSuicuneGFX")
+  local suicuneRaw = Lz3.decompress(self.rom:bytes(suicune.bank, suicune.address, 0x1000))
+  local suicuneImage = ImageWriter.decode2bpp(suicuneRaw, 128, 128)
+  self:save(suicuneImage, "title/suicune.png")
+  self:tick("Title screen", 1, 4)
+
+  local logo = self:symbol("TitleLogoGFX")
+  local logoRaw = Lz3.decompress(self.rom:bytes(logo.bank, logo.address, 0x1000))
+  -- The real compressed data only encodes 156 of the logo's 160 tiles (20x8):
+  -- the bottom-right 4 tiles are genuinely blank background, and the
+  -- compressor never bothered emitting trailing all-zero tiles. On real
+  -- hardware VRAM is cleared before Decompress runs, so those tile slots
+  -- read back as zero, i.e. shade 0 / white -- matching the real logo's
+  -- blank corner there. Pad to the full 160-tile rectangle the same way.
+  local logoExpectedLength = 160 * 64 * 2 / 8
+  for index = #logoRaw + 1, logoExpectedLength do logoRaw[index] = 0 end
+  -- Real hardware draws the crystal ornament as an OAM sprite with the
+  -- BG-priority bit set (title.asm InitializeBackground: `ld a, 0 |
+  -- OAM_PRIO`), which means the sprite is hidden behind the background's
+  -- ink (color 1-3) but shows through the background's blank/color-0
+  -- pixels. Decoding the logo with transparent=true makes its shade-0
+  -- pixels alpha=0, reproducing that "see-through" blank-area behavior so
+  -- the crystal drawn behind it (TitleState's crystalLayout branch) peeks
+  -- through the gaps instead of being fully hidden by an opaque logo.
+  local logoImage = ImageWriter.decode2bpp(logoRaw, 160, 64, true)
+  self:save(logoImage, "title/logo.png")
+  self:tick("Title screen", 2, 4)
+
+  local crystalGfx = self:symbol("TitleCrystalGFX")
+  local crystalRaw = Lz3.decompress(self.rom:bytes(crystalGfx.bank, crystalGfx.address, 0x1000))
+  -- gfx/title/crystal.2bpp is built with pokecrystal's own `tools/gfx
+  -- --interleave` (Makefile: "gfx/title/crystal.2bpp: tools/gfx +=
+  -- --interleave --png=$<") -- unlike the logo/Suicune sheets, which are
+  -- plain raster tile order. --interleave (tools/gfx.c's interleave())
+  -- pairs up consecutive tile-ROWS and alternates their tiles
+  -- column-by-column: stream position t's source (row, col) is
+  -- row = 2*floor(t/12) + (t%12 odd and 1 or 0), col = (t%12) // 2 for a
+  -- 48px-wide (6-tile) image. Confirmed against the real decompressed
+  -- bytes (byte-for-byte identical to the pret/pokecrystal checkout's own
+  -- pre-interleave gfx/title/crystal.2bpp build artifact) and against
+  -- tools/gfx.c's interleave() transform directly: without undoing this,
+  -- ImageWriter.decode2bpp's plain-raster assumption renders a scrambled
+  -- checkerboard instead of the crystal shard.
+  local function deinterleaveTiles(raw, widthTiles)
+    local out = {}
+    local numTiles = #raw / 16
+    local pairWidth = widthTiles * 2
+    for t = 0, numTiles - 1 do
+      local pair = math.floor(t / pairWidth)
+      local rem = t % pairWidth
+      local row, col
+      if rem % 2 == 0 then
+        row, col = pair * 2, rem / 2
+      else
+        row, col = pair * 2 + 1, (rem - 1) / 2
+      end
+      local destTile = row * widthTiles + col
+      for byteIndex = 1, 16 do
+        out[destTile * 16 + byteIndex] = raw[t * 16 + byteIndex]
+      end
+    end
+    return out
+  end
+  crystalRaw = deinterleaveTiles(crystalRaw, 48 / 8)
+  local crystalImage = ImageWriter.decode2bpp(crystalRaw, 48, 80)
+  self:save(crystalImage, "title/crystal.png")
+  self:tick("Title screen", 3, 4)
+
+  -- 16 GBC palettes (8 BG, 8 OBJ), 4 colors each, RGB555 packed 2
+  -- bytes/color -- same layout and scale5 conversion RomExtractor.lua's
+  -- extractPalettes already uses for Gen1's SuperPalettes/CGBBasePalettes.
+  local palTable = self:symbol("TitleScreenPalettes")
+  local function scale5(value) return math.floor(value * 255 / 31 + 0.5) end
+  local function readPalettes(startIndex, count)
+    local out = {}
+    for index = 0, count - 1 do
+      local colors = {}
+      for color = 0, 3 do
+        local value = self.rom:word(palTable.bank,
+          palTable.address + (startIndex + index) * 8 + color * 2)
+        colors[#colors + 1] = {
+          scale5(bit.band(value, 0x1F)),
+          scale5(bit.band(bit.rshift(value, 5), 0x1F)),
+          scale5(bit.band(bit.rshift(value, 10), 0x1F)),
+        }
+      end
+      out[#out + 1] = colors
+    end
+    return out
+  end
+  local palette = { bg = readPalettes(0, 8), obj = readPalettes(8, 8) }
+  self:tick("Title screen", 4, 4)
+
+  local title = {
+    logo = "assets/generated/title/logo.png",
+    suicune = "assets/generated/title/suicune.png",
+    crystalOrnament = "assets/generated/title/crystal.png",
+    palette = palette,
+  }
+  return title
+end
+
+-- Music_TitleScreen's pulse (Ch1/Ch2) and noise (Ch4) channels, translated
+-- from Crystal's bytecode dialect via CrystalMusicTranscoder. Channel 3
+-- (wave) is not read -- out of scope, see the plan's Non-goals. Generous
+-- byte-window sizes (400/400/300 for the three main bodies, 40/40 for
+-- Ch1/Ch2's one subroutine each, 20 each for Ch4's four) are comfortably
+-- larger than the real verified spans (345/355/222 and 23/26/10/10/8/11
+-- respectively) -- decodeChannel stops at sound_ret regardless of extra
+-- trailing bytes in the window, same margin convention extractCry already
+-- established.
+function RomExtractorGen2:extractTitleMusic()
+  self:beginStage("Title music")
+
+  local ch1 = self:symbol("Music_TitleScreen_Ch1")
+  local ch1Sub1 = self:symbol("Music_TitleScreen_Ch1.sub1")
+  local ch1Sub1Loop1 = self:symbol("Music_TitleScreen_Ch1.sub1loop1")
+  local ch1Labels = {
+    [ch1Sub1.address] = "sub1",
+    [ch1Sub1Loop1.address] = "sub1loop1",
+  }
+
+  local ch2 = self:symbol("Music_TitleScreen_Ch2")
+  local ch2Sub1 = self:symbol("Music_TitleScreen_Ch2.sub1")
+  local ch2Sub1Loop1 = self:symbol("Music_TitleScreen_Ch2.sub1loop1")
+  local ch2Labels = {
+    [ch2Sub1.address] = "sub1",
+    [ch2Sub1Loop1.address] = "sub1loop1",
+  }
+
+  local ch4 = self:symbol("Music_TitleScreen_Ch4")
+  local ch4Loop1 = self:symbol("Music_TitleScreen_Ch4.loop1")
+  local ch4Sub1 = self:symbol("Music_TitleScreen_Ch4.sub1")
+  local ch4Sub2 = self:symbol("Music_TitleScreen_Ch4.sub2")
+  local ch4Sub3 = self:symbol("Music_TitleScreen_Ch4.sub3")
+  local ch4Sub4 = self:symbol("Music_TitleScreen_Ch4.sub4")
+  local ch4Labels = {
+    [ch4Loop1.address] = "loop1",
+    [ch4Sub1.address] = "sub1",
+    [ch4Sub2.address] = "sub2",
+    [ch4Sub3.address] = "sub3",
+    [ch4Sub4.address] = "sub4",
+  }
+
+  local song = CrystalMusicTranscoder.buildSong({
+    {
+      hw = 1, baseAddress = ch1.address,
+      bytes = self.rom:bytes(ch1.bank, ch1.address, 400),
+      subroutines = {
+        sub1 = { baseAddress = ch1Sub1.address,
+                 bytes = self.rom:bytes(ch1Sub1.bank, ch1Sub1.address, 40) },
+      },
+      labels = ch1Labels,
+    },
+    {
+      hw = 2, baseAddress = ch2.address,
+      bytes = self.rom:bytes(ch2.bank, ch2.address, 400),
+      subroutines = {
+        sub1 = { baseAddress = ch2Sub1.address,
+                 bytes = self.rom:bytes(ch2Sub1.bank, ch2Sub1.address, 40) },
+      },
+      labels = ch2Labels,
+    },
+    {
+      hw = 4, baseAddress = ch4.address,
+      bytes = self.rom:bytes(ch4.bank, ch4.address, 300),
+      subroutines = {
+        sub1 = { baseAddress = ch4Sub1.address,
+                 bytes = self.rom:bytes(ch4Sub1.bank, ch4Sub1.address, 20) },
+        sub2 = { baseAddress = ch4Sub2.address,
+                 bytes = self.rom:bytes(ch4Sub2.bank, ch4Sub2.address, 20) },
+        sub3 = { baseAddress = ch4Sub3.address,
+                 bytes = self.rom:bytes(ch4Sub3.bank, ch4Sub3.address, 20) },
+        sub4 = { baseAddress = ch4Sub4.address,
+                 bytes = self.rom:bytes(ch4Sub4.bank, ch4Sub4.address, 20) },
+      },
+      labels = ch4Labels,
+    },
+  })
+
+  self:tick("Title music", 1, 1)
+  return song
+end
+
+function RomExtractorGen2:extractStubs()
+  for _, name in ipairs(STUB_MODULES) do
+    self:write(name, {})
+  end
+end
+
+function RomExtractorGen2:run()
+  local results = {}
+  results.sprites = self:extractSprite()
+  results.tilesets = self:extractTileset()
+  local intro = self:extractIntroPics()
+  results.trainers = intro.trainers
+  results.pokemon = intro.pokemon
+  results.maps = self:extractMap()
+  results.font = self:extractFont()
+  results.palettes = self:extractPalettes()
+  results.text = self:extractIntroText()
+  local title = self:extractTitle()
+  results.field = self:extractField(results.maps.NEW_BARK_TOWN, title)
+  local cries = self:extractCry()
+  local titleSong = self:extractTitleMusic()
+  results.audio = { cries = cries.cries, songs = { Music_TitleScreen = titleSong } }
+  self:write("audio", results.audio)
+  self:extractStubs()
+  if self.progress then
+    self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
+  end
+  return results
+end
+
+return RomExtractorGen2

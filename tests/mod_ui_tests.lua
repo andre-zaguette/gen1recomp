@@ -282,22 +282,32 @@ local function optGame()
 end
 local om = OptionsMenu.new(optGame())
 local WANT_IDS = { "textSpeed", "animations", "battleStyle", "battleLayout",
+                   "battleFit", "battleBg", "uiLayout",
                    "ruleset", "musicVol", "sfxVol", "musicFilter",
                    "performance", "colors",
-                   "tilt", "gbcfx", "zoom", "voidFill", "videoMode", "fpsCap",
+                   "tilt", "gbcfx", "zoom", "voidFill", "videoMode",
+                   "faithfulRes", "fpsCap",
                    "speed", "mods", "controls" }
 check(#om.rows == #WANT_IDS, "vanilla options row count (plus MODS/CONTROLS)")
 for i, id in ipairs(WANT_IDS) do
   check(om.rows[i].id == id, "options row order: " .. id)
 end
+-- looked up by id rather than a hardcoded index, so future row insertions
+-- (like battleFit/battleBg/uiLayout/faithfulRes above) don't desync these
+local function rowById(rows, id)
+  for _, row in ipairs(rows) do
+    if row.id == id then return row end
+  end
+end
 
 -- ruleset row cycles the sorted non-hidden registry ids showing name
+local rulesetRow = rowById(om.rows, "ruleset")
 om.game.save.options.ruleset = "gen1_faithful"
-check(om.rows[5].value(om.game) == "GEN 1", "ruleset row shows record.name")
-om.rows[5].step(om.game, 1)
+check(rulesetRow.value(om.game) == "GEN 1", "ruleset row shows record.name")
+rulesetRow.step(om.game, 1)
 check(om.game.save.options.ruleset == "modern_clean",
   "ruleset row cycles sorted registry ids")
-om.rows[5].step(om.game, 1)
+rulesetRow.step(om.game, 1)
 check(om.game.save.options.ruleset == "gen1_faithful",
   "hidden rulesets are excluded from the cycle")
 
@@ -316,41 +326,45 @@ check(om.game.save.options.battleLayout == "wide", "battle layout flips to WIDE"
 check(om.rows[4].value(om.game) == "WIDE", "the WIDE layout renders its label")
 om.rows[4].step(om.game, 1)
 check(om.game.save.options.battleLayout == "og", "battle layout flips back")
-om.rows[6].step(om.game, -1)
+local musicVolRow = rowById(om.rows, "musicVol")
+musicVolRow.step(om.game, -1)
 check(om.game.save.options.musicVol == 6, "music volume steps down")
-for _ = 1, 10 do om.rows[6].step(om.game, -1) end
+for _ = 1, 10 do musicVolRow.step(om.game, -1) end
 check(om.game.save.options.musicVol == 0, "music volume clamps at 0")
 
--- ZOOM / VOID FILL rows (indices shifted +1 by the PERFORMANCE row spliced
--- in ahead of COLORS)
+-- ZOOM / VOID FILL rows, looked up by id since more rows have been spliced
+-- in ahead of them over time (battleFit/battleBg/uiLayout, PERFORMANCE)
 local Zoom = require("src.render.Zoom")
 local TileRenderer = require("src.render.TileRenderer")
+local zoomRow = rowById(om.rows, "zoom")
+local voidFillRow = rowById(om.rows, "voidFill")
 om.game.save.options.zoom = 0
 Zoom.offset = 0
-check(om.rows[13].value(om.game) == "FIT", "ZOOM row shows FIT at offset 0")
-om.rows[13].step(om.game, 1)
+check(zoomRow.value(om.game) == "FIT", "ZOOM row shows FIT at offset 0")
+zoomRow.step(om.game, 1)
 check(om.game.save.options.zoom == 1 and Zoom.offset == 1,
   "ZOOM row steps to IN1")
-om.rows[14].step(om.game, 1)
+voidFillRow.step(om.game, 1)
 check(om.game.save.options.voidFill == "water"
       and TileRenderer.voidFill == "water",
   "VOID FILL row cycles TREES → WATER")
-om.rows[14].step(om.game, 1)
+voidFillRow.step(om.game, 1)
 check(om.game.save.options.voidFill == "black", "VOID FILL steps to BLACK")
-om.rows[14].step(om.game, 1)
+voidFillRow.step(om.game, 1)
 check(om.game.save.options.voidFill == "trees", "VOID FILL wraps to TREES")
 
 -- the MAX FPS row cycles the render-cap steps and shows the value plain
+local fpsCapRow = rowById(om.rows, "fpsCap")
 om.game.save.options.fpsCap = nil
-check(om.rows[16].value(om.game) == "60",
+check(fpsCapRow.value(om.game) == "60",
   "MAX FPS row defaults to 60 with no saved cap")
-om.rows[16].step(om.game, 1)
+fpsCapRow.step(om.game, 1)
 check(om.game.save.options.fpsCap == 75, "MAX FPS steps up from 60 to 75")
-check(om.rows[16].value(om.game) == "75", "the MAX FPS row renders the cap")
+check(fpsCapRow.value(om.game) == "75", "the MAX FPS row renders the cap")
 om.game.save.options.fpsCap = 160
-om.rows[16].step(om.game, 1)
+fpsCapRow.step(om.game, 1)
 check(om.game.save.options.fpsCap == 30, "MAX FPS wraps past the ceiling to 30")
-om.rows[16].step(om.game, -1)
+fpsCapRow.step(om.game, -1)
 check(om.game.save.options.fpsCap == 160, "MAX FPS wraps back down to the ceiling")
 
 -- ------- FrameCap normalize / cycle (issue #88)
@@ -380,7 +394,7 @@ check(FrameCap.current == 60, "FrameCap.applyOptions defaults a missing key to 6
 -- the MODS row is the manager's discoverable home
 local mgGame = optGame()
 om = OptionsMenu.new(mgGame)
-om.rows[18].activate(mgGame)
+rowById(om.rows, "mods").activate(mgGame)
 check(getmetatable(mgGame.stack:top()) == ManagerState,
   "the MODS row opens the manager")
 check(mgGame.stack:top().screenId == "ManagerState",
@@ -390,7 +404,7 @@ check(mgGame.stack:top().screenId == "ManagerState",
 local BindingsMenu = require("src.ui.BindingsMenu")
 local cbGame = optGame()
 om = OptionsMenu.new(cbGame)
-om.rows[19].activate(cbGame)
+rowById(om.rows, "controls").activate(cbGame)
 local bm = cbGame.stack:top()
 check(getmetatable(bm) == BindingsMenu,
   "the CONTROLS row opens the rebind list")

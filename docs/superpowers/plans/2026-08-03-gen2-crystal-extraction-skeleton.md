@@ -23,7 +23,7 @@
 
 These were confirmed by fetching real files from `https://github.com/pret/pokecrystal` (branch `master`) during planning. Re-fetch and re-confirm if pokecrystal's `master` has moved on since.
 
-**LZ3 compression** (`home/decompress.asm`, `Decompress::`): a command stream terminated by `$FF`. Each command byte: bits 5-7 = command id, bits 0-4 = `length - 1` (so stored length `n` means `n+1` actual bytes/repeats), *except* command 7 (`LZ_LONG`): the real command is bits 2-4 of that byte, and length is 10-bit (bits 0-1 of that byte as the high 2 bits, next byte as the low 8 bits), plus 1. Commands: `0`=LITERAL (copy n raw bytes), `1`=ITERATE (read 1 byte, repeat n times), `2`=ALTERNATE (read 2 bytes, alternate them for n bytes total), `3`=ZERO (write n zero bytes), `4`=REPEAT/`5`=FLIP/`6`=REVERSE (back-reference commands: read 1 more byte; if bit7 set, it's a 7-bit magnitude subtracted from the *current* output length; if bit7 clear, read one more byte and the 16-bit big-endian pair is added to the output length *at the start of the whole stream* — then copy `n` bytes forward (REPEAT), bit-flipped (FLIP), or backward (REVERSE) from that resolved source position).
+**LZ3 compression** (`home/decompress.asm`, `Decompress::`): a command stream terminated by `$FF`. Each command byte: bits 5-7 = command id, bits 0-4 = `length - 1` (so stored length `n` means `n+1` actual bytes/repeats), *except* command 7 (`LZ_LONG`): the real command is bits 2-4 of that byte, and length is 10-bit (bits 0-1 of that byte as the high 2 bits, next byte as the low 8 bits), plus 1. Commands: `0`=LITERAL (copy n raw bytes), `1`=ITERATE (read 1 byte, repeat n times), `2`=ALTERNATE (read 2 bytes, alternate them for n bytes total), `3`=ZERO (write n zero bytes), `4`=REPEAT/`5`=FLIP/`6`=REVERSE (back-reference commands: read 1 more byte; if bit7 set, the source position is `(current output length) - magnitude - 1` where `magnitude` is the low 7 bits (verified by hand-simulating the Z80 `.rewrite`/negative branch: `and %01111111 / cpl / add e / ld l,a / ld a,-1 / adc d / ld h,a` computes `HL = DE - magnitude - 1`, not `DE - magnitude` — a naive reading of "subtract the magnitude" misses the extra `-1` the `cpl`/`ld a,-1` idiom introduces); if bit7 clear, read one more byte and the 16-bit big-endian pair is added *unmodified* to the output length *at the start of the whole stream* — then copy `n` bytes forward (REPEAT), bit-flipped (FLIP), or backward (REVERSE) from that resolved source position).
 
 **Tileset struct** (`data/tilesets.asm`, `MACRO tileset`): 15 bytes — `dba` (bank + word pointer, 3 bytes each) for GFX, Meta (blockset), Coll (collision), then `dw` Anim, `dw` NULL (unused), `dw` PalMap. New Bark Town uses `TILESET_JOHTO`; its pieces are directly-addressable symbols: `TilesetJohtoGFX` (LZ3-compressed `.2bpp.lz`), `TilesetJohtoMeta` (`data/tilesets/johto_metatiles.bin`, 2048 bytes = 128 blocks × 16 bytes, 4×4 tile-id grid — byte-identical layout to Gen1's `.bst` blocksets), `TilesetJohtoColl` (`data/tilesets/johto_collision.asm`, 4 raw bytes per block — one `COLL_*` constant per quadrant/cell of the 4×4 block, *not* a flat walkable-id list like Gen1). Because the skeleton only ever needs the Johto tileset, the manifest embeds these specific symbol names directly — no need to parse/walk the `Tilesets::` table.
 
@@ -87,8 +87,8 @@ class Lz3Test(unittest.TestCase):
     def test_repeat_negative_offset(self):
         # 3 literal bytes "ABC", then REPEAT 3 bytes from offset -3
         # (back to the start of "ABC"): cmd=4<<5=0x80, length field=3-1=2 -> 0x82,
-        # offset byte with bit7 set, magnitude 3 -> 0x83
-        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x83, 0xFF])
+        # offset byte with bit7 set, magnitude 2 -> 0x82 (src = len(out)-magnitude-1 = 3-2-1 = 0)
+        data = bytes([0x02, 0x41, 0x42, 0x43, 0x82, 0x82, 0xFF])
         self.assertEqual(lz3.decompress(data), b"ABCABC")
 
     def test_repeat_positive_offset(self):
@@ -100,8 +100,9 @@ class Lz3Test(unittest.TestCase):
 
     def test_flip_bit_reverses_each_byte(self):
         # 1 literal byte 0b10110000 (0xB0), then FLIP 1 byte from offset -1
-        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x81 (bit7 set, magnitude 1)
-        data = bytes([0x00, 0xB0, 0xA0, 0x81, 0xFF])
+        # cmd=5<<5=0xA0, length field=1-1=0 -> 0xA0, offset byte 0x80 (bit7 set, magnitude 0;
+        # src = len(out)-magnitude-1 = 1-0-1 = 0, the literal byte just written)
+        data = bytes([0x00, 0xB0, 0xA0, 0x80, 0xFF])
         # 0xB0 = 0b10110000 -> bit-reversed = 0b00001101 = 0x0D
         self.assertEqual(lz3.decompress(data), bytes([0xB0, 0x0D]))
 
@@ -198,7 +199,7 @@ def decompress(data):
             offset_byte = read_byte()
             if offset_byte & 0x80:
                 magnitude = offset_byte & 0x7F
-                src = len(out) - magnitude
+                src = len(out) - magnitude - 1
             else:
                 lo = read_byte()
                 src = start_pos + ((offset_byte << 8) | lo)
@@ -292,7 +293,7 @@ eq(#zero, 4, "zero length")
 for i = 1, 4 do eq(zero[i], 0, "zero byte " .. i) end
 
 -- 3 literal bytes "ABC", then REPEAT 3 bytes from offset -3
-eqBytes(Lz3.decompress({ 0x02, 0x41, 0x42, 0x43, 0x82, 0x83, 0xFF }),
+eqBytes(Lz3.decompress({ 0x02, 0x41, 0x42, 0x43, 0x82, 0x82, 0xFF }),
   "ABCABC", "repeat negative offset")
 
 -- 3 literal bytes "XYZ", then REPEAT 3 bytes from positive offset 0x0000
@@ -300,7 +301,7 @@ eqBytes(Lz3.decompress({ 0x02, 0x58, 0x59, 0x5A, 0x82, 0x00, 0x00, 0xFF }),
   "XYZXYZ", "repeat positive offset")
 
 -- 1 literal byte 0xB0, then FLIP 1 byte from offset -1
-local flip = Lz3.decompress({ 0x00, 0xB0, 0xA0, 0x81, 0xFF })
+local flip = Lz3.decompress({ 0x00, 0xB0, 0xA0, 0x80, 0xFF })
 eqBytes(flip, string.char(0xB0, 0x0D), "flip")
 
 -- LZ_LONG: inner cmd=0 (LITERAL), 32 literal bytes
@@ -389,7 +390,7 @@ function Lz3.decompress(data)
       local src
       if bit.band(offsetByte, 0x80) ~= 0 then
         local magnitude = bit.band(offsetByte, 0x7F)
-        src = #out - magnitude
+        src = #out - magnitude - 1
       else
         local lo = readByte()
         src = startLen + bit.bor(bit.lshift(offsetByte, 8), lo)
@@ -413,7 +414,7 @@ end
 return Lz3
 ```
 
-Note: `src`/indices above are computed in 0-indexed terms then read via `out[src + i + 1]` (1-indexed table access) — `src` itself is a 0-indexed offset into the (conceptually 0-indexed) output stream, consistent with the Python version; `#out` in Lua already equals the 0-indexed "next write position," so `src = #out - magnitude` matches Python's `src = len(out) - magnitude` directly.
+Note: `src`/indices above are computed in 0-indexed terms then read via `out[src + i + 1]` (1-indexed table access) — `src` itself is a 0-indexed offset into the (conceptually 0-indexed) output stream, consistent with the Python version; `#out` in Lua already equals the 0-indexed "next write position," so `src = #out - magnitude - 1` matches Python's `src = len(out) - magnitude - 1` directly. The `- 1` matters: hand-simulating `decompress.asm`'s negative-offset branch (`and %01111111 / cpl / add e / ld l,a / ld a,-1 / adc d / ld h,a`) shows it computes `HL = DE - magnitude - 1`, not `DE - magnitude` — confirmed against real pret/pokecrystal source during Task 1's review.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -750,7 +751,7 @@ def extract_tileset(rom, symbols, out_dir, out_assets):
     compressed = rom.bytes(gfx.bank, gfx.address, 0x4000)  # generous upper bound; LZ3 stops at $FF
     raw = lz3.decompress(compressed)
     width_tiles = 16  # gfx/tilesets/johto.png is a 16-tiles-wide sheet, like Gen1 tileset sheets
-    height = len(raw) * 8 // 16 // width_tiles * 8
+    height = len(raw) // 16 // width_tiles * 8
     width = width_tiles * 8
     _write_2bpp_png(raw, width, height, os.path.join(out_assets, "tilesets", "johto.png"))
 
@@ -1460,7 +1461,182 @@ In the launcher, select the "Crystal (alpha)" tab, choose `roms/Pokemon - Crysta
 
 Compare `crystal/data/generated/maps.lua`'s `NEW_BARK_TOWN.warps` (4 entries expected) and the rendered tileset PNG against known New Bark Town structure (professor's lab, player's house, rival's house, and the routes to the west/east) — if the extracted warp count or tileset art doesn't match, work backward from which Task's byte offsets are wrong (most likely Task 4/5 Step 2b's event-row parsing or Task 3's macro assumptions) and fix that task, then re-run from Task 8 Step 1.
 
-- [ ] **Step 4: If everything above passes, update the spec's status**
+**Found during this step (real bug, not anticipated by the plan):** attempting to import Crystal crashed the launcher —
+
+```
+src/import/LauncherView.lua:54: attempt to index local 'c' (a nil value)
+```
+
+Root cause, confirmed by reading the code: `src/import/LauncherView.lua`'s tab bar is a **hardcoded array of exactly 3 game tabs** (`red`/`blue`/`yellow`, plus `mods`/`find`) at the `local tabs = { ... }` literal inside `buildHeader` (around line 565) — Task 6 only wired Crystal into `GameVersion.lua`/`RomImporter.lua`'s *import logic*, never into this separate, hand-maintained UI tab list, so there is no Crystal tab button to click at all. Separately, `RomImporter.lua:893-895` already sets `self.tab = version` on ROM drop by SHA-1 regardless of whether a tab button exists for it, so dropping the Crystal ROM flips the active tab to `"crystal"` programmatically and the (correctly data-driven) ROM-card panel then tries to render a Crystal card — hitting `local accent = version == "yellow" and "gold" or version` (line 683) → `accent = "crystal"` → `C("crystal")` → `PAL["crystal"]` is nil → crash. A second, non-crashing but still wrong bug in the same area: the "N of 3 ready" filler text (line 633) hardcodes "3", which is now wrong with 4 versions.
+
+Fix this now, before re-attempting Step 1-3:
+
+### Task 9: Wire Crystal into the launcher tab bar
+
+**Files:**
+- Modify: `src/import/LauncherView.lua`
+
+**Interfaces:**
+- Consumes: `GameVersion.ORDER` (existing, already includes `"crystal"` since Task 6).
+- No other task depends on this; it only makes the already-correct, already-data-driven ROM-card rendering (which already works for Crystal, per Task 8 Step 1's crash trace showing it *tried* to render) reachable and crash-free.
+
+- [ ] **Step 1: Add a `crystal` accent color to `PAL`**
+
+In `src/import/LauncherView.lua`, the `PAL` table (around line 30-47), add a new entry alongside `red`/`blue`/`gold` — a cyan distinct from Crystal's siblings, matching the games's own icy-blue branding:
+
+```lua
+local PAL = {
+  bg        = { 10, 15, 34 },
+  card      = { 16, 23, 48 },
+  rowBg     = { 9, 14, 34 },
+  border    = { 120, 150, 220 },
+  red       = { 255, 60, 72 },
+  blue      = { 70, 150, 255 },
+  gold      = { 255, 203, 5 },
+  crystal   = { 125, 224, 224 },
+  green     = { 62, 224, 138 },
+  -- ... (rest unchanged)
+```
+
+- [ ] **Step 2: Add a `crystal` tab to the hardcoded `tabs` array**
+
+In `buildHeader`, the `local tabs = { ... }` literal (around line 565-571), add a fourth game tab between `yellow` and `mods`:
+
+```lua
+  local tabs = {
+    { id = "red", letter = "R", col = "red", ink = "white", labelText = Strings("RED") },
+    { id = "blue", letter = "B", col = "blue", ink = "white", labelText = Strings("BLUE") },
+    { id = "yellow", letter = "Y", col = "gold", ink = "bg", labelText = Strings("YELLOW") },
+    { id = "crystal", letter = "C", col = "crystal", ink = "bg", labelText = Strings("CRYSTAL") },
+    { id = "mods", icon = imp._modsIcon, col = "chipModTop", ink = "white", labelText = Strings("MODS") },
+    { id = "find", icon = imp._findIcon, col = "chipModTop", ink = "white", labelText = Strings("FIND MODS") },
+  }
+```
+
+(`ink = "bg"` matches `yellow`'s choice — both `gold` and `crystal` are light fills where dark text reads better than white; the letter-glyph ink-color branch at line ~604 already handles `ink == "bg"` generically, so no other code changes are needed for the glyph to render legibly.)
+
+- [ ] **Step 3: Make the "N of _ ready" count dynamic**
+
+Replace the hardcoded literal (around line 633):
+
+```lua
+  label(bar, Strings("%d of 3 ready", ready), 12 * m.s + 2, C("gray"),
+    { textWrap = false })
+```
+
+with:
+
+```lua
+  local totalVersions = #GameVersion.ORDER
+  label(bar, Strings("%d of %d ready", ready, totalVersions), 12 * m.s + 2, C("gray"),
+    { textWrap = false })
+```
+
+(`Strings.get`'s `string.format(text, ...)` call already supports multiple `%d` substitutions — confirmed by reading `src/core/Strings.lua:90-113` — so this is a direct drop-in, no other `Strings` changes needed.)
+
+- [ ] **Step 4: Manually verify**
+
+There's no automated test for this file (matches the established pattern for `LauncherView.lua`, which has no test coverage anywhere in this codebase today). Verification is Task 8's own retry: run `love .` in this worktree, confirm a 4th "C" tab appears in the tab bar alongside R/B/Y, confirm the "N of 4 ready" text (not "N of 3"), and confirm dropping the Crystal ROM no longer crashes — proceed to Task 8 Step 1-3 as originally written.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/import/LauncherView.lua
+git commit -m "$(cat <<'EOF'
+Add Crystal to the launcher's tab bar and accent palette
+
+Task 6 wired Crystal into GameVersion.lua/RomImporter.lua's import
+logic, but LauncherView.lua's tab bar is a separately hand-maintained
+list that was never updated -- so there was no Crystal tab to click,
+and dropping the ROM (which sets the active tab by SHA-1 regardless)
+crashed trying to color a ROM card with a nonexistent PAL entry.
+Found during Task 8's real-ROM manual verification.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+**Found during Task 9 Step 4's retry of Task 8 (real bug, not anticipated by the plan):** pressing Play after a successful Crystal import crashes with:
+
+```
+src/core/Game.lua:388: attempt to index field 'stack' (a nil value)
+```
+
+Root cause, confirmed by reading the code: `src/core/Data.lua`'s `MODULES` list (line 8) unconditionally requires 16 generated data modules — `constants, maps, tilesets, text, text_pointers, trainer_headers, font, sprites, pokemon, moves, items, type_chart, trainers, encounters, field, battle_anims` — and `error()`s on the first one that fails to `require` (`Data.lua:209-223`). `RomExtractorGen2.lua` (Task 5) only ever writes 3 of them: `maps`, `tilesets`, `sprites` (`self:write(...)` at lines 91, 147, 206) — by design, since the spec's non-goals exclude Pokédex/moves/items/battle/text data. So `Data:load()` throws on `constants` (the first missing module), before `Game:load()` reaches `self.stack = StateStack` (`Game.lua:60`).
+
+The crash you actually see is one step downstream of that: `LauncherView.lua:211` (`RomImporter:play` → `onComplete` → `main.lua`'s `bootGame` → `Game:load()`) runs inside a `pcall` in the click-dispatch path, which swallows the `Data:load()` error silently. But `main.lua` had already set `Importer = nil` and torn down the launcher UI before the throw, so every frame afterward, `love.draw()` falls through to `Game:draw()` on a `Game` object whose `load()` never finished — producing the visible `self.stack` nil crash, repeated every frame.
+
+Fix this now, before re-attempting Task 8 Step 1-3 again:
+
+### Task 10: Make Crystal's generated cache satisfy Data:load()'s module gate, and boot straight into New Bark Town
+
+**Files:**
+- Modify: `src/import/RomExtractorGen2.lua`
+- Add: a minimal pass-through UI screen (see Step 3)
+
+**Interfaces:**
+- Consumes: `src/core/Data.lua`'s `MODULES` list (unchanged — this task supplies what it demands, it does not weaken the gate); `src/world/FieldDefaults.lua`'s `seed()` (confirmed pure fill-if-absent, safe against a Kanto-map-free dataset); `src/world/SsAnneLayout.lua`'s `apply()` (confirmed to no-op safely when `SS_ANNE_1F`/`SS_ANNE_1F_ROOMS` are absent from `maps`); `src/ui/Screens.lua`'s `push(game, id, ...)` contract (a screen module's `new(game, onDone)` calls `onDone()` after popping itself — confirmed against `src/ui/OakSpeech.lua:235,551`).
+- Produces: `crystal/data/generated/{constants,text,text_pointers,trainer_headers,font,pokemon,moves,items,type_chart,trainers,encounters,field,battle_anims}.lua`, all minimal-but-valid-shaped stubs; a `field.lua` whose `boot` table points spawn at New Bark Town and skips the Oak-speech-equivalent starter-selection screen.
+
+Confirmed safe by reading the source directly (do not re-derive from scratch, but do verify nothing has drifted before relying on it):
+- `Data:seedDefaults()` (`Data.lua:92-148`) only additively fills gaps (`CONSTANT_DEFAULTS`, `BOOT_DEFAULTS`, `FieldDefaults.seed`) and computes `constants.dexSize` by scanning `self.pokemon` (safe at 0 entries → `dexSize = 0`, `dexDigits = 3`).
+- `Data:seedCinnabarGymTrainerHeaders` / `Data:seedFightingDojoKarateMaster` only require `self.trainer_headers` to be a non-nil table; they add a couple of inert Kanto-only keys to it that nothing Crystal-related ever reads. Harmless, not worth special-casing.
+- `src/render/Font.lua`'s `Font.load(data)` (`Font.lua:38-86`) tolerates `data.font = {}` cleanly (`pagesOf`, `def.charmap or {}`, `def.border or {}` all degrade to empty) — no glyphs render, which is fine since this skeleton shows no text/dialogue.
+
+Not yet confirmed — **verify against source, do not guess**, before writing the corresponding stub or wiring:
+- Whether `src/ui/TitleState.lua` and the splash screens (`src/ui/IntroMovie.lua`, whatever `bootScreens(self).splash` defaults to) touch any `Data` field beyond what's already stubbed. If they do, either extend the relevant stub or override `field.boot.screens.splash`/`.title` too — do not add Crystal-branded splash/title art; a generic/inert screen is in scope, custom presentation is not.
+- The exact New Bark Town spawn tile: read the already-generated `crystal/data/generated/maps.lua` (from Task 8's completed import) and pick a coordinate known walkable — e.g. one of `NEW_BARK_TOWN.warps[i]`'s own `(x, y)`, which is guaranteed walkable since that's where a warp lands the player. Do not invent a coordinate without checking it against the real extracted map.
+
+- [ ] **Step 1: Write minimal stub content for the 13 modules `RomExtractorGen2` doesn't otherwise produce**
+
+In `src/import/RomExtractorGen2.lua`, alongside the existing `self:write("maps", ...)` / `self:write("tilesets", ...)` / `self:write("sprites", ...)` calls, add `self:write(name, {})` for `constants`, `text`, `text_pointers`, `trainer_headers`, `font`, `pokemon`, `moves`, `items`, `type_chart`, `trainers`, `encounters`, `battle_anims` — bare empty tables satisfy `Data:load()`'s `require` gate and every downstream read site this task's research confirmed tolerates emptiness. Do not invent placeholder entries (fake species, fake moves) — an empty table is the honest representation of "not extracted yet," matching the spec's stated non-goals.
+
+`field` is not in that bare-empty list — it needs real content, in Step 2.
+
+- [ ] **Step 2: Stamp `field.boot` to spawn in New Bark Town and skip starter selection**
+
+Still in `RomExtractorGen2.lua`, write a `field` module (`self:write("field", { boot = { ... } })`) with:
+- `startMap = "NEW_BARK_TOWN"`, `startX`/`startY` = the verified walkable coordinate from this task's research above, `startFacing = "down"`.
+- `screens = { newGame = "<the no-op screen id from Step 3>" }` — leave `splash`/`title` on the `BOOT_DEFAULTS` fallback unless Step 1's source-reading above found a reason they need overriding too.
+
+Everything else in `BOOT_DEFAULTS` (`playerName`, `rivalName`, `startMoney`, `namePresets`) is filled in for free by `Data:seedDefaults`'s fill-if-absent pass — do not duplicate those keys.
+
+- [ ] **Step 3: Add a no-op "no starter selection" screen**
+
+`Screens.push` has no built-in skip sentinel (`Screens.lua:43-63` always resolves an id and instantiates it) — `field.boot.screens.newGame` must name a real screen module. Add one (naming and exact location at the implementer's discretion, e.g. `src/ui/NoOpScreen.lua`) matching `OakSpeech.new(game, onDone)`'s contract: pop itself and call `onDone()`, with no starter selection, no dialogue, no other side effect. Confirm by reading `OakSpeech.lua` fully (not skimming) that this is the complete contract a caller depends on — `Game:makeTitleState`'s `onNewGame` (`Game.lua:139-153`) already pushes `OverworldState` before pushing this screen on top, so once this screen pops itself the player is standing in New Bark Town.
+
+- [ ] **Step 4: Manually verify**
+
+No automated test covers this (real-ROM boot, like Task 8, is manual-only per the spec's own Testing section). Run `love .`, select Crystal, import if needed, press Play, press NEW GAME at the title screen. Expected: no crash, no starter-selection screen, player spawns standing in New Bark Town on a walkable tile — then proceed to Task 8 Step 2-3's visual/collision/warp-count checks as originally written.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/import/RomExtractorGen2.lua src/ui/<the-new-screen-file>.lua
+git commit -m "$(cat <<'EOF'
+Make Crystal's generated cache satisfy Data:load()'s module gate
+
+Data:load() requires 16 generated modules; RomExtractorGen2 only
+wrote 3 (maps, tilesets, sprites), so Data:load() threw on the
+missing 'constants' module every time -- silently swallowed by
+LauncherView's click-dispatch pcall, surfacing only as a nil
+self.stack crash in Game:draw one frame later. Stub the other 13
+with empty tables (all confirmed tolerant of emptiness by reading
+Data.lua, FieldDefaults.lua, SsAnneLayout.lua, and Font.lua directly)
+and stamp field.boot to spawn in New Bark Town through a no-op
+screen instead of Gen1's species-driven Oak speech.
+
+Found during Task 9's retry of Task 8's manual verification.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+- [ ] **Step 6: If everything above passes, update the spec's status**
 
 Edit `docs/superpowers/specs/2026-08-03-gen2-crystal-extraction-skeleton-design.md`'s `Status:` line from "approved for planning" to "skeleton verified against real ROM, <today's date>", and commit:
 

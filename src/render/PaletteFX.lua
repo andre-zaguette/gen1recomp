@@ -21,6 +21,33 @@ local shader -- false = unavailable (headless / no shader support)
 local gbcPack -- false = missing; nil = not loaded yet
 local yellowPack -- false = missing; nil = not loaded yet
 
+-- Crystal's real-color pack reads live, per-session ROM-extracted data
+-- (unlike RED++'s static committed pack below, which is fully self-
+-- contained), so it needs a reference to the current Game.data -- set
+-- once at boot (src/core/Game.lua, alongside Font.load(Data)).
+local activeData = false
+local crystalPackCache, crystalPackBucket
+
+function PaletteFX.setData(data)
+  activeData = data
+  crystalPackCache, crystalPackBucket = nil, nil
+end
+
+-- Crystal's own morn/day/nite boundaries (engine/rtc/rtc.asm,
+-- constants/misc_constants.asm: MORN_HOUR=4, DAY_HOUR=10, NITE_HOUR=18).
+-- hour is an optional 0-23 override (tests pass one directly, matching
+-- this project's existing os.time()-injection convention -- see
+-- src/mods/ModIndex.lua's `now = now or os.time()`); omitted, this reads
+-- the host's real-world clock, mirroring how a real GBC cartridge's RTC
+-- (battery-backed, free-running on real elapsed time) works, not a
+-- simulated or saved in-game clock.
+function PaletteFX.timeOfDay(hour)
+  hour = hour or os.date("*t").hour
+  if hour >= 4 and hour < 10 then return "morn" end
+  if hour >= 10 and hour < 18 then return "day" end
+  return "nite"
+end
+
 -- Cycle order matches OptionsMenu / hotkey 2.  The three real colorizations
 -- come first (OG RED/BLUE/YELLOW = GBC hardware, SGB = per-map Super Game Boy,
 -- ADVANCED = pokered-gbc per-tile), then the DMG-shade novelty modes.
@@ -59,6 +86,21 @@ function PaletteFX.darkWorld() return darkWorld end
 
 -- cache-key suffix for anything baked under the dark shift
 function PaletteFX.darkKey() return darkWorld and "#dark" or "" end
+
+-- cache-key suffix identifying which bake variant gbcPack() would currently
+-- resolve to.  Empty for every non-Crystal version -- RED++'s pack is one
+-- static, session-long table (no per-bucket variance), so Gen1's cache keys
+-- are completely unaffected.  For Crystal, gbcPack() itself varies by
+-- time-of-day bucket (morn/day/nite), so anything caching a Crystal bake
+-- (TileRenderer's gbcAtlasCache in particular) needs that bucket folded into
+-- its key too, the same way darkKey() folds in the dark-cave shift -- without
+-- it, a checkTimeOfDay() bucket crossing clears every OTHER Crystal cache
+-- (SpriteRenderer, MapLoader) but this one keeps serving the stale,
+-- previous-bucket image forever.
+function PaletteFX.packKey()
+  if not GameVersion.isCrystal() then return "" end
+  return "#" .. PaletteFX.timeOfDay()
+end
 
 -- FadePal2 sets rOBP0 = `dc 3,3,3,2` as well as rBGP, so EVERY OBJ colour a
 -- sprite can carry lands on shade 3: the player, trainers and item balls are
@@ -285,8 +327,60 @@ function PaletteFX.whole(colors)
   return PaletteFX.zone(colors, 0, 0, 19, 17)
 end
 
--- Red++ / pokered-gbc SuperPalette pack (committed; optional if absent).
-function PaletteFX.gbcPack()
+-- Red++ / pokered-gbc SuperPalette pack (committed; optional if absent) --
+-- OR, for Crystal, the player's own ROM-extracted real color data,
+-- resolved to the current (or test-injected) time-of-day bucket.  Every
+-- consumer of this function (hasWorldTileset/worldGroupAt/
+-- worldGroupColors/spriteObp below) reads whatever shape it returns
+-- without caring which branch produced it -- Crystal's pack just needs
+-- the same {world = {tileGroups, groupColors, roofGroup, spriteAssignment,
+-- spritePalettes}} shape RED++'s does.
+--
+-- bucket is an optional override (tests pass one directly); omitted,
+-- reads PaletteFX.timeOfDay()'s real-clock bucket.  Cached per bucket so
+-- repeated calls within one frame (many tiles share this) don't rebuild
+-- the wrapper table -- setData/checkTimeOfDay clear the cache when it's
+-- actually stale.
+--
+-- Cache check comes before any clock read: this is a per-tile hot path
+-- (worldGroupAt/worldGroupColors/hasWorldTileset/spriteObp below all call
+-- this with no bucket argument, once per tile during an atlas bake), so
+-- an os.date() call on every hit would be pure per-tile waste.  When
+-- bucket is omitted and something is already cached, that cache is
+-- trusted outright -- PaletteFX.checkTimeOfDay is the sole authority that
+-- clears crystalPackCache on an actual morn/day/nite crossing (and does
+-- so synchronously, before the reload it triggers can call back in here),
+-- so nothing here can go stale between crossings without also going
+-- through that invalidation.  An explicit bucket (tests) that already
+-- matches what's cached also needs no clock read.  Only a genuine cache
+-- miss (first call this session, or right after setData/checkTimeOfDay
+-- cleared it) or an explicit *different* bucket override falls through to
+-- resolving/rebuilding below.
+function PaletteFX.gbcPack(bucket)
+  if GameVersion.isCrystal() then
+    local paletteData = activeData and activeData.palettes
+    if not paletteData then return nil end
+    if crystalPackCache and (bucket == nil or bucket == crystalPackBucket) then
+      return crystalPackCache
+    end
+    bucket = bucket or PaletteFX.timeOfDay()
+    local byTime = paletteData.byTime[bucket] or paletteData.byTime.day
+    crystalPackCache = { world = {
+      tileGroups = { TILESET_JOHTO = paletteData.tileGroups },
+      groupColors = { TILESET_JOHTO = byTime.groupColors },
+      -- Crystal has no Gen1-style route/town roof-recolor exception; an
+      -- empty (not nil) table makes worldGroupColors' `w.roofGroup[tileset]`
+      -- index resolve to nil safely instead of erroring on a missing table.
+      roofGroup = {},
+      -- Chris is the only overworld sprite this skeleton extracts, always
+      -- resolving to spritePalettes' one entry (see spriteObp's
+      -- ChrisSpriteGFX case below).
+      spriteAssignment = { [0] = 0 },
+      spritePalettes = { [0] = byTime.spriteColor },
+    } }
+    crystalPackBucket = bucket
+    return crystalPackCache
+  end
   if gbcPack == nil then
     local ok, pack = pcall(require, "data.palettes_gbc")
     gbcPack = ok and pack or false
@@ -304,9 +398,20 @@ function PaletteFX.yellowPack()
   return yellowPack or nil
 end
 
+-- The Crystal half is also gated on gbcPack() actually resolving: an old
+-- Crystal cache built before this plan landed (or the dev-only Python
+-- extraction path, which produces no palettes at all) has Game.data.palettes
+-- absent, so gbcPack()'s Crystal branch returns nil.  Without this guard,
+-- true here regardless would still send SpriteRenderer/TileRenderer down
+-- the usesGbcPack() branch, which then gets nil back from spriteObp/
+-- worldGroupColors and falls back to the RAW, fully-opaque sprite sheet
+-- (an opaque box behind every character) instead of the DMG-shaded bake
+-- the final `else` branch would have produced -- worse than not having
+-- this whole feature at all.  gbcPack() does not call usesGbcPack(), so
+-- this cannot recurse.
 function PaletteFX.usesGbcPack(mode)
   mode = mode or PaletteFX.mode
-  return mode == "redpp"
+  return mode == "redpp" or (GameVersion.isCrystal() and PaletteFX.gbcPack() ~= nil)
 end
 
 -- Yellow's authentic GBC look is CGBBasePalettes (per-map), not a boot-ROM
@@ -394,7 +499,22 @@ end
 
 -- Active named-palette table for COLORS: RED++ uses data/palettes_gbc.lua,
 -- everything else uses the ROM-imported data.palettes.
+--
+-- Crystal has no SGB-style named-palette system at all (no SuperPalettes,
+-- no per-species mon_palettes) -- every caller below (pal/monPal/
+-- monPalName, plus BattleState's blackImage/sgbBattlePals/colorMode)
+-- expects whatever this returns to carry `.palettes`/`.pokemon` fields.
+-- gbcPack() for Crystal instead returns the {world = {...}} per-tile shape
+-- (a different contract, consumed directly by hasWorldTileset/
+-- worldGroupAt/worldGroupColors/spriteObp, never through pack()), and
+-- Crystal's own data.palettes is {tileGroups, byTime} -- neither shape
+-- has `.palettes`/`.pokemon`, so returning either here would crash every
+-- caller.  Short-circuit to nil instead: every caller already treats a
+-- nil pack as "no named colorization available" and degrades safely
+-- (pal/monPal/monPalName return nil/MEWMON, BattleState leaves images
+-- unrecolored and disables its color-battle path).
 function PaletteFX.pack(data)
+  if GameVersion.isCrystal() then return nil end
   if PaletteFX.usesGbcPack() then
     local g = PaletteFX.gbcPack()
     if g then return g end
@@ -435,7 +555,16 @@ end
 -- everything a background tile drew.  Objects do not come through here
 -- (they bake GBC_OBJ), so this stays a BG-only hook.
 -- OG YELLOW instead resolves each name through CGBBasePalettes.
+--
+-- Crystal doesn't participate in the COLORS option at all (see pack()'s own
+-- guard above), but PaletteFX.mode is a single shared save-wide value -- a
+-- player could have "og red" saved from an earlier Gen1 playthrough and boot
+-- straight into Crystal with it still set.  Without this guard the `ogred`
+-- branch just below would short-circuit a Crystal UI element to Gen1's red
+-- boot-ROM palette instead of leaving it to real per-tile color / no
+-- named-palette colorization, exactly the leak pack() already closed.
 function PaletteFX.pal(data, name)
+  if GameVersion.isCrystal() then return nil end
   if PaletteFX.mode == "ogred" and not GameVersion.isYellow() then
     return PaletteFX.ogBg()
   end
@@ -532,7 +661,12 @@ function PaletteFX.monPalName(data, species, transformed)
   end
   local p = PaletteFX.pack(data)
   if p and p.pokemon[species] then return p.pokemon[species] end
-  if data and data.palettes and data.palettes.pokemon[species] then
+  -- Crystal's data.palettes is {tileGroups, byTime} (Task 3's shape, no
+  -- `.pokemon` map at all), so this chain needs the same nil-check on
+  -- `.pokemon` itself that romNamedPal above already does for `.palettes` --
+  -- without it, `data.palettes.pokemon[species]` indexes a nil field.
+  if data and data.palettes and data.palettes.pokemon
+     and data.palettes.pokemon[species] then
     return data.palettes.pokemon[species]
   end
   return "MEWMON"
@@ -677,7 +811,8 @@ function PaletteFX.spriteObp(spriteDef, seed)
   -- SpriteSheetPointerTable, so their source has no bracketed index;
   -- they wear the player's OBP palette (spriteAssignment[0]).
   if not idx and (src:find("RedBikeSprite", 1, true)
-                  or src:find("SurfingPikachuSprite", 1, true)) then
+                  or src:find("SurfingPikachuSprite", 1, true)
+                  or src:find("ChrisSpriteGFX", 1, true)) then
     idx = 0
   end
   local group = idx and w.spriteAssignment[idx]
@@ -781,6 +916,34 @@ function PaletteFX.setMode(mode)
   end
 end
 
+-- Crystal only: detects a real-world morn/day/nite boundary crossing
+-- while already in-game, and forces the same invalidate-and-reload
+-- setMode already does for a COLORS change, so the visible palette
+-- updates without restarting.  Cheap to call every frame -- os.date is
+-- the only work done once the bucket hasn't changed; the (comparatively
+-- expensive) atlas rebake only happens on an actual crossing.
+local lastCrystalBucket
+function PaletteFX.checkTimeOfDay()
+  if not GameVersion.isCrystal() then return end
+  local bucket = PaletteFX.timeOfDay()
+  if lastCrystalBucket == nil then
+    lastCrystalBucket = bucket
+    return
+  end
+  if bucket == lastCrystalBucket then return end
+  lastCrystalBucket = bucket
+  crystalPackCache, crystalPackBucket = nil, nil
+  pcall(function() require("src.battle.BattleState").invalidate() end)
+  pcall(function() require("src.render.SpriteRenderer").invalidate() end)
+  pcall(function()
+    require("src.world.MapLoader").invalidateAll()
+    local Game = require("src.core.Game")
+    if Game.overworld and Game.overworld.map and Game.overworld.reloadMap then
+      Game.overworld:reloadMap(Game.overworld.map.id, "timeOfDay")
+    end
+  end)
+end
+
 function PaletteFX.cycleMode()
   local cur = PaletteFX.mode or "gbc"
   local idx = 1
@@ -807,7 +970,20 @@ end
 -- When a state exposes no SGB zones but COLORS needs a forced palette
 -- (OG / OG INV / CLASSIC), invent a whole-screen zone so the shade-remap
 -- shader still runs.  GBC / RED++ / GBC INV leave nil alone (raw DMG canvas).
+--
+-- Crystal renders real per-tile color through the usesGbcPack() atlas path
+-- (TileRenderer/SpriteRenderer), never the SGB zone/shade-remap machinery at
+-- all -- an empty zone list from a Crystal state means "already true-color,
+-- nothing here needs shade-remapping" (see OverworldState:sgbWorldZones),
+-- not "nothing colored this, please invent a zone."  This function is keyed
+-- on PaletteFX.mode alone, which Crystal never touches (it doesn't
+-- participate in the COLORS option), so a player who happens to have
+-- og/og_inv/classic saved from a Gen1 playthrough would otherwise get
+-- Crystal's real color painted over with an unrelated whole-screen DMG
+-- shade-remap.  Bail out first whenever real per-tile color is already
+-- active.
 function PaletteFX.ensureZones(zones)
+  if PaletteFX.usesGbcPack() then return zones end
   if zones and zones[1] then return zones end
   local mode = PaletteFX.mode or "gbc"
   if mode == "og" or mode == "og_inv" or mode == "classic" then

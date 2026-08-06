@@ -367,7 +367,7 @@ function OverworldState:setMap(mapId, x, y, facing, opts)
     self.player.moving = false
     self.player.targetX, self.player.targetY = nil, nil
   else
-    self.player = Player.new(Game.data, x, y, facing)
+    self.player = Player.new(Game.data, x, y, facing, Game.save)
   end
   -- boot only: the original persists the surf state.  wWalkBikeSurfState
   -- (ram/wram.asm) lives inside wMainDataStart..wMainDataEnd, which
@@ -850,6 +850,7 @@ function OverworldState:updateParallel()
 end
 
 function OverworldState:update(dt)
+  PaletteFX.checkTimeOfDay()
   -- deferred cutscene launch (see queueScript): run a queued script only
   -- once the triggering warp's transition has finished, its runner has gone
   -- dead, and no scripted walk is mid-step.  This is how the HALL_OF_FAME

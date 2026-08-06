@@ -82,6 +82,15 @@ local WIRED = { -- 1-based trade index -> port flag
 -- (init.lua's registry MERGES talk tables in place, so the same script
 -- rows are reachable through several story/flavor modules -- dedupe by
 -- map + text constant, which is what the player can actually reach)
+--
+-- A single trade index CAN legitimately appear twice within the SAME map:
+-- Route 18 Gate 2F wires both TEXT_ROUTE18GATE2F_YOUNGSTER (Red) and
+-- TEXT_ROUTE18GATE2F_COOK (Yellow) to trade index 6, because Red maps
+-- have no COOK object and Yellow maps have no YOUNGSTER -- only one NPC
+-- is ever actually reachable on a given version (#651, story5.lua,
+-- tests/parity_yellow_route18_gate_trade.lua).  So "wired by only one
+-- NPC" only flags a real bug when the SAME index shows up under two
+-- DIFFERENT maps.
 local seen, sites = {}, {}
 for _, modname in ipairs({ "data.scripts.story", "data.scripts.story2",
                            "data.scripts.story3", "data.scripts.story4",
@@ -98,9 +107,9 @@ for _, modname in ipairs({ "data.scripts.story", "data.scripts.story2",
               check(WIRED[idx] == flag,
                     ("%s/%s: trade %s pairs with %s"):format(
                       mapId, const, tostring(idx), tostring(flag)))
-              check(not seen[idx],
+              check(not seen[idx] or seen[idx] == mapId,
                     ("trade index %s wired by only one NPC"):format(tostring(idx)))
-              seen[idx] = true
+              seen[idx] = mapId
             end
           end
         end
@@ -116,9 +125,9 @@ check(not seen[3], "unused CHIKUCHIKU trade (index 3) stays unwired")
 -- === harness: run a talk script headless, recording show_text ids ===
 local shown = {}
 local origShow = Commands.show_text
-Commands.show_text = function(ctx, textId, subs)
+Commands.show_text = function(ctx, textId, subs, extraOpts)
   table.insert(shown, textId)
-  return origShow(ctx, textId, subs)
+  return origShow(ctx, textId, subs, extraOpts)
 end
 
 -- pressFn returns the Input.pressed table for this frame (default: A)

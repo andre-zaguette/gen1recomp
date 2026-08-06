@@ -89,11 +89,25 @@ local importer = setmetatable({
   _padCursor = { x = 0, y = 0 }, _padCursorActive = false,
   _padAxis = { leftx = 0, lefty = 0, righty = 0 },
   _padDir = {}, _rawHatDirs = {}, _padInited = true,
+  -- The FlexLove migration made gamepadpressed's "a" case dispatch through
+  -- LauncherView.clickAt (hit-testing the FlexLove tree) instead of calling
+  -- self:mousepressed directly -- RomImporter:mousepressed is now an
+  -- intentional no-op (#553). _flex is what RomImporter:draw's ensureFlex
+  -- sets before any input can reach the view; flag it the same way here.
+  _flex = true,
 }, RomImporter)
 local clicked = false
-function importer:mousepressed(_, _, button)
-  clicked = button == 1
-end
+-- RomImporter requires src.import.LauncherView lazily, at call time, so
+-- pre-seeding package.loaded here intercepts that require with a stub and
+-- keeps this file's promise of running standalone under plain luajit --
+-- the real LauncherView pulls in FlexLove, which pulls in a UTF-8 module
+-- that errors under luajit without the luarocks 'luautf8' package installed.
+local savedLauncherView = package.loaded["src.import.LauncherView"]
+package.loaded["src.import.LauncherView"] = {
+  clickAt = function(imp, x, y)
+    if imp == importer then clicked = true end
+  end,
+}
 importer:joystickaxis(nil, 1, -0.8)
 check(importer._padAxis.leftx == -0.8,
   "raw joystick left axis reaches the launcher cursor")
@@ -108,6 +122,7 @@ check(clicked, "raw joystick primary button clicks the launcher cursor")
 clicked = false
 importer:joystickpressed(mapped, 1)
 check(not clicked, "mapped pad does not double-click the launcher cursor")
+package.loaded["src.import.LauncherView"] = savedLauncherView
 
 -- Drivers that only inject pressQueue still get a one-step hold.
 Input:reset()

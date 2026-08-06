@@ -44,6 +44,7 @@ local function withWhiteOf(pal, ref)
 end
 
 function TitleState:sgbPalettes(game)
+  if self.crystalLayout then return nil end
   local P = require("src.render.PaletteFX")
   local z
   if self.yellowLayout then
@@ -161,6 +162,24 @@ function TitleState.new(game, opts)
   self.yellowBubble = self.yellow and tryImage(imagePath(title.pikaBubble)
     or "assets/generated/title/pika_bubble.png") or nil
   self.yellowLayout = self.yellow and self.yellowPikachu ~= nil
+  self.crystal = GameVersion.isCrystal()
+  self.suicuneSheet = self.crystal and tryImage(imagePath(title.suicune)
+    or "assets/generated/title/suicune.png") or nil
+  self.crystalOrnament = self.crystal and tryImage(imagePath(title.crystalOrnament)
+    or "assets/generated/title/crystal.png") or nil
+  self.crystalLayout = self.crystal and self.suicuneSheet ~= nil
+  if self.crystalLayout then
+    -- title.asm boot: hSCX starts at 112 (off-screen right / logo band's
+    -- alternating-line wipe) and the falling crystal ornament starts at
+    -- y=-0x22, both animating in over the same ~28-frame entrance (see
+    -- TitleScreenEntrance/AnimateTitleCrystal in engine/menus/intro_menu.asm
+    -- and engine/movie/title.asm).
+    self.entranceSCX = 112
+    self.ornamentY = -0x22
+    self.phase = "entrance"
+    self.suicuneFrame = 1
+    self.suicuneFrameTimer = 0
+  end
   if self.yellowLayout then
     -- title.asm boot: hSCY starts at $40 with the logo parked above the
     -- viewport; .bouncePokemonLogoLoop drops it in with an overshoot
@@ -175,7 +194,9 @@ function TitleState.new(game, opts)
     self.showBubble = false
     self.blinkTimer = 0
     self.blinkAt = nil
-  else
+  elseif not self.crystalLayout then
+    -- crystalLayout already set self.phase = "entrance" above; don't
+    -- clobber it back to "loop" here.
     self.phase = "loop"
     self.showBubble = true
   end
@@ -195,8 +216,10 @@ end
 function TitleState:enter()
   -- Yellow defers the title theme until after the logo drop and
   -- Pikachu's cry (title.asm plays MUSIC_TITLE_SCREEN only after
-  -- WaitForSoundToFinish on PikachuCry1)
-  if self.yellowLayout then return end
+  -- WaitForSoundToFinish on PikachuCry1); Crystal defers it the same way
+  -- until the entrance wipe/falling ornament land (see :update's
+  -- crystalLayout branch, which calls startMusic itself at that point).
+  if self.yellowLayout or self.crystalLayout then return end
   self:startMusic()
 end
 
@@ -417,6 +440,27 @@ function TitleState:update(dt)
     end
     return
   end
+  if self.crystalLayout then
+    if self.phase == "entrance" then
+      self.entranceSCX = math.max(0, self.entranceSCX - 4) -- 112 -> 0 over 28 frames
+      self.ornamentY = math.min(6, self.ornamentY + 2) -- -0x22 -> 6, +2px/frame
+      if self.entranceSCX == 0 and self.ornamentY >= 6 then
+        self.phase = "loop"
+        self:startMusic()
+      end
+      return -- input ignored until the entrance lands, matching Yellow's cinematic gate
+    end
+    self.suicuneFrameTimer = self.suicuneFrameTimer + 1
+    if self.suicuneFrameTimer >= 8 then -- SuicuneFrameIterator: one advance every 8 frames
+      self.suicuneFrameTimer = 0
+      self.suicuneFrame = self.suicuneFrame % 4 + 1
+    end
+    local input = self.game.input
+    if input:wasPressed("start") or input:wasPressed("a") then
+      self:openMenu()
+    end
+    return
+  end
   self.timer = self.timer + 1
   self.blink = (self.blink + 1) % 60
   if not self.yellowLayout and self.timer >= CYCLE_FRAMES then
@@ -454,7 +498,10 @@ function TitleState:draw()
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.rectangle("fill", 0, 0, 160, 144)
   local scrollY = self.yellowLayout and -(self.scy or 0) or 0
-  if self.logo then
+  if self.crystalLayout then
+    -- crystalLayout draws its own logo below, in wipe-in strips -- skip
+    -- this generic single-shot draw/fallback-text path entirely.
+  elseif self.logo then
     love.graphics.draw(self.logo, 16, 8 + scrollY)
   else
     love.graphics.setColor(0, 0, 0, 1)
@@ -476,6 +523,65 @@ function TitleState:draw()
     if overlay then
       -- the eye OAM band sits at (56,80) on the landed screen
       love.graphics.draw(overlay, 32 + 24, 64 + 16 + dy)
+    end
+  elseif self.crystalLayout then
+    -- TitleScreenEntrance: the logo wipes in from alternating sides per
+    -- row-pair (the "interlaced" effect) -- draw the logo in 8px-tall
+    -- strips, odd/even strips offset in opposite directions, both
+    -- converging on 0 as self.entranceSCX counts down to 0.
+    -- The crystal ornament sprite is drawn first (behind), then the logo
+    -- on top: real hardware draws the ornament OAM with OAM_PRIO set,
+    -- which sits behind the background's ink but in front of its blank
+    -- (color-0) pixels. extractTitle() now decodes the logo with
+    -- transparent=true so its blank areas have alpha=0, letting the
+    -- ornament drawn underneath show through the gaps while the logo's
+    -- opaque ink still fully covers it -- matching that layering instead
+    -- of painting the crystal over the finished logo.
+    if self.crystalOrnament then
+      love.graphics.draw(self.crystalOrnament, 56, self.ornamentY)
+    end
+    if self.logo then
+      local iw, ih = self.logo:getDimensions()
+      local stripH = 8
+      -- title.asm's own DrawTitleGraphic call draws the logo at
+      -- hlcoord 0,3 -> pixel (0,24), height 7 tiles (56px) -- NOT Gen1's
+      -- (16,8) TitleScreen_PlacePokemonLogo position.  Only 7 of the
+      -- decoded sheet's 8 tile-rows are the logo: the 8th (y=56-63) is
+      -- the copyright-text glyph strip, drawn separately by title.asm's
+      -- second DrawTitleGraphic call onto a different BG map at a
+      -- different screen position (confirmed by the tile-index math:
+      -- the logo call consumes tiles $80..$80+139, and $80+140 wraps
+      -- (mod 256) to $0C, exactly the copyright call's own base tile --
+      -- i.e. it continues reading the same decompressed buffer right
+      -- where the logo's 7 rows left off).  This engine already draws
+      -- the copyright line as text via Font.draw at the bottom of
+      -- :draw, so only these first 7 rows belong here.
+      local logoRows = math.min(ih, 56)
+      for y = 0, logoRows - 1, stripH do
+        local dir = ((y / stripH) % 2 == 0) and 1 or -1
+        local dx = dir * self.entranceSCX
+        love.graphics.draw(self.logo,
+          love.graphics.newQuad(0, y, iw, math.min(stripH, logoRows - y), iw, ih),
+          dx, 24 + y)
+      end
+    end
+    if self.phase == "loop" and self.suicuneSheet then
+      -- SuicuneFrameIterator's .Frames table selects one of 4 fixed
+      -- frames from the decoded 128x128 sheet every 8 frames.  The sheet
+      -- is a 2x2 grid of 64x64 tile-blocks (vTiles3/vTiles5 each cover an
+      -- 8x8-tile VRAM region), but the actual running-Suicune art only
+      -- fills the top 48px of each 64px-tall block -- the bottom 16px of
+      -- every block is blank padding.  Verified against the real decoded
+      -- suicune.png (Task 2's extractTitle output): a naive tightly-packed
+      -- 64x48 grid (y=0/48) crops the legs off frames 3-4; the real second
+      -- row of frames starts at y=64, not y=48.
+      local frameQuads = {
+        love.graphics.newQuad(0, 0, 64, 48, 128, 128),
+        love.graphics.newQuad(64, 0, 64, 48, 128, 128),
+        love.graphics.newQuad(0, 64, 64, 48, 128, 128),
+        love.graphics.newQuad(64, 64, 64, 48, 128, 128),
+      }
+      love.graphics.draw(self.suicuneSheet, frameQuads[self.suicuneFrame], 48, 96)
     end
   else
     -- Yellow's Version_GFX slot holds a leftover "Blue Version" ribbon

@@ -73,6 +73,7 @@ local VERSION_REQUIRED_FILES = {
     "assets/generated/battle/profoakb.png",
     "assets/generated/pikachu/pikapic_1.png",
   },
+  crystal = { "assets/generated/fonts/font.png" },
 }
 
 -- "Split-screen ROM selector" first-run palette (matches the FirstRun mockup):
@@ -873,9 +874,13 @@ function RomImporter:startData(data, displayName)
     self:setError("The selected file could not be read.")
     return
   end
-  if #data ~= 1024 * 1024 then
-    self:setError(("Expected a 1 MiB Game Boy ROM; this file is %.2f MiB.")
-      :format(#data / 1024 / 1024))
+  local validSizes = {}
+  for _, version in ipairs(GameVersion.ORDER) do
+    validSizes[GameVersion.info(version).romSize] = true
+  end
+  if not validSizes[#data] then
+    self:setError(("Expected a 1 MiB Game Boy ROM or 2 MiB Game Boy Color ROM; "
+      .. "this file is %.2f MiB."):format(#data / 1024 / 1024))
     return
   end
   local actualHash = sha1(data)
@@ -917,7 +922,9 @@ function RomImporter:startData(data, displayName)
     CacheFs.remove(MARKER_PATH)
 
     local manifest = decodeManifest(version)
-    local RomExtractor = require("src.import.RomExtractor")
+    local extractorModule = info.extractor == "gen2"
+      and "src.import.RomExtractorGen2" or "src.import.RomExtractor"
+    local RomExtractor = require(extractorModule)
     local extractor = RomExtractor.new(self.romData, manifest,
       function(progress, total, stage, current, stageTotal)
         self.status = stage
