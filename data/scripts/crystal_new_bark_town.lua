@@ -7,9 +7,14 @@
 -- caught spying by the lab before the player has even met Elm. ROM: he only
 -- disappears from here once MrPokemonsHouse.asm's errand-return script sets
 -- that flag, right before the player crosses paths with him elsewhere on
--- the way back -- that whole errand doesn't exist in this project yet, so
--- for now he just stays put rather than vanishing with nothing to replace
--- him.
+-- the way back. That errand now exists (data/scripts/crystal_mr_pokemons_
+-- house.lua's TEXT_MRPOKEMONSHOUSE_GENTLEMAN, its completion tail) and is
+-- what actually makes him vanish, via a cross-map
+-- hide_object("NEW_BARK_TOWN", "NEWBARKTOWN_RIVAL") call from that script
+-- (Commands.lua's toggleObject persists to save.objectToggles regardless
+-- of which map is currently loaded, and OverworldController.lua:85 reads
+-- it back when NEW_BARK_TOWN's NPC list is built) -- nothing needs wiring
+-- here in his own file for that half of the behavior.
 
 -- object index within NEW_BARK_TOWN's object list (object_const_def order
 -- in NewBarkTown.asm: NEWBARKTOWN_TEACHER, _FISHER, _RIVAL)
@@ -36,10 +41,12 @@ return {
     -- ROM: NewBarkTownRivalScript. After the two lines of dialogue the real
     -- script shoves the player one tile south (playsound SFX_TACKLE) and
     -- retreats the rival one tile east before he vanishes for good (his
-    -- flag gets set at Mr. Pokémon's house right after). This project has
-    -- no trigger to make him vanish yet (#8's known gap), so he stays put
-    -- and stays interactable -- retreating him a permanent tile every talk
-    -- would walk him off his post a little further each time.
+    -- flag gets set at Mr. Pokémon's house right after, not here). This
+    -- talk script itself is unchanged by that -- he stays interactable
+    -- exactly like this on every visit until the errand-completion script
+    -- hides him for good; retreating him a permanent tile every talk would
+    -- walk him off his post a little further each time, so that cosmetic
+    -- shove/retreat still isn't ported.
     TEXT_NEWBARKTOWN_RIVAL = {
       { "show_text", "…\fSo this is the\nfamous ELM POKéMON\vLAB…" },
       { "show_text", "…What are you\nstaring at?" },

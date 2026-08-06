@@ -859,6 +859,13 @@ local TILESET_SPECS = {
     coll = "TilesetGateColl", image = "gate.png",
     source = "ROM:TilesetGateGFX/Meta/Coll",
   },
+  -- MrPokemonsHouse's tileset (data/maps/maps.asm: `map MrPokemonsHouse,
+  -- TILESET_FACILITY, INDOOR, ...`).
+  TILESET_FACILITY = {
+    gfx = "TilesetFacilityGFX", meta = "TilesetFacilityMeta",
+    coll = "TilesetFacilityColl", image = "facility.png",
+    source = "ROM:TilesetFacilityGFX/Meta/Coll",
+  },
 }
 
 local function decodeBlocks(raw)

@@ -1358,6 +1358,7 @@
     "24:7": "PLAYERS_HOUSE_2F",
     "24:8": "PLAYERS_NEIGHBORS_HOUSE",
     "24:9": "ELMS_HOUSE",
+    "26:10": "MR_POKEMONS_HOUSE",
     "26:3": "CHERRYGROVE_CITY"
   },
   "maps": {
@@ -1692,6 +1693,75 @@
       "tileset": "TILESET_LAB",
       "warpCount": 2,
       "width": 5
+    },
+    "MR_POKEMONS_HOUSE": {
+      "bgEventCount": 5,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "MrPokemonsHouse",
+      "number": 10,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "MRPOKEMONSHOUSE_GENTLEMAN",
+          "range": "RIGHT",
+          "script": "MrPokemonsHouse_MrPokemonScript",
+          "sprite": "SPRITE_GENTLEMAN",
+          "text": "TEXT_MRPOKEMONSHOUSE_GENTLEMAN",
+          "x": 3,
+          "y": 5
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": "MRPOKEMONSHOUSE_OAK",
+          "range": "UP",
+          "script": "ObjectEvent",
+          "sprite": "SPRITE_OAK",
+          "text": "TEXT_MRPOKEMONSHOUSE_OAK",
+          "x": 6,
+          "y": 5
+        }
+      ],
+      "signs": [
+        {
+          "script": "MrPokemonsHouse_ForeignMagazines",
+          "text": "MrPokemonsHouse_ForeignMagazines",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "MrPokemonsHouse_ForeignMagazines",
+          "text": "MrPokemonsHouse_ForeignMagazines",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "script": "MrPokemonsHouse_BrokenComputer",
+          "text": "MrPokemonsHouse_BrokenComputer",
+          "x": 6,
+          "y": 1
+        },
+        {
+          "script": "MrPokemonsHouse_BrokenComputer",
+          "text": "MrPokemonsHouse_BrokenComputer",
+          "x": 7,
+          "y": 1
+        },
+        {
+          "script": "MrPokemonsHouse_StrangeCoins",
+          "text": "MrPokemonsHouse_StrangeCoins",
+          "x": 6,
+          "y": 4
+        }
+      ],
+      "tileset": "TILESET_FACILITY",
+      "warpCount": 2,
+      "width": 4
     },
     "NEW_BARK_TOWN": {
       "bgEventCount": 4,
@@ -6381,6 +6451,14 @@
       49,
       31296
     ],
+    "MrPokemonsHouse_MapAttributes": [
+      37,
+      26264
+    ],
+    "MrPokemonsHouse_MapEvents": [
+      101,
+      30191
+    ],
     "Music_TitleScreen_Ch1": [
       58,
       30740
@@ -6480,6 +6558,18 @@
     "Route29_MapEvents": [
       104,
       21988
+    ],
+    "TilesetFacilityColl": [
+      55,
+      28048
+    ],
+    "TilesetFacilityGFX": [
+      55,
+      25968
+    ],
+    "TilesetFacilityMeta": [
+      55,
+      27024
     ],
     "TilesetGateColl": [
       45,

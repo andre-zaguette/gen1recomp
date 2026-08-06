@@ -164,12 +164,29 @@ return {
       { "show_text", "The wrapper from\nthe snack PROF.ELM\vate is in there…" },
     },
 
-    -- ROM: ElmsLabWindow branches on EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON
-    -- (Elm's phone call about the break-in) for a "He broke in through
-    -- here!" variant -- that call is part of the mystery-egg/theft chain
-    -- this project hasn't built, so only the normal line is reachable.
+    -- ROM: ElmsLabWindow. `checkflag ENGINE_FLYPOINT_VIOLET iftrue .Normal`
+    -- -- always false this early (Violet City/flying is Milestone 3+, no
+    -- ENGINE_FLYPOINT_VIOLET setter exists yet) -- then
+    -- `checkevent EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON iftrue .BreakIn`
+    -- else `.Normal`. That event is now reachable (data/scripts/
+    -- crystal_mr_pokemons_house.lua's errand-completion script sets it),
+    -- so both branches are wired; ENGINE_FLYPOINT_VIOLET's check is ported
+    -- too even though its "always show Normal once you can fly to Violet"
+    -- short-circuit can't fire yet, for the same reason
+    -- EVENT_GAVE_MYSTERY_EGG_TO_ELM's branch is ported in Mr. Pokémon's
+    -- House despite being currently dead.
     ElmsLabWindow = {
+      { "check_flag", "ENGINE_FLYPOINT_VIOLET" },
+      { "jump_if_true", "normal" },
+      { "check_flag", "EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON" },
+      { "jump_if_true", "break_in" },
+
+      { "label", "normal" },
       { "show_text", "The window's open.\fA pleasant breeze\nis blowing in." },
+      { "jump", "end" },
+
+      { "label", "break_in" },
+      { "show_text", "He broke in\nthrough here!" },
     },
 
     ElmsLabPC = {

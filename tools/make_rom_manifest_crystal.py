@@ -40,6 +40,8 @@ REQUIRED_SYMBOLS = (
     "Route29Route46Gate_MapEvents",
     "CherrygroveCity_MapAttributes",
     "CherrygroveCity_MapEvents",
+    "MrPokemonsHouse_MapAttributes",
+    "MrPokemonsHouse_MapEvents",
     "TilesetJohtoGFX",
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
@@ -60,6 +62,14 @@ REQUIRED_SYMBOLS = (
     "TilesetGateGFX",
     "TilesetGateMeta",
     "TilesetGateColl",
+    # MrPokemonsHouse's tileset (data/maps/maps.asm: `map MrPokemonsHouse,
+    # TILESET_FACILITY, INDOOR, ...`) -- data/maps/attributes.asm's own
+    # `map_attributes MrPokemonsHouse, MR_POKEMONS_HOUSE, $00` third field
+    # is the border block, not the tileset id, same caveat already
+    # documented for Route29Route46Gate/CherrygroveCity above.
+    "TilesetFacilityGFX",
+    "TilesetFacilityMeta",
+    "TilesetFacilityColl",
     "ChrisSpriteGFX",
     "KrisSpriteGFX",
     "Font",
@@ -238,6 +248,17 @@ MAP_SPECS = {
         # CHERRYGROVE_CITY, $35` third field is the border block, not the
         # tileset id, same caveat as Route29Route46Gate above.
         "tileset": "TILESET_JOHTO",
+    },
+    "MR_POKEMONS_HOUSE": {
+        "label": "MrPokemonsHouse",
+        "asm": "MrPokemonsHouse.asm",
+        # data/maps/maps.asm: `map MrPokemonsHouse, TILESET_FACILITY,
+        # INDOOR, LANDMARK_ROUTE_30, MUSIC_CHERRYGROVE_CITY, FALSE,
+        # PALETTE_DAY, FISHGROUP_SHORE` -- 2nd field is the real tileset id
+        # (`map` macro), NOT attributes.asm's `map_attributes` 3rd field
+        # (border block, $00 here) -- the exact caveat Route29Route46Gate's
+        # own registration task got wrong the first time.
+        "tileset": "TILESET_FACILITY",
     },
 }
 
@@ -581,6 +602,51 @@ START_MAP_CONTENT = {
                 # Potion ball -- no unbuilt system involved.
                 "name": "CHERRYGROVECITY_FISHER",
                 "text": "TEXT_CHERRYGROVECITY_FISHER",
+            },
+        ],
+    },
+    "MR_POKEMONS_HOUSE": {
+        # Sign "text" values below are pure documentation (see the bg_event
+        # loop's own comment above ElmsLab's entry) -- only the count (5,
+        # matching MrPokemonsHouse_MapEvents' real def_bg_events) matters.
+        "signs": [
+            {"text": "MrPokemonsHouse_ForeignMagazines (0,1): It's packed with\\nforeign magazines."},
+            {"text": "MrPokemonsHouse_ForeignMagazines (1,1)"},
+            {"text": "MrPokemonsHouse_BrokenComputer (6,1): It's a big com-\\nputer. Hmm. It's broken."},
+            {"text": "MrPokemonsHouse_BrokenComputer (7,1)"},
+            {"text": "MrPokemonsHouse_StrangeCoins (6,4): A whole pile of\\nstrange coins!"},
+        ],
+        "objects": [
+            {
+                # ROM: MrPokemonsHouse_MrPokemonScript. Trailing object_event
+                # flag is -1 ("always appear") -- Mr. Pokémon is visible
+                # from the moment the map loads, for the whole game.
+                "name": "MRPOKEMONSHOUSE_GENTLEMAN",
+                "text": "TEXT_MRPOKEMONSHOUSE_GENTLEMAN",
+            },
+            {
+                # ROM: object_event's trailing flag is
+                # EVENT_MR_POKEMONS_HOUSE_OAK, which is never setevent'd or
+                # clearevent'd anywhere else in the whole disassembly
+                # (confirmed: the only other hit is its own `const` line in
+                # constants/event_flags.asm) and is NOT in
+                # InitializeEventsScript's force-set list either -- so it
+                # reads clear on every save, meaning OAK (SPRITE_OAK, object
+                # index 2 per MrPokemonsHouse.asm's object_const_def) is
+                # visible from the very start too, same as the Gentleman.
+                # This matches the real game: PROF.OAK is standing in this
+                # room together with MR.POKéMON before the player ever
+                # arrives -- the errand-completion script
+                # (MrPokemonsHouse_OakScript) walks him over, gives the
+                # PokéDex, heals the party, then `disappear`s him for good;
+                # his own object flag is never touched by any of that (the
+                # ROM hides him with the same explicit-disappear mechanism
+                # this project's hide_object already models, not a flag
+                # read), so he stays a plain always-visible object here too
+                # until data/scripts/crystal_mr_pokemons_house.lua's
+                # completion script calls hide_object on him directly.
+                "name": "MRPOKEMONSHOUSE_OAK",
+                "text": "TEXT_MRPOKEMONSHOUSE_OAK",
             },
         ],
     },
