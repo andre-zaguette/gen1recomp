@@ -1090,12 +1090,20 @@ function RomExtractorGen2:extractMap()
     local warpCount = self.rom:byte(eventsBank, addr)
     addr = addr + 1
     local warps = {}
-    for _ = 1, warpCount do
+    for romIndex = 1, warpCount do
       local row = self.rom:bytes(eventsBank, addr, 5)
       local destMap = self.manifest.mapLookup[row[4] .. ":" .. row[5]]
       if destMap then
+        -- romIndex is this entry's 1-based position in the ROM's own
+        -- def_warp_events order -- NOT necessarily #warps+1: skipping an
+        -- earlier entry (below) compacts this array, so another map's
+        -- warp_event pointing at "warp N of this map" by ROM order would
+        -- silently resolve to the wrong (or a missing) entry once N no
+        -- longer matches this array's own position. Warp.lua's resolve()
+        -- matches on romIndex first for exactly this reason.
         warps[#warps + 1] = {
           y = row[1], x = row[2], destWarp = row[3], destMap = destMap,
+          romIndex = romIndex,
         }
       else
         -- A warp into a map this slice doesn't extract yet (e.g. Route

@@ -90,13 +90,33 @@ end
 -- map; the landing cell is that map's warp entry named by the warp id
 -- (wDestinationWarpID placement -- two-sided route gates land you on
 -- the side you exit, not where you entered).
+-- Finds the warp entry whose ROM def_warp_events position is idx. Gen1
+-- extraction never skips a warp, so its array position always equals the
+-- ROM's own order and this is the direct lookup. Some Gen2 maps (this
+-- project's incremental-coverage import) skip warps into not-yet-registered
+-- destinations, which compacts the array -- a later warp_event elsewhere
+-- naming "warp N of this map" by ROM order would then hit the wrong slot
+-- (or nil) via plain positional indexing, so those entries carry their own
+-- romIndex (RomExtractorGen2.lua's extractMap) and get matched by that
+-- instead.
+local function findWarp(warps, idx)
+  if not warps then return nil end
+  local direct = warps[idx]
+  if direct and not direct.romIndex then return direct end
+  if direct and direct.romIndex == idx then return direct end
+  for _, w in ipairs(warps) do
+    if w.romIndex == idx then return w end
+  end
+  return direct
+end
+
 local function resolve(data, warpDef, lastMap)
   local destMap = warpDef.destMap
   if destMap == "LAST_MAP" then
     assert(lastMap, "LAST_MAP warp with no remembered outdoor map")
     destMap = lastMap.id
     local destDef = data.maps[destMap]
-    local dw = destDef and destDef.warps[warpDef.destWarp]
+    local dw = destDef and findWarp(destDef.warps, warpDef.destWarp)
     if dw then
       return destMap, dw.x, dw.y
     end
@@ -105,7 +125,7 @@ local function resolve(data, warpDef, lastMap)
   end
   local destDef = data.maps[destMap]
   assert(destDef, "warp to unknown map " .. tostring(destMap))
-  local dw = destDef.warps[warpDef.destWarp]
+  local dw = findWarp(destDef.warps, warpDef.destWarp)
   assert(dw, ("warp to %s#%d out of range"):format(destMap, warpDef.destWarp))
   return destMap, dw.x, dw.y
 end
