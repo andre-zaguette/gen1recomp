@@ -200,6 +200,18 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
     elseif cmd == 0xFD then -- sound_loop_cmd (Crystal) -> ChipAsm {loop=...}
       local count = bytes[i + 1]
       events[#events + 1] = { loop = { count = count, to = targetName(bytes[i + 2], bytes[i + 3]) } }
+      -- count 0 is Crystal's own "loop forever" sentinel: the real ROM
+      -- bytecode never falls through past this point (there is nothing
+      -- after it but the next song's own data), matching ChipAsm.lua's
+      -- own endsItself() check (`last.loop.count == 0` needs no $FF
+      -- terminator either). Music_TitleScreen's own channels happen not
+      -- to end this way (verified: none of its sound_loop calls use
+      -- count 0), which is why this case went uncaught until a real ROM
+      -- import against Music_ElmsLab crashed with a nil-argument error
+      -- deep in garbage bytes read past the channel's real end -- a
+      -- finite-count loop (count > 0) really does fall through to more
+      -- real bytes afterward, so only the zero case stops the scan.
+      if count == 0 then return events end
       i = i + 4
     elseif cmd == 0xFE then -- sound_call_cmd (Crystal) -> ChipAsm {call=...}
       events[#events + 1] = { call = targetName(bytes[i + 1], bytes[i + 2]) }
