@@ -120,6 +120,20 @@ local START_NPC_SPRITES = {
   SPRITE_POKE_BALL = { file = "poke_ball.png", frames = 1, walker = false, palette = "red" },
   SPRITE_COOLTRAINER_M = { file = "cooltrainer_m.png", frames = 6, walker = true, palette = "red" },
   SPRITE_YOUNGSTER = { file = "youngster.png", frames = 6, walker = true, palette = "green" },
+  -- Mr. Pokémon's House's own two always-visible objects (object_event
+  -- trailing flag -1 / a never-set flag -- both read visible-by-default,
+  -- confirmed this session's Task 6). Both crashed a live playtest
+  -- ("unknown sprite SPRITE_GENTLEMAN", src/world/NPC.lua:28) since
+  -- neither was in this table -- Task 6's own report wrongly generalized
+  -- the "a HIDDEN object's missing sprite never crashes" precedent
+  -- (true for Cherrygrove's SPRITE_GRAMPS) to these two, which are not
+  -- hidden. Palettes are each sprite's own ROM default (not a per-object
+  -- override -- MrPokemonsHouse.asm's object_events pass literal `0`,
+  -- i.e. "use the sprite's own default", per data/sprites/sprites.asm's
+  -- own `overworld_sprite GentlemanSpriteGFX, ..., PAL_OW_BLUE` /
+  -- `OakSpriteGFX, ..., PAL_OW_BROWN`).
+  SPRITE_GENTLEMAN = { file = "gentleman.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_OAK = { file = "oak.png", frames = 6, walker = true, palette = "brown" },
 }
 
 function RomExtractorGen2:extractSprite()
