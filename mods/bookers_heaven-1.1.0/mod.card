@@ -1,0 +1,25 @@
+-- Sharing metadata (25-community-and-ecosystem.md 3.2).  Read by tooling and
+-- the manager detail pane; never by the loader's merge.
+return {
+  summary = "Pallet Town gains an east wing"
+    .. "BOOKER'S HEAVEN, where BOOKER is waiting.",
+  author = "bryanthaboi",
+  contact = "https://github.com/bryanthaboi/gen1recomp",
+  tags = { "map", "quest", "tiled" },
+  differences = {
+    changed = {
+      "blah blah blah"
+        .. "",
+    },
+    added = {
+      "BOOKERS_HEAVEN, a DOJO-tileset room at map index 1000",
+    },
+    known = {
+      "the whisper",
+    },
+  },
+  credits = {
+    { who = "pret/pokered", for_ = "the DOJO tileset and Pallet Town data this builds on" },
+  },
+  compat = { engine = ">=0.0.0-dev <1.0.0", modApi = 2 },
+}

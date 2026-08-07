@@ -1,0 +1,27 @@
+-- Sharing metadata: read by tooling and the manager detail pane.
+return {
+  summary = "Four fixes Gen 1 never got: the move split, the corrected type rows, an AI that multiplies, and an encounter atlas.",
+  author = "MadeinTaly",
+  support = "https://linktr.ee/made_in_taly",
+  tags = { "mechanic", "balance", "ui", "quality-of-life" },
+  compat = { modApi = 2 },
+  differences = {
+    added = {
+      "ATLAS on the start menu: every encounter area, its species and level ranges, and whether you own one",
+      "five options, each switching one piece independently",
+    },
+    changed = {
+      "SPLIT: a move's category comes from the move rather than its type, so Gyarados throws Hydro Pump off the right stat",
+      "GHOST FIX: Ghost does 2x to Psychic instead of nothing at all",
+      "TYPE CHART on MODERN: Bug/Poison, Poison/Bug and Ice/Fire as Gen 2 rebalanced them",
+      "SMART AI: the vanilla type pass multiplies both defender types instead of reading the first row",
+    },
+    known = {
+      "BETA. The split table is the Gen 4 categorisation applied to Gen 1's typing; corrections welcome as issues",
+      "SPLIT and TYPE CHART are load-time registry patches, so changing them takes effect on the next launch, not mid-game",
+      "SMART AI patches LAYER_3 rather than adding a layer: TrainerAI walks the trainer class's own list, so a new id would never be called",
+      "the AI still only nudges scores -- vanilla's other passes run untouched, so a trainer keeps its personality",
+      "the Atlas has no search: at 8 pixels a glyph a 160-wide screen holds nineteen characters, and a filter box would cost more than it earns",
+    },
+  },
+}

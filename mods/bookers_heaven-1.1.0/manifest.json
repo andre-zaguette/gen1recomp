@@ -1,0 +1,18 @@
+{
+  "id": "bookers_heaven",
+  "name": "Booker's Heaven",
+  "version": "1.1.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "category": "QUEST",
+  "game_version": ">=0.0.0-dev <1.0.0",
+  "priority": 100,
+  "permissions": [
+    "engine_internals"
+  ],
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": [],
+  "description": "Booker's Heaven"
+}

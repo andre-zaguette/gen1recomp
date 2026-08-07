@@ -1,0 +1,13 @@
+{
+"id": "Music_FRLG",
+"name": "Music-FRLG",
+"version": "26.08.04",
+"entry": "main.lua",
+"api": 2,
+"priority": 99,
+"category": "AUDIO",
+"game_version": ">=0.1.65",
+"description": "Music from FireRed / LeafGreen",
+"github": "DarioMelo/Gen1Recomp-MusicMods",
+"profile": "content"
+}

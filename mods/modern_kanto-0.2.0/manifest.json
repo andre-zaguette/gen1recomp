@@ -1,0 +1,20 @@
+{
+  "id": "modern_kanto",
+  "name": "Modern Kanto",
+  "version": "0.2.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "overhaul",
+  "category": "MECHANIC",
+  "game_version": ">=0.0.0-0 <2.0.0",
+  "github": "MadeinTaly/gen1recomp-modern-kanto",
+  "priority": 100,
+  "experimental": true,
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": [],
+  "permissions": [
+    "engine_internals"
+  ],
+  "description": "BETA. Four changes that each answer the same complaint about Gen 1: the Gen 4 physical/special split as per-move data, the four type-chart rows Gen 2 corrected (including the Ghost-does-nothing-to-Psychic bug), an AI type pass that multiplies dual types out instead of reading one row, and an Atlas screen for what lives where and what you still need. Every piece is separately switchable; the balance-changing ones are off by default."
+}

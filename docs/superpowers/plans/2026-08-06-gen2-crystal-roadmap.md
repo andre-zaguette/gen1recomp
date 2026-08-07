@@ -391,11 +391,87 @@ Expected: `ALL TIERS PASSED`. Update `docs/new-features.md`'s New Bark Town rout
 
 ---
 
+### Task 7: Register Route 30, closing Milestone 1's reachability gap
+
+Added after the final whole-branch review of Tasks 4-6 found a Critical, milestone-breaking gap: Mr. Pokémon's House (Task 6) has no registered map that warps into it — its only real ROM entrance is `Route30`'s `warp_event 17, 5, MR_POKEMONS_HOUSE, 1`, and Route 30 was never registered. Cherrygrove's own north `connection` also points at Route 30. Until this task, the entire Task 6 errand chain (Mystery Egg, rival hide, officer reveal, PokéDex) is unreachable in a real playthrough — this task is what actually lets a player walk to it.
+
+**Files:**
+- Modify: `tools/make_rom_manifest_crystal.py` (`MAP_SPECS`, `REQUIRED_SYMBOLS`, `START_MAP_CONTENT`)
+- Modify: `tools/rom_manifest_crystal.json` (regenerated, not hand-edited)
+- Create: `data/scripts/crystal_route30.lua`
+- Modify: `data/scripts/init.lua`
+
+**Interfaces:**
+- Consumes: the same registration pattern Tasks 4-6 established (read `maps.asm`'s `map` macro for the real tileset — NOT `attributes.asm`'s `map_attributes` third field, which is the border block; this exact confusion was Task 4's own Critical review finding).
+- Produces: `CHERRYGROVE_CITY`'s `connections.north` and `MR_POKEMONS_HOUSE`'s incoming warp both resolve for real; Task 6's errand chain becomes reachable by a player walking north out of Cherrygrove.
+
+- [ ] **Step 1: Read the real map source**
+
+```bash
+cat roms/pokecrystal/maps/Route30.asm
+grep -n "map_const ROUTE_30\b" roms/pokecrystal/constants/map_constants.asm
+grep -n "map_attributes Route30,\|map Route30," roms/pokecrystal/data/maps/attributes.asm roms/pokecrystal/data/maps/maps.asm
+```
+Already confirmed this session: `map_const ROUTE_30, 10, 27` (a tall vertical route), `map Route30, TILESET_JOHTO, ...` (reuses the already-registered tileset, like New Bark Town/Route 29/Cherrygrove), `connection north, Route31, ROUTE_31, -10` / `connection south, CherrygroveCity, CHERRYGROVE_CITY, -5` (south connection already round-trips with Cherrygrove's own `connection north, Route30, ROUTE_30, 5`, per Task 5's report). Two warps: `warp_event 7,39, ROUTE_30_BERRY_HOUSE, 1` and `warp_event 17,5, MR_POKEMONS_HOUSE, 1` — both destinations already exist in the manifest or this task registers them (`ROUTE_30_BERRY_HOUSE` is a new, tiny, single-building map not yet registered; scope it the same way as this task's own object triage, Step 2, or defer it explicitly if it turns out to need content this task doesn't otherwise touch).
+
+- [ ] **Step 2: Scope which objects are in-bounds**
+
+```bash
+grep -n "def_warp_events\|def_coord_events\|def_bg_events\|def_object_events\|^\tobject_event\|^\twarp_event\|^\tcoord_event\|^\tbg_event" roms/pokecrystal/maps/Route30.asm
+```
+Already confirmed this session: 2 warps, 0 coord_events, 5 signs, 9 objects. Triage each object the same way Task 5 triaged Cherrygrove — port what's buildable, hide-and-document what isn't:
+- **Already confirmed blocked**: this project has no generic trainer-battle auto-trigger wiring for `OBJECTTYPE_TRAINER` NPCs in `src/world/OverworldController.lua` (grepped this session, zero hits — `Commands.start_battle(ctx, "trainer", ...)` exists and is called manually from talk scripts elsewhere, but nothing drives it from an `OBJECTTYPE_TRAINER` object's sight-detection), AND this project has no Gen2 trainer-party data extracted at all (`RomExtractorGen2.lua` has no trainer/party table). This blocks all three real trainers (`TrainerYoungsterJoey`, `TrainerYoungsterMikey`, `TrainerBugCatcherDon`) and the two `EVENT_ROUTE_30_BATTLE`-gated "SPRITE_MONSTER" decoy objects (`YoungsterJoey_ImportantBattleScript`'s pair) — defer all five the same way Task 5 deferred `CHERRYGROVECITY_GRAMPS`/`_RIVAL`, with a `START_MAP_CONTENT` entry each (`hidden: true`) so `objectCount` stays accurate. Do not attempt to build trainer-battle wiring as part of this task — that is its own future task once a real need forces it (matching this plan's own "build the system where the ROM first needs it" principle already used for Milestones 4/6).
+- **Likely portable** (verify against the real script bodies, do not assume): `Route30YoungsterScript` (a `jumptextfaceplayer`-shaped NPC, not a trainer), `Route30CooltrainerFScript`, `Route30FruitTree1`/`2` (compare to `ROUTE29_FRUIT_TREE`'s already-established pattern, if that was ported in Route 29 — check `crystal_route29.lua`; if it too was deferred, match that precedent instead of inventing new fruit-tree behavior), `Route30Antidote` (an item ball, same shape as `ELMSLAB_POKE_BALL*`/Route 29's Potion ball), and all 5 signs (`Route30Sign`, `MrPokemonsHouseDirectionsSign`, `MrPokemonsHouseSign`, `Route30TrainerTips`, `Route30HiddenPotion` — note the last one is a `BGEVENT_ITEM` bg_event, not a sign; read its real type from the `.asm` before assuming it's sign-shaped).
+
+- [ ] **Step 3: Register the map, connections, tileset**
+
+`TILESET_JOHTO` (per Step 1) — already fully registered (`TILESET_SPECS`, symbols) since New Bark Town, so no new tileset symbols needed here, unlike Tasks 4/6.
+
+- [ ] **Step 4: Regenerate, diff, apply**
+
+```bash
+source .venv/bin/activate
+python3 tools/make_rom_manifest_crystal.py --pokecrystal roms/pokecrystal --symbols roms/pokecrystal/pokecrystal.sym --out /tmp/manifest_route30.json
+diff tools/rom_manifest_crystal.json /tmp/manifest_route30.json
+cp /tmp/manifest_route30.json tools/rom_manifest_crystal.json
+```
+Expected: Route 30's own entry, `CHERRYGROVE_CITY.connections.north` and `MR_POKEMONS_HOUSE`'s incoming-warp resolution both becoming real (no longer skipped) as visible side effects, and nothing about any other already-registered map's entry changing.
+
+- [ ] **Step 5: Write the talk script(s), register**
+
+Follow `crystal_cherrygrove_city.lua`'s structure. Every deferred object still needs its `START_MAP_CONTENT` entry (Step 2) even with no corresponding `data/scripts/crystal_route30.lua` talk table entry, matching Task 5's `CHERRYGROVECITY_GRAMPS`/`_RIVAL` precedent exactly.
+
+- [ ] **Step 6: Confirm the warp-index fix from this session covers this map correctly**
+
+This session's own `9370a38` fix (Warp.lua's `romIndex`-based lookup, replacing plain positional array indexing after `RomExtractorGen2.lua`'s warp-skip compaction) is what makes any warp into a *previously*-unregistered map resolve correctly once that map registers. Verify it end-to-end for this specific case with an isolated script (same shape as Task 4's Step 6 check, extended to actually resolve a destination, not just assert a talk script exists):
+```lua
+-- package.path setup, love_stub, GameVersion.set("crystal") --
+local Warp = require("src.world.Warp")
+local data = require("data.generated.something_loadable_without_a_rom")
+-- or, if a real Data:load() isn't possible in this environment (it wasn't
+-- for Tasks 4-6 either -- no data/generated/ exists without a real ROM
+-- import), construct the minimal data.maps table by hand from the real
+-- manifest's warp entries the way this session's own verify_warp_fix.lua
+-- script (used to validate commit 9370a38) already did, and confirm
+-- Cherrygrove's own north warp/connection and Mr. Pokémon's House's
+-- incoming warp both resolve to Route 30 cells that are in-bounds for
+-- Route 30's own 10x27 dimensions.
+```
+
+- [ ] **Step 7: Run the full suite and commit**
+
+```bash
+LUA=luajit scripts/test.sh 2>&1 | tail -20
+```
+Expected: `ALL TIERS PASSED`. Commit message should name the specific reachability gap this closes (Mr. Pokémon's House / Task 6's errand chain becoming walkable for the first time).
+
+---
+
 ## Milestones 2-9: sequencing notes only
 
 Each of these gets its own `docs/superpowers/plans/YYYY-MM-DD-gen2-crystal-<slice>.md`, written with this same skill, once the milestone before it is done. Notes here are the *why this order* reasoning, not task breakdowns — writing task-level detail now would mean inventing ROM structure nobody has read yet.
 
-- **Milestone 2 (early-game music)** comes right after Milestone 1 rather than being deferred to the end, because every map from here on adds another silent room, and the title-screen transcoder work (`src/audio/CrystalMusicTranscoder.lua`, `docs/superpowers/plans/2026-08-05-gen2-crystal-title-screen.md`) is the only proven reference for how much work one song takes in this codebase — worth doing while that reference is fresh, on a small map set (2-3 songs), before the map count makes the backlog feel unbounded.
+- **Milestone 2 (early-game music)** comes right after Milestone 1 rather than being deferred to the end, because every map from here on adds another silent room, and the title-screen transcoder work (`src/audio/CrystalMusicTranscoder.lua`, `docs/superpowers/plans/2026-08-05-gen2-crystal-title-screen.md`) is the only proven reference for how much work one song takes in this codebase — worth doing while that reference is fresh, on a small map set (2-3 songs), before the map count makes the backlog feel unbounded. Confirmed via a real playtest during Milestone 0/1 execution: `RomExtractorGen2.lua:extractTitleMusic` only ever transcodes `Music_TitleScreen` (hand-verified per-channel symbol names, same effort as the title-screen plan); `results.audio` has no `mapSongs` table at all for Crystal, so `Music.playMap` (called on entering the overworld) finds nothing and silently no-ops, leaving the title theme playing forever — this is why music never changes after New Game/Continue. Research already done for when this milestone's own plan gets written: the maps registered by Milestone 1 need exactly **3** distinct songs — `MUSIC_NEW_BARK_TOWN` (NewBarkTown, PlayersHouse1F/2F, PlayersNeighborsHouse, ElmsHouse, HallOfFame), `MUSIC_PROF_ELM` (ElmsLab), and `MUSIC_ROUTE_29` (Route29, Route29Route46Gate) — per `roms/pokecrystal/data/maps/maps.asm`'s `map` macro (5th field). Each `MUSIC_*` constant's 0-based index in `constants/music_constants.asm`'s `const_def` sequence selects its entry in `audio/music_pointers.asm` (one `dba <label>` per line, e.g. `dba Music_TitleScreen` is entry 1 for `MUSIC_TITLE`), which resolves to the song label whose per-channel sub-labels (`_Ch1`/`_Ch2`/`_Ch4`, `.sub1`, `.loop1`, etc.) get hand-verified against the `.sym` file and decoded via `CrystalMusicTranscoder.buildSong`, exactly mirroring `extractTitleMusic`'s existing structure — this milestone is "do that two more times," not new engine work. (The title→menu transition keeping the same theme, also reported in the same playtest, is expected ROM behavior, not a bug — vanilla Crystal's Continue/New Game menu has no music of its own.)
 - **Milestone 3 (Violet City, first gym)** is the natural next story beat after Cherrygrove/Mr. Pokémon, and is the first place this project needs a working gym-badge/gym-leader battle flow for Crystal specifically (check whether Gen1's existing gym-battle plumbing in `src/battle/` is version-generic already or Red/Blue/Yellow-specific before assuming it's reusable as-is).
 - **Milestone 4 (Gen2 systems, wave 1)** is scoped to day/night + Pokégear + bag pockets specifically because Violet City onward starts featuring NPCs and encounters that check time-of-day (this session hit this gap repeatedly as a *simplification*, e.g. `crystal_route29.lua`'s Cooltrainer M2 always showing the DAY line) — worth promoting from "simplified" to "real" once enough maps depend on it that the simplification debt compounds.
 - **Milestones 5-7** are the rest of the Johto gym run in ROM order; no new engine systems expected beyond what Milestones 2 and 4 already built, just more of the same map/NPC/dialogue work at Route 29 → Cherrygrove scale.

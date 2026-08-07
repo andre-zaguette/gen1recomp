@@ -1,0 +1,32 @@
+# Nested engine / reference clones (use scripts/bootstrap.sh)
+/.deps/
+/gen1recomp/
+/DramaticShapeVoxelMod/
+
+# Build output
+/dist/
+
+# ROMs and generated caches — never commit
+*.gb
+*.gbc
+*.gba
+*.ips
+*.bps
+
+# Local tooling
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.modkit/
+
+# Love save / bake cache
+overworld-spawns-cache/
+overworld_wild_spawns-cache/
+.cache/
+
+# Commercial Anima atlas — keep locally if present, never commit or ship.
+/assets/enhanced_overworld/Pokemon_Sprites/POKEMON 1.png
+
+# Local inspect crops (authoring only).
+/assets/_inspect/

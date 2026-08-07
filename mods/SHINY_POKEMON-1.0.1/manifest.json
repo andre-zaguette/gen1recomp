@@ -1,0 +1,25 @@
+{
+  "id": "SHINY_POKEMON",
+  "name": "Shiny Pokemon",
+  "version": "1.0.1",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "category": "GAMEPLAY",
+  "game_version": ">=0.1.37 <2.0.0",
+  "priority": 150,
+  "author": "masterwebx",
+  "dependencies": [],
+  "optional_dependencies": [
+    "overworld_wild_spawns",
+    "PokePCFollowers_VoxelMerge",
+    "FOLLOWERS_EX"
+  ],
+  "conflicts": [],
+  "permissions": [
+    "engine_internals"
+  ],
+  "affects_link": false,
+  "github": "masterwebx/gen1recomp-shiny-pokemon",
+  "description": "Shiny colors and sparkles in battle and overworld (OW bakes amortized; voxel sparkles once). Open SHINY POKEMON in OPTIONS."
+}
