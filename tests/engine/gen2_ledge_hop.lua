@@ -89,4 +89,68 @@ eq(map:isWalkableCell(0, 3), false,
   "with the walkable floor cell above (symptom 1's exact failure shape: " ..
   "tile-id reuse must not leak walkability across blocks)")
 
+-- Regression guard for a SECOND, separate bug found via live playtest
+-- after the above fix shipped: "it blocks one tile before reaching the
+-- ledge, and then it doesn't go down." Root cause: a real Route 29 ledge
+-- (TILESET_JOHTO block 75) packs BOTH the hop quadrant AND a WALL
+-- quadrant into ONE metatile block -- TL=COLL_HOP_DOWN, BL=WALL, TR/BR
+-- =land (re-verified directly against the real ROM: bank/addr from
+-- TilesetJohtoMeta/Coll in tools/rom_manifest_crystal.json). Real open
+-- ground only resumes one cell past that wall, i.e. 2 cells past the lip
+-- itself / 3 cells from the player's pre-hop position -- not the
+-- 2-cells-from-start distance Gen1's own ledges use (this fixture's own
+-- shape above), which is exactly what OverworldController.lua's
+-- checkLedgeHop's "hopDistance" now branches on (2 for a Gen1
+-- field.ledges match, 3 for a Gen2 hopFacing match).
+--
+-- Block layout, one row per metatile block (matching real block 75's
+-- own TL/BL split, not two separate blocks):
+--   row 0 (id 0): plain floor -- where the player is standing pre-hop.
+--   row 1 (id 1): the ledge itself -- TL quadrant (tile 42) is the real
+--     COLL_HOP_DOWN spot; BL quadrant (tile 7) is the real WALL quadrant
+--     directly below it, exactly like block 75. TR/BR (tile 5) are
+--     ordinary land, matching block 75's own non-ledge columns.
+--   row 2 (id 2): real open ground, one full block past the ledge.
+local function filler16(tl, tr, bl, br)
+  local b = {}
+  for i = 1, 16 do b[i] = 0 end
+  b[5], b[7], b[13], b[15] = tl, tr, bl, br -- the 4 quadrant-representative slots cellTile ever reads
+  return b
+end
+local TALL_FLOOR_BLOCK = filler16(9, 9, 9, 9)
+local TALL_LEDGE_BLOCK = filler16(42, 5, 7, 5) -- TL=hop tile, BL=wall, TR/BR=land
+local TALL_GROUND_BLOCK = filler16(5, 5, 5, 5)
+local tallTilesetDef = {
+  id = "TEST_LEDGE_TILESET_TALL",
+  blocks = { TALL_FLOOR_BLOCK, TALL_LEDGE_BLOCK, TALL_GROUND_BLOCK },
+  walkable = { 9, 5 }, -- tile 7 (the wall quadrant) is deliberately absent
+  hopFacing = { [1] = { [0] = { down = true } } }, -- block id 1, quadrant 0 (TL)
+}
+local tallMapDef = {
+  id = "TEST_LEDGE_MAP_TALL", tileset = "TEST_LEDGE_TILESET_TALL",
+  width = 1, height = 3, blocks = { 0, 1, 2 }, borderBlock = 0,
+}
+local tallMap = Map.new(tallMapDef, tallTilesetDef)
+
+-- cy=1: block 0 (floor)'s bottom-left quadrant -- the player's pre-hop
+-- standing cell.
+check(tallMap:isWalkableCell(0, 1) == true, "the tall fixture's pre-hop cell is walkable floor")
+-- cy=2: block 1 (ledge)'s top-left quadrant -- the real hop spot, one
+-- cell past the player's start (matches checkLedgeHop's "front" cell).
+local lipHop = tallMap:hopFacingAt(0, 2)
+check(lipHop ~= nil and lipHop.down == true, "the tall fixture's lip (2 cells past start) allows a downward hop")
+-- cy=3: block 1's own bottom-left quadrant -- the WALL directly below
+-- the lip, 2 cells past the player's start. This is the OLD
+-- hopDistance=2 landing spot, and it must be blocked (the exact real
+-- Route 29 bug: hop lands on a wall).
+eq(tallMap:isWalkableCell(0, 3), false,
+  "2 cells past the lip's start lands on the real wall quadrant -- " ..
+  "confirms the old hopDistance=2 landing was broken for this real shape")
+-- cy=4: block 2 (ground)'s top-left quadrant, 3 cells past the player's
+-- start. This is the FIXED hopDistance=3 landing spot, and it must be
+-- walkable.
+eq(tallMap:isWalkableCell(0, 4), true,
+  "3 cells past the lip's start lands on real open ground -- " ..
+  "confirms hopDistance=3 is what checkLedgeHop needs for Gen2 ledges")
+
 T.finish("Gen2 ledge hop collision (COLL_HOP_* block+quadrant keying)")

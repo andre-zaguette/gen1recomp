@@ -1311,13 +1311,27 @@ function OverworldState:checkLedgeHop(dir)
       break
     end
   end
+  -- Gen2's own real ledge metatiles pair the hop quadrant with a WALL
+  -- quadrant immediately past it in the SAME 2-cell-tall/wide metatile
+  -- block (confirmed against every real TILESET_JOHTO ledge block: e.g.
+  -- block 75's column has HOP_DOWN directly above a WALL quadrant, block
+  -- 79's HOP_RIGHT row has WALL directly beside it) -- real open ground
+  -- only resumes one cell past that wall quadrant, i.e. 2 cells past the
+  -- lip itself. Gen1's own ledges (this file's pre-existing field.ledges
+  -- list) land 1 cell past the lip (2 cells from the player's pre-hop
+  -- position) and that already works for every authored Gen1 tile-ID
+  -- pair, so this extra cell is Gen2-only, not a change to Gen1's math.
+  local gen2Match = false
   if not matched then
     local hopFacing = self.map:hopFacingAt(fx, fy)
     matched = hopFacing ~= nil and hopFacing[dir] == true
+    gen2Match = matched
   end
   if not matched then return false end
+  local hopDistance = gen2Match and 3 or 2
 
-  local lx, ly = Collision.target(fx, fy, dir)
+  local lx, ly = fx, fy
+  for _ = 2, hopDistance do lx, ly = Collision.target(lx, ly, dir) end
   if not self.map:inBounds(lx, ly) then
     -- The landing is on the CONNECTED map.  pokered never checks where a
     -- hop lands (engine/overworld/ledges.asm HandleLedges just simulates
@@ -1330,6 +1344,16 @@ function OverworldState:checkLedgeHop(dir)
     -- cell the way crossConnection does, hop the first cell onto the
     -- ledge tile, and hand the second to checkEdgeExit, which owns the
     -- crossing.
+    -- NOTE: this branch's "hop 1 cell, hand the rest to checkEdgeExit"
+    -- split was designed for Gen1's 2-total-cell hop (1 handled here + 1
+    -- handled by checkEdgeExit's own single-cell seam crossing). No
+    -- currently-registered Gen2 ledge sits at a map edge (every real
+    -- TILESET_JOHTO ledge block found on Route 29 is well inside the map
+    -- interior), so a Gen2 hopDistance of 3 landing off-map here is
+    -- untested -- checkEdgeExit only ever performs a single-cell
+    -- crossing step, so a real Gen2 edge-crossing ledge would come up 1
+    -- cell short. Flagging rather than guessing at a fix with no real
+    -- map data to verify against.
     local dest, ts, cx, cy = self:connectionLanding(dir)
     if not (dest and Map.defPassable(dest, ts, cx, cy, p.surfing)) then
       return false
@@ -1343,7 +1367,7 @@ function OverworldState:checkLedgeHop(dir)
      and self.map:isWalkableCell(lx, ly) then
     require("src.core.Sound").play(Game.data, "Ledge")
     p.hopFrames, p.hopTotal = 32, 32 -- jump arc (cosmetic)
-    self:scriptMove(p, dir, 2)
+    self:scriptMove(p, dir, hopDistance)
     return true
   end
   return false
