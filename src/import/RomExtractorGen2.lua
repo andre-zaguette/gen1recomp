@@ -22,7 +22,7 @@ local Rom = require("src.import.Rom")
 local RomExtractorGen2 = {}
 RomExtractorGen2.__index = RomExtractorGen2
 
-local STAGE_COUNT = 9
+local STAGE_COUNT = 10
 
 -- The other 11 modules Data:load()'s MODULES gate requires that this
 -- skeleton's scope (Crystal intro/start maps/tilesets/player sprite/font
@@ -1698,6 +1698,39 @@ function RomExtractorGen2:extractElmsLabMusic()
   return song
 end
 
+-- Music_CherrygroveCity: same shape as Music_ElmsLab -- four channels,
+-- each with only its own .mainloop, no sub-labels (pokecrystal.sym).
+function RomExtractorGen2:extractCherrygroveCityMusic()
+  self:beginStage("Cherrygrove City music")
+
+  local ch1 = self:symbol("Music_CherrygroveCity_Ch1")
+  local ch1Loop = self:symbol("Music_CherrygroveCity_Ch1.mainloop")
+  local ch2 = self:symbol("Music_CherrygroveCity_Ch2")
+  local ch2Loop = self:symbol("Music_CherrygroveCity_Ch2.mainloop")
+  local ch3 = self:symbol("Music_CherrygroveCity_Ch3")
+  local ch3Loop = self:symbol("Music_CherrygroveCity_Ch3.mainloop")
+  local ch4 = self:symbol("Music_CherrygroveCity_Ch4")
+  local ch4Loop = self:symbol("Music_CherrygroveCity_Ch4.mainloop")
+
+  local song = CrystalMusicTranscoder.buildSong({
+    { hw = 1, baseAddress = ch1.address,
+      bytes = self.rom:bytes(ch1.bank, ch1.address, 300),
+      labels = { [ch1Loop.address] = "mainloop" } },
+    { hw = 2, baseAddress = ch2.address,
+      bytes = self.rom:bytes(ch2.bank, ch2.address, 300),
+      labels = { [ch2Loop.address] = "mainloop" } },
+    { hw = 3, baseAddress = ch3.address,
+      bytes = self.rom:bytes(ch3.bank, ch3.address, 300),
+      labels = { [ch3Loop.address] = "mainloop" } },
+    { hw = 4, baseAddress = ch4.address,
+      bytes = self.rom:bytes(ch4.bank, ch4.address, 300),
+      labels = { [ch4Loop.address] = "mainloop" } },
+  })
+
+  self:tick("Cherrygrove City music", 1, 1)
+  return song
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -1727,6 +1760,7 @@ function RomExtractorGen2:run()
   local cries = self:extractCry()
   local titleSong = self:extractTitleMusic()
   local elmsLabSong = self:extractElmsLabMusic()
+  local cherrygroveCitySong = self:extractCherrygroveCityMusic()
   local mapSongs = {}
   for mapId, expected in pairs(self.manifest.maps) do
     if expected.music then mapSongs[mapId] = expected.music end
@@ -1736,6 +1770,7 @@ function RomExtractorGen2:run()
     songs = {
       Music_TitleScreen = titleSong,
       Music_ElmsLab = elmsLabSong,
+      Music_CherrygroveCity = cherrygroveCitySong,
     },
     mapSongs = mapSongs,
   }

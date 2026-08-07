@@ -44,4 +44,21 @@ for mapId, expectedSong in pairs(EXPECTED_MAP_SONGS) do
     ("%s's manifest music field is %s"):format(mapId, expectedSong))
 end
 
+-- Runtime song-def shape can only be checked against a real ROM import
+-- (no data/generated/ in this checkout) -- if one exists locally, verify
+-- Music_CherrygroveCity resolves to a real ChipAsm song def; otherwise
+-- skip with a clear reason rather than silently passing nothing.
+local ok, Data = pcall(function()
+  return require("src.core.Data")
+end)
+if ok and love.filesystem and love.filesystem.getInfo
+   and love.filesystem.getInfo("data/generated/audio.lua") then
+  local audio = require("data.generated.audio")
+  check(audio.songs.Music_CherrygroveCity ~= nil,
+    "Music_CherrygroveCity resolves to a real song def when a ROM is imported")
+else
+  print("(skipped: no data/generated/audio.lua in this environment -- " ..
+    "runtime song-def shape needs a real ROM import to verify)")
+end
+
 T.finish("Gen2 mapSongs manifest wiring")
