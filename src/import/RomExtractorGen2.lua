@@ -1593,12 +1593,17 @@ function RomExtractorGen2:extractTitle()
   return title
 end
 
--- Music_TitleScreen's pulse (Ch1/Ch2) and noise (Ch4) channels, translated
--- from Crystal's bytecode dialect via CrystalMusicTranscoder. Channel 3
--- (wave) is not read -- out of scope, see the plan's Non-goals. Generous
--- byte-window sizes (400/400/300 for the three main bodies, 40/40 for
--- Ch1/Ch2's one subroutine each, 20 each for Ch4's four) are comfortably
--- larger than the real verified spans (345/355/222 and 23/26/10/10/8/11
+-- Music_TitleScreen's pulse (Ch1/Ch2), wave (Ch3), and noise (Ch4)
+-- channels, translated from Crystal's bytecode dialect via
+-- CrystalMusicTranscoder. Channel 3 has no sub-labels and no sound_loop
+-- of its own -- pokecrystal.sym lists only Music_TitleScreen_Ch3 itself
+-- (3a:7b01, no .subN/.mainloop children), and its real body
+-- (roms/pokecrystal/audio/music/titlescreen.asm:580-894) plays once and
+-- ends in a real sound_ret ($FF), unlike every other song this milestone
+-- extracted where Ch3 loops via a .mainloop label. Generous byte-window
+-- sizes (400/400/400/300 for the four main bodies, 40/40 for Ch1/Ch2's
+-- one subroutine each, 20 each for Ch4's four) are comfortably larger
+-- than the real verified spans (345/355/347/222 and 23/26/10/10/8/11
 -- respectively) -- decodeChannel stops at sound_ret regardless of extra
 -- trailing bytes in the window, same margin convention extractCry already
 -- established.
@@ -1620,6 +1625,8 @@ function RomExtractorGen2:extractTitleMusic()
     [ch2Sub1.address] = "sub1",
     [ch2Sub1Loop1.address] = "sub1loop1",
   }
+
+  local ch3 = self:symbol("Music_TitleScreen_Ch3")
 
   local ch4 = self:symbol("Music_TitleScreen_Ch4")
   local ch4Loop1 = self:symbol("Music_TitleScreen_Ch4.loop1")
@@ -1653,6 +1660,10 @@ function RomExtractorGen2:extractTitleMusic()
                  bytes = self.rom:bytes(ch2Sub1.bank, ch2Sub1.address, 40) },
       },
       labels = ch2Labels,
+    },
+    {
+      hw = 3, baseAddress = ch3.address,
+      bytes = self.rom:bytes(ch3.bank, ch3.address, 400),
     },
     {
       hw = 4, baseAddress = ch4.address,

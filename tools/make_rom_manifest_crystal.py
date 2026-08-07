@@ -110,9 +110,8 @@ REQUIRED_SYMBOLS = (
     "TitleLogoGFX",
     "TitleCrystalGFX",
     "TitleScreenPalettes",
-    # Music_TitleScreen's pulse (Ch1/Ch2) and noise (Ch4) channels, plus
-    # every subroutine they sound_call/sound_loop into. Ch3 (wave) is
-    # deliberately absent -- out of scope, see the plan's Non-goals.
+    # Music_TitleScreen's pulse (Ch1/Ch2), wave (Ch3), and noise (Ch4)
+    # channels, plus every subroutine they sound_call/sound_loop into.
     # Addresses confirmed against pokecrystal.sym; see the plan's
     # "Research already done" section for the full byte-level decode this
     # is built from.
@@ -132,6 +131,14 @@ REQUIRED_SYMBOLS = (
     # "sound_call/sound_loop target $7AEB has no matching entry in the
     # labels map" the moment it reaches Ch2's own sound_loop instruction.
     "Music_TitleScreen_Ch2.sub1loop1",
+    # Ch3 (wave, hw=3) -- confirmed against pokecrystal.sym (`3a:7b01
+    # Music_TitleScreen_Ch3`, no .subN/.mainloop children) and against
+    # the real disassembly (audio/music/titlescreen.asm:580-894): a flat,
+    # single-block channel with no sound_call/sound_loop of its own,
+    # ending in a real sound_ret ($FF). Previously omitted from this list
+    # on the false premise that Music_TitleScreen had no Ch3 at all --
+    # it does; it just never loops, unlike every other song's Ch3.
+    "Music_TitleScreen_Ch3",
     "Music_TitleScreen_Ch4",
     "Music_TitleScreen_Ch4.loop1",
     "Music_TitleScreen_Ch4.sub1",
