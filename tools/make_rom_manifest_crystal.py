@@ -203,6 +203,26 @@ REQUIRED_SYMBOLS = (
     "Music_NewBarkTown_Ch2.sub2",
     "Music_NewBarkTown_Ch3",
     "Music_NewBarkTown_Ch3.mainloop",
+    # Music_Route30's four channels -- Ch1/Ch2/Ch3 are .mainloop-only; Ch4
+    # has five subroutines (.sub1 through .sub5, the most of any song in this
+    # milestone). Confirmed against pokecrystal.sym: 3d:4fde Music_Route30_Ch1,
+    # 3d:4ff1 .mainloop; 3d:502a Ch2, 3d:503d .mainloop; 3d:507c Ch3,
+    # 3d:5088 .mainloop; 3d:50cf Ch4, 3d:50d7 .mainloop, 3d:5129 .sub1,
+    # 3d:5158 .sub2, 3d:5187 .sub3, 3d:51b6 .sub4, 3d:51e5 .sub5.
+    "Music_Route30",
+    "Music_Route30_Ch1",
+    "Music_Route30_Ch1.mainloop",
+    "Music_Route30_Ch2",
+    "Music_Route30_Ch2.mainloop",
+    "Music_Route30_Ch3",
+    "Music_Route30_Ch3.mainloop",
+    "Music_Route30_Ch4",
+    "Music_Route30_Ch4.mainloop",
+    "Music_Route30_Ch4.sub1",
+    "Music_Route30_Ch4.sub2",
+    "Music_Route30_Ch4.sub3",
+    "Music_Route30_Ch4.sub4",
+    "Music_Route30_Ch4.sub5",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
