@@ -1784,6 +1784,58 @@ function RomExtractorGen2:extractRoute29Music()
   return song
 end
 
+-- Music_NewBarkTown: Ch1 and Ch2 each have two extra subroutines
+-- (.sub1, .sub2); Ch3 is .mainloop-only. This song has NO Channel 4 --
+-- confirmed by the absence of Music_NewBarkTown_Ch4 in pokecrystal.sym,
+-- not an omission (buildSong accepts any number of channels).
+function RomExtractorGen2:extractNewBarkTownMusic()
+  self:beginStage("New Bark Town music")
+
+  local ch1 = self:symbol("Music_NewBarkTown_Ch1")
+  local ch1Loop = self:symbol("Music_NewBarkTown_Ch1.mainloop")
+  local ch1Sub1 = self:symbol("Music_NewBarkTown_Ch1.sub1")
+  local ch1Sub2 = self:symbol("Music_NewBarkTown_Ch1.sub2")
+  local ch2 = self:symbol("Music_NewBarkTown_Ch2")
+  local ch2Loop = self:symbol("Music_NewBarkTown_Ch2.mainloop")
+  local ch2Sub1 = self:symbol("Music_NewBarkTown_Ch2.sub1")
+  local ch2Sub2 = self:symbol("Music_NewBarkTown_Ch2.sub2")
+  local ch3 = self:symbol("Music_NewBarkTown_Ch3")
+  local ch3Loop = self:symbol("Music_NewBarkTown_Ch3.mainloop")
+
+  local song = CrystalMusicTranscoder.buildSong({
+    { hw = 1, baseAddress = ch1.address,
+      bytes = self.rom:bytes(ch1.bank, ch1.address, 300),
+      subroutines = {
+        sub1 = { baseAddress = ch1Sub1.address,
+                 bytes = self.rom:bytes(ch1Sub1.bank, ch1Sub1.address, 60) },
+        sub2 = { baseAddress = ch1Sub2.address,
+                 bytes = self.rom:bytes(ch1Sub2.bank, ch1Sub2.address, 60) },
+      },
+      labels = {
+        [ch1Loop.address] = "mainloop",
+        [ch1Sub1.address] = "sub1", [ch1Sub2.address] = "sub2",
+      } },
+    { hw = 2, baseAddress = ch2.address,
+      bytes = self.rom:bytes(ch2.bank, ch2.address, 300),
+      subroutines = {
+        sub1 = { baseAddress = ch2Sub1.address,
+                 bytes = self.rom:bytes(ch2Sub1.bank, ch2Sub1.address, 60) },
+        sub2 = { baseAddress = ch2Sub2.address,
+                 bytes = self.rom:bytes(ch2Sub2.bank, ch2Sub2.address, 60) },
+      },
+      labels = {
+        [ch2Loop.address] = "mainloop",
+        [ch2Sub1.address] = "sub1", [ch2Sub2.address] = "sub2",
+      } },
+    { hw = 3, baseAddress = ch3.address,
+      bytes = self.rom:bytes(ch3.bank, ch3.address, 300),
+      labels = { [ch3Loop.address] = "mainloop" } },
+  })
+
+  self:tick("New Bark Town music", 1, 1)
+  return song
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -1815,6 +1867,7 @@ function RomExtractorGen2:run()
   local elmsLabSong = self:extractElmsLabMusic()
   local cherrygroveCitySong = self:extractCherrygroveCityMusic()
   local route29Song = self:extractRoute29Music()
+  local newBarkTownSong = self:extractNewBarkTownMusic()
   local mapSongs = {}
   for mapId, expected in pairs(self.manifest.maps) do
     if expected.music then mapSongs[mapId] = expected.music end
@@ -1826,6 +1879,7 @@ function RomExtractorGen2:run()
       Music_ElmsLab = elmsLabSong,
       Music_CherrygroveCity = cherrygroveCitySong,
       Music_Route29 = route29Song,
+      Music_NewBarkTown = newBarkTownSong,
     },
     mapSongs = mapSongs,
   }
