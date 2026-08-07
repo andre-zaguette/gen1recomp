@@ -138,6 +138,22 @@ REQUIRED_SYMBOLS = (
     "Music_TitleScreen_Ch4.sub2",
     "Music_TitleScreen_Ch4.sub3",
     "Music_TitleScreen_Ch4.sub4",
+    # Music_ElmsLab's four channels -- all four hardware channels
+    # (pulse 1/2, wave, noise), each with only its own .mainloop label and
+    # no sub-labels (confirmed against pokecrystal.sym: 3a:604c
+    # Music_ElmsLab_Ch1, 3a:6075 .mainloop; 3a:6128 Ch2, 3a:614f
+    # .mainloop; 3a:61fd Ch3, 3a:6216 .mainloop; 3a:62b1 Ch4, 3a:62b9
+    # .mainloop). The first song to exercise Ch3 (wave, hw=3) decoding --
+    # see docs/superpowers/plans/2026-08-06-gen2-crystal-milestone2-music.md's
+    # Task 1 (wave-channel support) and Task 2 (this extraction).
+    "Music_ElmsLab_Ch1",
+    "Music_ElmsLab_Ch1.mainloop",
+    "Music_ElmsLab_Ch2",
+    "Music_ElmsLab_Ch2.mainloop",
+    "Music_ElmsLab_Ch3",
+    "Music_ElmsLab_Ch3.mainloop",
+    "Music_ElmsLab_Ch4",
+    "Music_ElmsLab_Ch4.mainloop",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
@@ -205,31 +221,37 @@ MAP_SPECS = {
         "label": "NewBarkTown",
         "asm": "NewBarkTown.asm",
         "tileset": "TILESET_JOHTO",
+        "music": "Music_NewBarkTown",  # maps.asm:494, MUSIC_NEW_BARK_TOWN
     },
     "PLAYERS_HOUSE_1F": {
         "label": "PlayersHouse1F",
         "asm": "PlayersHouse1F.asm",
         "tileset": "TILESET_PLAYERS_HOUSE",
+        "music": "Music_NewBarkTown",  # maps.asm:496, MUSIC_NEW_BARK_TOWN
     },
     "PLAYERS_HOUSE_2F": {
         "label": "PlayersHouse2F",
         "asm": "PlayersHouse2F.asm",
         "tileset": "TILESET_PLAYERS_ROOM",
+        "music": "Music_NewBarkTown",  # maps.asm:497, MUSIC_NEW_BARK_TOWN
     },
     "ELMS_LAB": {
         "label": "ElmsLab",
         "asm": "ElmsLab.asm",
         "tileset": "TILESET_LAB",
+        "music": "Music_ElmsLab",  # maps.asm:495, MUSIC_PROF_ELM
     },
     "PLAYERS_NEIGHBORS_HOUSE": {
         "label": "PlayersNeighborsHouse",
         "asm": "PlayersNeighborsHouse.asm",
         "tileset": "TILESET_HOUSE",
+        "music": "Music_NewBarkTown",  # maps.asm:498, MUSIC_NEW_BARK_TOWN
     },
     "ELMS_HOUSE": {
         "label": "ElmsHouse",
         "asm": "ElmsHouse.asm",
         "tileset": "TILESET_PLAYERS_HOUSE",
+        "music": "Music_NewBarkTown",  # maps.asm:499, MUSIC_NEW_BARK_TOWN
     },
     "ROUTE_29": {
         "label": "Route29",
@@ -237,6 +259,7 @@ MAP_SPECS = {
         # data/maps/attributes.asm: `map_attributes Route29, ROUTE_29, $05`
         # -- same tileset id as NewBarkTown's own `$05`.
         "tileset": "TILESET_JOHTO",
+        "music": "Music_Route29",  # maps.asm:493, MUSIC_ROUTE_29
     },
     "ROUTE_29_ROUTE_46_GATE": {
         "label": "Route29Route46Gate",
@@ -246,6 +269,7 @@ MAP_SPECS = {
         # the border block, not the tileset id -- the real tileset comes from
         # the `map` macro's 2nd field in maps.asm.
         "tileset": "TILESET_GATE",
+        "music": "Music_Route29",  # maps.asm:503, MUSIC_ROUTE_29
     },
     "CHERRYGROVE_CITY": {
         "label": "CherrygroveCity",
@@ -256,6 +280,7 @@ MAP_SPECS = {
         # CHERRYGROVE_CITY, $35` third field is the border block, not the
         # tileset id, same caveat as Route29Route46Gate above.
         "tileset": "TILESET_JOHTO",
+        "music": "Music_CherrygroveCity",  # maps.asm:529, MUSIC_CHERRYGROVE_CITY
     },
     "MR_POKEMONS_HOUSE": {
         "label": "MrPokemonsHouse",
@@ -267,6 +292,7 @@ MAP_SPECS = {
         # (border block, $00 here) -- the exact caveat Route29Route46Gate's
         # own registration task got wrong the first time.
         "tileset": "TILESET_FACILITY",
+        "music": "Music_CherrygroveCity",  # maps.asm:536, MUSIC_CHERRYGROVE_CITY
     },
     "ROUTE_30": {
         "label": "Route30",
@@ -281,6 +307,7 @@ MAP_SPECS = {
         # Route29Route46Gate's own registration task got wrong the first
         # time, re-confirmed correctly here via maps.asm directly.
         "tileset": "TILESET_JOHTO",
+        "music": "Music_Route30",  # maps.asm:527, MUSIC_ROUTE_30
     },
 }
 
@@ -953,6 +980,7 @@ def parse_maps(pokecrystal):
         out[const_name] = {
             "label": spec["label"],
             "tileset": spec["tileset"],
+            "music": spec["music"],
             "width": dim["width"],
             "height": dim["height"],
             "group": dim["group"],

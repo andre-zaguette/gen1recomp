@@ -1379,6 +1379,7 @@
       "group": 26,
       "height": 9,
       "label": "CherrygroveCity",
+      "music": "Music_CherrygroveCity",
       "number": 3,
       "objectCount": 5,
       "objects": [
@@ -1477,6 +1478,7 @@
       "group": 24,
       "height": 4,
       "label": "ElmsHouse",
+      "music": "Music_NewBarkTown",
       "number": 9,
       "objectCount": 2,
       "objects": [
@@ -1522,6 +1524,7 @@
       "group": 24,
       "height": 6,
       "label": "ElmsLab",
+      "music": "Music_ElmsLab",
       "number": 5,
       "objectCount": 6,
       "objects": [
@@ -1702,6 +1705,7 @@
       "group": 26,
       "height": 4,
       "label": "MrPokemonsHouse",
+      "music": "Music_CherrygroveCity",
       "number": 10,
       "objectCount": 2,
       "objects": [
@@ -1780,6 +1784,7 @@
       "group": 24,
       "height": 9,
       "label": "NewBarkTown",
+      "music": "Music_NewBarkTown",
       "number": 4,
       "objectCount": 3,
       "objects": [
@@ -1854,6 +1859,7 @@
       "group": 24,
       "height": 4,
       "label": "PlayersHouse1F",
+      "music": "Music_NewBarkTown",
       "number": 6,
       "objectCount": 5,
       "objects": [
@@ -1917,6 +1923,7 @@
       "group": 24,
       "height": 3,
       "label": "PlayersHouse2F",
+      "music": "Music_NewBarkTown",
       "number": 7,
       "objectCount": 4,
       "objects": [],
@@ -1932,6 +1939,7 @@
       "group": 24,
       "height": 4,
       "label": "PlayersNeighborsHouse",
+      "music": "Music_NewBarkTown",
       "number": 8,
       "objectCount": 2,
       "objects": [
@@ -1984,6 +1992,7 @@
       "group": 24,
       "height": 9,
       "label": "Route29",
+      "music": "Music_Route29",
       "number": 3,
       "objectCount": 8,
       "objects": [
@@ -2103,6 +2112,7 @@
       "group": 24,
       "height": 4,
       "label": "Route29Route46Gate",
+      "music": "Music_Route29",
       "number": 13,
       "objectCount": 2,
       "objects": [
@@ -2150,6 +2160,7 @@
       "group": 26,
       "height": 27,
       "label": "Route30",
+      "music": "Music_Route30",
       "number": 1,
       "objectCount": 11,
       "objects": [
@@ -6644,6 +6655,38 @@
     "MrPokemonsHouse_MapEvents": [
       101,
       30191
+    ],
+    "Music_ElmsLab_Ch1": [
+      58,
+      24652
+    ],
+    "Music_ElmsLab_Ch1.mainloop": [
+      58,
+      24693
+    ],
+    "Music_ElmsLab_Ch2": [
+      58,
+      24872
+    ],
+    "Music_ElmsLab_Ch2.mainloop": [
+      58,
+      24911
+    ],
+    "Music_ElmsLab_Ch3": [
+      58,
+      25085
+    ],
+    "Music_ElmsLab_Ch3.mainloop": [
+      58,
+      25110
+    ],
+    "Music_ElmsLab_Ch4": [
+      58,
+      25265
+    ],
+    "Music_ElmsLab_Ch4.mainloop": [
+      58,
+      25273
     ],
     "Music_TitleScreen_Ch1": [
       58,
