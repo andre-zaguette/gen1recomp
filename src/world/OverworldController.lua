@@ -1269,10 +1269,20 @@ end
 --     (Game.data.field.ledges).
 --   * Gen2 (constants/collision_constants.asm's COLL_HOP_* range,
 --     RomExtractorGen2.lua's extractTileset): the FRONT tile's own
---     collision permission directly encodes which facing(s) may hop it --
---     no standing-tile pairing at all, matching how the real engine's
---     .TryJump (engine/overworld/player_movement.asm) only ever inspects
---     the target tile. Map:hopFacingAt exposes this per-tileset table.
+--     collision permission encodes which facing(s) may hop it.
+--     NOT a literal replica of the real engine's own .TryJump (engine/
+--     overworld/player_movement.asm), which actually reads
+--     wPlayerTileCollision -- the tile the player is already STANDING
+--     on -- not the target/front tile; ledges are freely walkable floor
+--     in the real ROM (COLL_HOP_* is classified LAND_TILE in data/
+--     collision/collision_permissions.asm) and only the subsequent
+--     press-while-standing-on-it turns into a hop. This project's
+--     collision model has no such standing-tile memory (isWalkableCell
+--     is a stateless per-target-cell query), so Map:hopFacingAt/
+--     Map:isWalkableCell instead block the front tile outright from
+--     every non-matching direction -- see isWalkableCell's own comment
+--     for the full tradeoff. Map:hopFacingAt exposes the per-tileset
+--     facing table this branch consults.
 -- Either source matching runs the identical landing/execution logic below.
 function OverworldState:checkLedgeHop(dir)
   local p = self.player
@@ -1284,7 +1294,15 @@ function OverworldState:checkLedgeHop(dir)
 
   local matched = false
   -- a row without a tileset applies everywhere; the vanilla rows are all
-  -- OVERWORLD, which is what the deleted hard gate used to say
+  -- OVERWORLD, which is what the deleted hard gate used to say.
+  -- Breaks on the first match (an intentional simplification the pre-fix
+  -- code didn't make -- it kept scanning field.ledges even after a
+  -- landing-blocked match, in case a later duplicate entry could still
+  -- land): the 5-tuple key (tileset, facing, input, standingTile,
+  -- ledgeTile) is specific enough that this project's own authored
+  -- Game.data.field.ledges rows never collide, so a failed landing on
+  -- the first match means the hop is genuinely blocked, not that a
+  -- different entry should be tried.
   for _, ledge in ipairs(Game.data.field.ledges) do
     if (ledge.tileset or "OVERWORLD") == tileset
        and ledge.facing == dir and ledge.input == dir

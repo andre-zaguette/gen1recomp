@@ -209,16 +209,35 @@ function Map:inBounds(cx, cy)
 end
 
 function Map:isWalkableCell(cx, cy)
-  -- A hop-quadrant cell is never walkable via a plain step, matching the
-  -- real engine's .TryStep/.TryJump split (engine/overworld/
-  -- player_movement.asm): only checkLedgeHop's facing-gated jump may
-  -- ever land the player two cells past it, so this excludes it here
-  -- unconditionally rather than relying on every caller to know to
-  -- check hopFacingAt too. Checked before the tile-id lookup below
-  -- because the same 8x8 graphic a hop quadrant uses can legitimately
-  -- be plain walkable floor elsewhere in the same tileset (verified
-  -- against TILESET_JOHTO) -- tile identity alone would otherwise wrongly
-  -- let the player walk straight through from the disallowed side.
+  -- A hop-quadrant cell is never walkable via a plain step -- a
+  -- DELIBERATE simplification of the real engine, not a literal replica
+  -- of it. In the real ROM (data/collision/collision_permissions.asm),
+  -- every COLL_HOP_* value is classified LAND_TILE, so .TryStep
+  -- (engine/overworld/player_movement.asm) actually lets the player walk
+  -- onto/around a ledge lip from any side same as plain floor; only
+  -- .TryJump's facing check (reading wPlayerTileCollision, the tile the
+  -- player is already STANDING on, not the target tile) turns a normal
+  -- step in the one matching direction into a 2-cell hop instead. The
+  -- real "can't come back up" wall players actually experience comes
+  -- from an adjacent WALL-classified cliff-face quadrant placed next to
+  -- the lip, not from the lip tile itself blocking anything.
+  -- This project's collision model has no "already standing on a special
+  -- tile, next input decides step-vs-hop" state -- isWalkableCell is
+  -- queried per target cell with no memory of where the player came
+  -- from. Replicating the ROM's exact two-stage behavior would need a
+  -- structural change (checkLedgeHop would have to gate on the
+  -- STANDING tile, matching wPlayerTileCollision, not the front tile it
+  -- currently reads); blocking the hop quadrant outright from every
+  -- non-matching direction is a simpler, strictly more conservative
+  -- stand-in that resolves the two reported symptoms (freely-passable
+  -- ledges; a real blocked-downward-jump) without that rework, at the
+  -- cost of also blocking a same-tileset approach the real ROM would
+  -- allow (e.g. walking onto the lip from the side without hopping).
+  -- Checked before the tile-id lookup below because the same 8x8
+  -- graphic a hop quadrant uses can legitimately be plain walkable
+  -- floor elsewhere in the same tileset (verified against
+  -- TILESET_JOHTO) -- tile identity alone would otherwise wrongly let
+  -- the player walk straight through from the disallowed side.
   if self:hopFacingAt(cx, cy) then return false end
   return self.walkable[self:cellTile(cx, cy)] or false
 end
@@ -226,9 +245,9 @@ end
 -- the {up=,down=,left=,right=} allowed hop-facing set for this cell's
 -- collision quadrant, or nil if it isn't a ledge tile at all -- see
 -- src/world/OverworldController.lua's checkLedgeHop, which is the only
--- caller (a facing not present in the set means "blocked", matching the
--- real engine's .TryJump: a ledge tile is walkable ONLY via a matching
--- hop, never as plain floor from any other side).
+-- caller, and isWalkableCell above for why this project blocks every
+-- other direction rather than replicating the real ROM's "walkable
+-- floor that happens to also hop" behavior exactly.
 --
 -- Keyed by (block id, quadrant) rather than resolved graphic tile id,
 -- unlike isWalkableCell/isGrassCell above -- verified against the real
