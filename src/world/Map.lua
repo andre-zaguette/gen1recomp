@@ -112,6 +112,15 @@ function Map.new(def, tilesetDef)
 
   self.walkable = {}
   for _, t in ipairs(tilesetDef.walkable) do self.walkable[t] = true end
+  -- block id -> quadrant (0-3) -> {up=,down=,left=,right=} allowed
+  -- hop-facing set (Gen2 ledges, RomExtractorGen2.lua's COLL_HOP_*
+  -- extraction) -- already keyed this way at extraction time, no rebuild
+  -- needed like walkable above; see Map:hopFacingAt for why this is
+  -- block+quadrant keyed rather than tile-id keyed like walkable/grass.
+  -- Gen1 tilesets never set this (their own ledges are the separate,
+  -- tile-ID-pair-authored Game.data.field.ledges list
+  -- OverworldController.lua's checkLedgeHop already consults).
+  self.hopFacing = tilesetDef.hopFacing or {}
   self.doorTiles = {}
   for _, t in ipairs(tilesetDef.doorTiles or {}) do self.doorTiles[t] = true end
   self.warpTiles = {}
@@ -200,7 +209,44 @@ function Map:inBounds(cx, cy)
 end
 
 function Map:isWalkableCell(cx, cy)
+  -- A hop-quadrant cell is never walkable via a plain step, matching the
+  -- real engine's .TryStep/.TryJump split (engine/overworld/
+  -- player_movement.asm): only checkLedgeHop's facing-gated jump may
+  -- ever land the player two cells past it, so this excludes it here
+  -- unconditionally rather than relying on every caller to know to
+  -- check hopFacingAt too. Checked before the tile-id lookup below
+  -- because the same 8x8 graphic a hop quadrant uses can legitimately
+  -- be plain walkable floor elsewhere in the same tileset (verified
+  -- against TILESET_JOHTO) -- tile identity alone would otherwise wrongly
+  -- let the player walk straight through from the disallowed side.
+  if self:hopFacingAt(cx, cy) then return false end
   return self.walkable[self:cellTile(cx, cy)] or false
+end
+
+-- the {up=,down=,left=,right=} allowed hop-facing set for this cell's
+-- collision quadrant, or nil if it isn't a ledge tile at all -- see
+-- src/world/OverworldController.lua's checkLedgeHop, which is the only
+-- caller (a facing not present in the set means "blocked", matching the
+-- real engine's .TryJump: a ledge tile is walkable ONLY via a matching
+-- hop, never as plain floor from any other side).
+--
+-- Keyed by (block id, quadrant) rather than resolved graphic tile id,
+-- unlike isWalkableCell/isGrassCell above -- verified against the real
+-- ROM (TILESET_JOHTO) that the same 8x8 graphic can carry a hop
+-- permission in one placed block and plain floor in another, so tile-id
+-- alone is not a reliable enough key for this one collision class (see
+-- RomExtractorGen2.lua's extractTileset). Mirrors Map:tileAt's own
+-- block/quadrant math (cellTile always samples row in {1,3}, col in
+-- {0,2} -- the exact four positions extractTileset's own row/col
+-- computation targets) rather than resolving through cellTile itself.
+function Map:hopFacingAt(cx, cy)
+  local tx, ty = cx * 2, cy * 2 + 1
+  local bx, by = math.floor(tx / 4), math.floor(ty / 4)
+  local blockId = self:blockAt(bx, by)
+  local block = self.hopFacing[blockId]
+  if not block then return nil end
+  local cellIndex = (ty % 4 == 3 and 2 or 0) + (tx % 4 == 2 and 1 or 0)
+  return block[cellIndex]
 end
 
 function Map:isGrassCell(cx, cy)

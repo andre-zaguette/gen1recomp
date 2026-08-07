@@ -50,6 +50,15 @@ local LAND_TILE, WATER_TILE, WALL_TILE, TALK = 0x00, 0x01, 0x0F, 0x10
 -- stay walkable (bits 0-3 are still LAND_TILE) once flagged, matching
 -- src/world/Map.lua's isGrassCell needing "walkable AND grass" together.
 local GRASS = 0x20
+-- Not a pokecrystal COLL_* base value either -- a third internal base
+-- (alongside LAND_TILE/WATER_TILE/WALL_TILE) for the COLL_HOP_* range
+-- ($A0-$A7, constants/collision_constants.asm's HI_NYBBLE_LEDGES): a hop
+-- tile is NOT unconditionally walkable (must not join walkableSet below)
+-- but is also not a plain WALL_TILE -- it's a direction-gated exception,
+-- see src/world/OverworldController.lua's checkLedgeHop and Map.lua's
+-- hopFacing lookup, which grant the crossing only when the player's
+-- facing matches this tile's own allowed direction(s).
+local HOP_TILE = 0x02
 local COLLISION_PERMISSION = {}
 for i = 0, 255 do COLLISION_PERMISSION[i] = LAND_TILE end
 local WALL = {
@@ -65,6 +74,25 @@ for i = 0x30, 0x3F do WATER[#WATER + 1] = i end
 for i = 0xC0, 0xCF do WATER[#WATER + 1] = i end
 local WATER_TALK = { 0x22, 0x24, 0x2A, 0x2C }
 local GRASS_TILES = { 0x14, 0x18 }
+-- constants/collision_constants.asm: COLL_HOP_RIGHT $A0, COLL_HOP_LEFT
+-- $A1, COLL_HOP_UP $A2 (unused by any real tileset), COLL_HOP_DOWN $A3,
+-- COLL_HOP_DOWN_RIGHT $A4, COLL_HOP_DOWN_LEFT $A5, COLL_HOP_UP_RIGHT $A6
+-- (unused), COLL_HOP_UP_LEFT $A7 (unused). Facing sets below match
+-- engine/overworld/player_movement.asm's own `.ledge_table` bitmask
+-- exactly (`.TryJump`: the target tile's collision nybble selects a row
+-- of that table, ANDed against the player's current facing -- a facing
+-- bit set in the row is a permitted hop direction).
+local HOP_FACINGS = {
+  [0xA0] = { right = true },
+  [0xA1] = { left = true },
+  [0xA2] = { up = true },
+  [0xA3] = { down = true },
+  [0xA4] = { right = true, down = true },
+  [0xA5] = { down = true, left = true },
+  [0xA6] = { up = true, right = true },
+  [0xA7] = { up = true, left = true },
+}
+for i in pairs(HOP_FACINGS) do COLLISION_PERMISSION[i] = HOP_TILE end
 for _, i in ipairs(WALL) do COLLISION_PERMISSION[i] = WALL_TILE end
 for _, i in ipairs(WALL_TALK) do COLLISION_PERMISSION[i] = bit.bor(WALL_TILE, TALK) end
 for _, i in ipairs(WATER) do COLLISION_PERMISSION[i] = WATER_TILE end
@@ -912,7 +940,7 @@ function RomExtractorGen2:extractTileset()
 
     local blocks = decodeBlocks(self.rom:bytes(meta.bank, meta.address, 2048))
     local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
-    local walkableSet, grassSet = {}, {}
+    local walkableSet, grassSet, hopSet = {}, {}, {}
     for blockIndex, block in ipairs(blocks) do
       for cellIndex = 0, 3 do
         local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
@@ -924,6 +952,24 @@ function RomExtractorGen2:extractTileset()
           local tileId = block[row * 4 + col + 1]
           walkableSet[tileId] = true
           if bit.band(permission, GRASS) == GRASS then grassSet[tileId] = true end
+        elseif bit.band(permission, 0x0F) == HOP_TILE then
+          -- Keyed by (blockIndex, cellIndex/quadrant), NOT by the
+          -- resolved 8x8 graphic tile id the walkable/grass branches use
+          -- above -- verified against the real ROM (TILESET_JOHTO) that
+          -- the same graphic tile id can carry a hop permission in one
+          -- placed block and plain walkable floor in another (tile
+          -- identity is not collision identity once a graphic gets
+          -- reused across metatiles). Block+quadrant is exactly what the
+          -- real engine's own wPlayerTileCollision byte is keyed by too
+          -- (home/map.asm's collision lookup reads the block's own 4
+          -- permission bytes directly, never the tile graphic). Keyed by
+          -- the 0-based block id (blockIndex - 1) to match Map:blockAt's
+          -- own 0-based convention (Map.lua indexes tileset.blocks with
+          -- blockId + 1, the same +1 this file's decodeBlocks output
+          -- already expects).
+          local blockId = blockIndex - 1
+          hopSet[blockId] = hopSet[blockId] or {}
+          hopSet[blockId][cellIndex] = HOP_FACINGS[collValue]
         end
       end
     end
@@ -936,6 +982,11 @@ function RomExtractorGen2:extractTileset()
     -- nil, same as Gen1, when a tileset has no grass tile at all (indoor
     -- tilesets).
     local grassTile = next(grassSet) and grassSet or nil
+    -- block id -> quadrant (0-3) -> {up=,down=,left=,right=} allowed
+    -- hop-facing set (see HOP_FACINGS above); nil when this tileset has
+    -- no ledges at all (indoor tilesets, and any outdoor tileset that
+    -- just doesn't use COLL_HOP_* -- not every route has ledges).
+    local hopFacing = next(hopSet) and hopSet or nil
 
     out[id] = {
       id = id, source = spec.source,
@@ -943,6 +994,7 @@ function RomExtractorGen2:extractTileset()
       imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
       blocks = blocks, walkable = walkable,
       counterTiles = {}, grassTile = grassTile, doorTiles = {}, warpTiles = {},
+      hopFacing = hopFacing,
       animation = nil,
     }
     index = index + 1

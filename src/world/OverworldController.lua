@@ -1262,8 +1262,18 @@ function OverworldState:startDustAnim(cx, cy, onDone)
   self.dustAnim = { x = cx, y = cy, frames = 32, onDone = onDone }
 end
 
--- Ledge hops (data/tilesets/ledge_tiles.asm): standing tile + ledge tile
--- in front + matching input direction -> jump two cells.
+-- Ledge hops. Two independent sources feed the same match, since Gen1 and
+-- Gen2 tilesets encode ledges completely differently at the ROM level:
+--   * Gen1 (data/tilesets/ledge_tiles.asm): standing tile + ledge tile in
+--     front + matching input direction, a hand-authored tile-ID-pair list
+--     (Game.data.field.ledges).
+--   * Gen2 (constants/collision_constants.asm's COLL_HOP_* range,
+--     RomExtractorGen2.lua's extractTileset): the FRONT tile's own
+--     collision permission directly encodes which facing(s) may hop it --
+--     no standing-tile pairing at all, matching how the real engine's
+--     .TryJump (engine/overworld/player_movement.asm) only ever inspects
+--     the target tile. Map:hopFacingAt exposes this per-tileset table.
+-- Either source matching runs the identical landing/execution logic below.
 function OverworldState:checkLedgeHop(dir)
   local p = self.player
   local tileset = self.map.def.tileset
@@ -1271,42 +1281,52 @@ function OverworldState:checkLedgeHop(dir)
   local fx, fy = Collision.target(p.cellX, p.cellY, dir)
   if not self.map:inBounds(fx, fy) then return false end
   local front = self.map:cellTile(fx, fy)
+
+  local matched = false
   -- a row without a tileset applies everywhere; the vanilla rows are all
   -- OVERWORLD, which is what the deleted hard gate used to say
   for _, ledge in ipairs(Game.data.field.ledges) do
     if (ledge.tileset or "OVERWORLD") == tileset
        and ledge.facing == dir and ledge.input == dir
        and ledge.standingTile == standing and ledge.ledgeTile == front then
-      local lx, ly = Collision.target(fx, fy, dir)
-      if not self.map:inBounds(lx, ly) then
-        -- The landing is on the CONNECTED map.  pokered never checks where a
-        -- hop lands (engine/overworld/ledges.asm HandleLedges just simulates
-        -- two presses in the hop direction) and the connection strip is
-        -- loaded, so ROUTE_4's bottom-row ledge at (12,17)/(13,17) really
-        -- does drop onto ROUTE_3 row 0 (south connection, offset -25 ->
-        -- destX = curX + 50; ROUTE_3 (62,0)/(63,0) are walkable $39/$23):
-        -- the one-way shortcut off the Mt Moon plaza that the in-bounds gate
-        -- was silently refusing, which is issue #223.  Validate the seam
-        -- cell the way crossConnection does, hop the first cell onto the
-        -- ledge tile, and hand the second to checkEdgeExit, which owns the
-        -- crossing.
-        local dest, ts, cx, cy = self:connectionLanding(dir)
-        if not (dest and Map.defPassable(dest, ts, cx, cy, p.surfing)) then
-          return false
-        end
-        require("src.core.Sound").play(Game.data, "Ledge")
-        p.hopFrames, p.hopTotal = 32, 32 -- jump arc (cosmetic)
-        self:scriptMove(p, dir, 1, function() self:checkEdgeExit(dir) end)
-        return true
-      end
-      if not Collision.occupied(self.entities, lx, ly, p)
-         and self.map:isWalkableCell(lx, ly) then
-        require("src.core.Sound").play(Game.data, "Ledge")
-        p.hopFrames, p.hopTotal = 32, 32 -- jump arc (cosmetic)
-        self:scriptMove(p, dir, 2)
-        return true
-      end
+      matched = true
+      break
     end
+  end
+  if not matched then
+    local hopFacing = self.map:hopFacingAt(fx, fy)
+    matched = hopFacing ~= nil and hopFacing[dir] == true
+  end
+  if not matched then return false end
+
+  local lx, ly = Collision.target(fx, fy, dir)
+  if not self.map:inBounds(lx, ly) then
+    -- The landing is on the CONNECTED map.  pokered never checks where a
+    -- hop lands (engine/overworld/ledges.asm HandleLedges just simulates
+    -- two presses in the hop direction) and the connection strip is
+    -- loaded, so ROUTE_4's bottom-row ledge at (12,17)/(13,17) really
+    -- does drop onto ROUTE_3 row 0 (south connection, offset -25 ->
+    -- destX = curX + 50; ROUTE_3 (62,0)/(63,0) are walkable $39/$23):
+    -- the one-way shortcut off the Mt Moon plaza that the in-bounds gate
+    -- was silently refusing, which is issue #223.  Validate the seam
+    -- cell the way crossConnection does, hop the first cell onto the
+    -- ledge tile, and hand the second to checkEdgeExit, which owns the
+    -- crossing.
+    local dest, ts, cx, cy = self:connectionLanding(dir)
+    if not (dest and Map.defPassable(dest, ts, cx, cy, p.surfing)) then
+      return false
+    end
+    require("src.core.Sound").play(Game.data, "Ledge")
+    p.hopFrames, p.hopTotal = 32, 32 -- jump arc (cosmetic)
+    self:scriptMove(p, dir, 1, function() self:checkEdgeExit(dir) end)
+    return true
+  end
+  if not Collision.occupied(self.entities, lx, ly, p)
+     and self.map:isWalkableCell(lx, ly) then
+    require("src.core.Sound").play(Game.data, "Ledge")
+    p.hopFrames, p.hopTotal = 32, 32 -- jump arc (cosmetic)
+    self:scriptMove(p, dir, 2)
+    return true
   end
   return false
 end
