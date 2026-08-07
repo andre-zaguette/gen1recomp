@@ -6656,6 +6656,42 @@
       101,
       30191
     ],
+    "Music_CherrygroveCity": [
+      61,
+      23299
+    ],
+    "Music_CherrygroveCity_Ch1": [
+      61,
+      23311
+    ],
+    "Music_CherrygroveCity_Ch1.mainloop": [
+      61,
+      23334
+    ],
+    "Music_CherrygroveCity_Ch2": [
+      61,
+      23412
+    ],
+    "Music_CherrygroveCity_Ch2.mainloop": [
+      61,
+      23431
+    ],
+    "Music_CherrygroveCity_Ch3": [
+      61,
+      23512
+    ],
+    "Music_CherrygroveCity_Ch3.mainloop": [
+      61,
+      23524
+    ],
+    "Music_CherrygroveCity_Ch4": [
+      61,
+      23624
+    ],
+    "Music_CherrygroveCity_Ch4.mainloop": [
+      61,
+      23629
+    ],
     "Music_ElmsLab_Ch1": [
       58,
       24652
@@ -6727,6 +6763,46 @@
     "Music_NewBarkTown_Ch3.mainloop": [
       58,
       29704
+    ],
+    "Music_Route29": [
+      60,
+      17286
+    ],
+    "Music_Route29_Ch1": [
+      60,
+      17298
+    ],
+    "Music_Route29_Ch1.mainloop": [
+      60,
+      17317
+    ],
+    "Music_Route29_Ch2": [
+      60,
+      17485
+    ],
+    "Music_Route29_Ch2.mainloop": [
+      60,
+      17496
+    ],
+    "Music_Route29_Ch2.sub1": [
+      60,
+      17630
+    ],
+    "Music_Route29_Ch3": [
+      60,
+      17659
+    ],
+    "Music_Route29_Ch3.mainloop": [
+      60,
+      17668
+    ],
+    "Music_Route29_Ch4": [
+      60,
+      17833
+    ],
+    "Music_Route29_Ch4.mainloop": [
+      60,
+      17840
     ],
     "Music_TitleScreen_Ch1": [
       58,

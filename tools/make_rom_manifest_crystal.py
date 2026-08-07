@@ -154,6 +154,37 @@ REQUIRED_SYMBOLS = (
     "Music_ElmsLab_Ch3.mainloop",
     "Music_ElmsLab_Ch4",
     "Music_ElmsLab_Ch4.mainloop",
+    # Music_Route29's four channels -- Ch1/Ch3/Ch4 are .mainloop-only; Ch2
+    # has one extra .sub1 (confirmed against pokecrystal.sym: 3c:4392 Ch1,
+    # 3c:43a5 .mainloop; 3c:444d Ch2, 3c:4458 .mainloop, 3c:44de .sub1;
+    # 3c:44fb Ch3, 3c:4504 .mainloop; 3c:45a9 Ch4, 3c:45b0 .mainloop).
+    # These were originally committed by hand-patching the JSON manifest
+    # directly (Task 4's fix round) without updating this generator --
+    # restored here after a later regeneration silently dropped them.
+    "Music_Route29",
+    "Music_Route29_Ch1",
+    "Music_Route29_Ch1.mainloop",
+    "Music_Route29_Ch2",
+    "Music_Route29_Ch2.mainloop",
+    "Music_Route29_Ch2.sub1",
+    "Music_Route29_Ch3",
+    "Music_Route29_Ch3.mainloop",
+    "Music_Route29_Ch4",
+    "Music_Route29_Ch4.mainloop",
+    # Music_CherrygroveCity's four channels, all .mainloop-only (confirmed
+    # against pokecrystal.sym: 3d:5b0f Ch1, 3d:5b26 .mainloop; 3d:5b74 Ch2,
+    # 3d:5b87 .mainloop; 3d:5bd8 Ch3, 3d:5be4 .mainloop; 3d:5c48 Ch4,
+    # 3d:5c4d .mainloop). Same "hand-patched JSON, never added here"
+    # history as Music_Route29 above -- restored together.
+    "Music_CherrygroveCity",
+    "Music_CherrygroveCity_Ch1",
+    "Music_CherrygroveCity_Ch1.mainloop",
+    "Music_CherrygroveCity_Ch2",
+    "Music_CherrygroveCity_Ch2.mainloop",
+    "Music_CherrygroveCity_Ch3",
+    "Music_CherrygroveCity_Ch3.mainloop",
+    "Music_CherrygroveCity_Ch4",
+    "Music_CherrygroveCity_Ch4.mainloop",
     # Music_NewBarkTown's three channels (no Channel 4) -- Ch1 and Ch2 each
     # have two subroutines (.sub1, .sub2); Ch3 is .mainloop-only. Confirmed
     # against pokecrystal.sym: 3a:72dd Music_NewBarkTown_Ch1, 3a:72eb
