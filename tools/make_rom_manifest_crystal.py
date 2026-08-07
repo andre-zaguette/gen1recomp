@@ -154,6 +154,24 @@ REQUIRED_SYMBOLS = (
     "Music_ElmsLab_Ch3.mainloop",
     "Music_ElmsLab_Ch4",
     "Music_ElmsLab_Ch4.mainloop",
+    # Music_NewBarkTown's three channels (no Channel 4) -- Ch1 and Ch2 each
+    # have two subroutines (.sub1, .sub2); Ch3 is .mainloop-only. Confirmed
+    # against pokecrystal.sym: 3a:72dd Music_NewBarkTown_Ch1, 3a:72eb
+    # .mainloop, 3a:7349 .sub1, 3a:737c .sub2; 3a:738d Ch2, 3a:7396
+    # .mainloop, 3a:73bf .sub1, 3a:73f2 .sub2; 3a:7400 Ch3, 3a:7408
+    # .mainloop. Notably absent: Music_NewBarkTown_Ch4 (not an extraction
+    # gap; the real ROM song genuinely only uses 3 of the 4 hardware
+    # channels). The most-used song in this milestone (5 maps resolve to it).
+    "Music_NewBarkTown_Ch1",
+    "Music_NewBarkTown_Ch1.mainloop",
+    "Music_NewBarkTown_Ch1.sub1",
+    "Music_NewBarkTown_Ch1.sub2",
+    "Music_NewBarkTown_Ch2",
+    "Music_NewBarkTown_Ch2.mainloop",
+    "Music_NewBarkTown_Ch2.sub1",
+    "Music_NewBarkTown_Ch2.sub2",
+    "Music_NewBarkTown_Ch3",
+    "Music_NewBarkTown_Ch3.mainloop",
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
