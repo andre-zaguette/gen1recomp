@@ -230,6 +230,27 @@ REQUIRED_SYMBOLS = (
     "Music_Route30_Ch4.sub3",
     "Music_Route30_Ch4.sub4",
     "Music_Route30_Ch4.sub5",
+    # SFX plan (docs/superpowers/plans/2026-08-08-gen2-crystal-sfx.md):
+    # the 14 real Sfx_*_ChN channel symbols behind this project's own
+    # Collision/Cut/Denied/Ball_Poof/Ledge_Jump/Withdraw_Deposit/
+    # Go_Inside/Get_Key_Item/Intro_Whoosh names -- see the plan's
+    # "Research already done" section for the name->constant mapping.
+    "Sfx_Bump_Ch5",             # 3c:5d6f -- Collision
+    "Sfx_Cut_Ch8",              # 3c:60c3 -- Cut
+    "Sfx_Wrong_Ch5",            # 3c:5f05 -- Denied
+    "Sfx_Wrong_Ch6",            # 3c:5f1c -- Denied
+    "Sfx_BallPoof_Ch5",         # 3c:5ff4 -- Ball_Poof
+    "Sfx_BallPoof_Ch8",         # 3c:5fff -- Ball_Poof
+    "Sfx_JumpOverLedge_Ch5",    # 3c:5ebc -- Ledge_Jump
+    "Sfx_Transaction_Ch5",      # 3c:5d55 -- Withdraw_Deposit
+    "Sfx_Transaction_Ch6",      # 3c:5d60 -- Withdraw_Deposit
+    "Sfx_EnterDoor_Ch8",        # 3c:5d08 -- Go_Inside
+    "Sfx_KeyItem_Ch5",          # 3c:4b92 -- Get_Key_Item
+    "Sfx_KeyItem_Ch6",          # 3c:4ba8 -- Get_Key_Item
+    "Sfx_KeyItem_Ch7",          # 3c:4bb8 -- Get_Key_Item (Ch8 deliberately
+                                # excluded -- see the plan's "Research
+                                # already done" section)
+    "Sfx_IntroWhoosh_Ch8",      # 3c:656c -- Intro_Whoosh
 )
 
 # Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)

@@ -1953,6 +1953,59 @@ function RomExtractorGen2:extractRoute30Music()
   return song
 end
 
+-- The first batch of Crystal SFX: the 9 names this project's own code
+-- already calls by name (Sound.play/Sound.startLoop call sites across
+-- src/ and data/scripts/), mapped to their real Crystal SFX_* constants
+-- -- see the plan's "Research already done" section for each mapping's
+-- verification. None of these channel bodies use sound_call/sound_loop
+-- (confirmed against their real bytes), so no subroutines/labels table
+-- is needed -- unlike every one of Milestone 2's music songs, which all
+-- loop forever.
+function RomExtractorGen2:extractSfx()
+  self:beginStage("Sound effects")
+
+  local function ch(symbolName, hw)
+    local sym = self:symbol(symbolName)
+    return { hw = hw, baseAddress = sym.address,
+      bytes = self.rom:bytes(sym.bank, sym.address, 40) }
+  end
+
+  local sfx = {
+    Collision = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_Bump_Ch5", 1),
+    }),
+    Cut = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_Cut_Ch8", 4),
+    }),
+    Denied = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_Wrong_Ch5", 1), ch("Sfx_Wrong_Ch6", 2),
+    }),
+    Ball_Poof = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_BallPoof_Ch5", 1), ch("Sfx_BallPoof_Ch8", 4),
+    }),
+    Ledge_Jump = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_JumpOverLedge_Ch5", 1),
+    }),
+    Withdraw_Deposit = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_Transaction_Ch5", 1), ch("Sfx_Transaction_Ch6", 2),
+    }),
+    Go_Inside = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_EnterDoor_Ch8", 4),
+    }),
+    -- Ch8 (a noise drum tail) deliberately excluded -- see the plan's
+    -- "Research already done" section.
+    Get_Key_Item = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_KeyItem_Ch5", 1), ch("Sfx_KeyItem_Ch6", 2), ch("Sfx_KeyItem_Ch7", 3),
+    }),
+    Intro_Whoosh = CrystalMusicTranscoder.buildSfx({
+      ch("Sfx_IntroWhoosh_Ch8", 4),
+    }),
+  }
+
+  self:tick("Sound effects", 1, 1)
+  return sfx
+end
+
 function RomExtractorGen2:extractStubs()
   for _, name in ipairs(STUB_MODULES) do
     self:write(name, {})
@@ -1986,6 +2039,7 @@ function RomExtractorGen2:run()
   local route29Song = self:extractRoute29Music()
   local newBarkTownSong = self:extractNewBarkTownMusic()
   local route30Song = self:extractRoute30Music()
+  local sfx = self:extractSfx()
   local mapSongs = {}
   for mapId, expected in pairs(self.manifest.maps) do
     if expected.music then mapSongs[mapId] = expected.music end
@@ -2001,6 +2055,7 @@ function RomExtractorGen2:run()
       Music_Route30 = route30Song,
     },
     mapSongs = mapSongs,
+    sfx = sfx,
   }
   self:write("audio", results.audio)
   self:extractStubs()

@@ -6972,6 +6972,62 @@
       104,
       23636
     ],
+    "Sfx_BallPoof_Ch5": [
+      60,
+      24564
+    ],
+    "Sfx_BallPoof_Ch8": [
+      60,
+      24575
+    ],
+    "Sfx_Bump_Ch5": [
+      60,
+      23919
+    ],
+    "Sfx_Cut_Ch8": [
+      60,
+      24771
+    ],
+    "Sfx_EnterDoor_Ch8": [
+      60,
+      23816
+    ],
+    "Sfx_IntroWhoosh_Ch8": [
+      60,
+      25964
+    ],
+    "Sfx_JumpOverLedge_Ch5": [
+      60,
+      24252
+    ],
+    "Sfx_KeyItem_Ch5": [
+      60,
+      19346
+    ],
+    "Sfx_KeyItem_Ch6": [
+      60,
+      19368
+    ],
+    "Sfx_KeyItem_Ch7": [
+      60,
+      19384
+    ],
+    "Sfx_Transaction_Ch5": [
+      60,
+      23893
+    ],
+    "Sfx_Transaction_Ch6": [
+      60,
+      23904
+    ],
+    "Sfx_Wrong_Ch5": [
+      60,
+      24325
+    ],
+    "Sfx_Wrong_Ch6": [
+      60,
+      24348
+    ],
     "TilesetFacilityColl": [
       55,
       28048
