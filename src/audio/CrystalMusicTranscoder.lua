@@ -17,7 +17,8 @@
 -- 0 on every channel) this is built from. Channel 3 (wave) support was
 -- added for Milestone 2 (docs/superpowers/plans/2026-08-06-gen2-crystal-
 -- milestone2-music.md, Task 1) -- all of the 5 songs required then use
--- Channel 3.
+-- Channel 3. Raw SFX decoding (square_note/noise_note/pitch_sweep) was
+-- added for the SFX plan (docs/superpowers/plans/2026-08-08-gen2-crystal-sfx.md).
 --
 -- Two opcodes below (volume_cmd $E5, octave_cmd $D0-$D7) are NOT in the
 -- task-3-brief.md code this module otherwise transcribes verbatim -- the
@@ -61,11 +62,15 @@ end
 -- decoding a subroutine, the subroutine's own start). Every sound_call/
 -- sound_loop target address is looked up in the same map; a missing
 -- entry is a hard error rather than a guess, matching
--- CrystalCryTranscoder's "raise on anything unverified" stance. Stops at
--- sound_ret ($FF, Crystal's own value -- shared with ChipAsm's dialect,
--- unlike sound_call/sound_loop); the returned list's last entry is always
--- {ret = true}.
-function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
+-- CrystalCryTranscoder's "raise on anything unverified" stance. `isSfx`
+-- (optional, defaults to false) marks the channel as a raw-record SFX
+-- channel: when true, every byte below 0xD0 decodes as a squareNote/
+-- noiseNote event (depending on hw), and $DD/$DF opcodes are available;
+-- when false or omitted, the channel uses the normal packed-note music
+-- scheme. Stops at sound_ret ($FF, Crystal's own value -- shared with
+-- ChipAsm's dialect, unlike sound_call/sound_loop); the returned list's
+-- last entry is always {ret = true}.
+function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, isSfx)
   labels = labels or {}
   local events = {}
   local i = 1
@@ -162,6 +167,24 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
       -- comment for why it is added here.
       events[#events + 1] = { octave = 8 - (cmd - 0xD0) }
       i = i + 1
+    elseif cmd == 0xDD then -- pitch_sweep_cmd: same high-nibble-pace,
+      -- low-nibble-signed-shift packing as ChipAsm.lua's own E.pitchSweep
+      -- (verified against Sfx_Bump_Ch5's real bytes in the plan's
+      -- "Research already done" section).
+      local packed = bytes[i + 1]
+      events[#events + 1] = { pitchSweep = {
+        pace = bit.rshift(packed, 4),
+        subtract = bit.band(packed, 8) ~= 0,
+        shift = bit.band(packed, 7),
+      } }
+      i = i + 2
+    elseif cmd == 0xDF then -- toggle_sfx_cmd: structural marker only. This
+      -- pipeline decides raw-vs-packed per channel via the isSfx
+      -- parameter (set by the caller for the whole channel), not via
+      -- Crystal's own mid-stream toggle, so the byte carries no
+      -- information this decoder needs -- dropped, same treatment as
+      -- volume_cmd/toggle_noise_cmd below.
+      i = i + 1
     elseif cmd == 0xE1 then -- vibrato_cmd
       local packed = bytes[i + 2]
       events[#events + 1] = { vibrato = {
@@ -186,6 +209,27 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels)
     elseif cmd == 0xEF then -- stereo_panning_cmd
       events[#events + 1] = { pan = bytes[i + 1] }
       i = i + 2
+    elseif isSfx and cmd < 0xD0 then -- ParseSFXOrCry (audio/engine.asm):
+      -- on an sfx channel EVERY sub-$D0 byte is a raw square_note/
+      -- noise_note record, not a packed one-byte note -- no command-byte
+      -- distinction exists in Crystal's own dialect (unlike Gen1's native
+      -- $20-$2F prefix); the plan's "Research already done" section
+      -- verifies the exact masking against SetNoteDuration.
+      local length = bit.band(cmd, 0x0F) + 1
+      local packed = bytes[i + 1]
+      local volume, fade = bit.rshift(packed, 4), fadeValue(bit.band(packed, 0x0F))
+      if hw == 4 then
+        events[#events + 1] = { noiseNote = {
+          len = length, volume = volume, fade = fade, parameter = bytes[i + 2],
+        } }
+        i = i + 3
+      else
+        local frequency = bytes[i + 2] + bytes[i + 3] * 0x100
+        events[#events + 1] = { squareNote = {
+          len = length, volume = volume, fade = fade, frequency = frequency,
+        } }
+        i = i + 4
+      end
     elseif cmd < 0xD0 then -- plain note/rest/drum record: dn(pitchOrDrum, length-1)
       local pitchOrDrum = bit.rshift(cmd, 4)
       local length = bit.band(cmd, 0x0F) + 1
@@ -250,6 +294,31 @@ function CrystalMusicTranscoder.buildSong(channels)
     }
   end
   return ChipAsm.song({ channels = specs })
+end
+
+-- Sibling to buildSong: assembles onto Crystal's own SFX channel range
+-- (hardware+4, i.e. channels 5-8) via ChipAsm.sfx instead of
+-- ChipAsm.song, and marks every channel isSfx so decodeChannel's raw
+-- square_note/noise_note branch activates.
+function CrystalMusicTranscoder.buildSfx(channels)
+  local specs = {}
+  for index, channel in ipairs(channels) do
+    local subroutines
+    if channel.subroutines then
+      subroutines = {}
+      for name, sub in pairs(channel.subroutines) do
+        subroutines[name] = CrystalMusicTranscoder.decodeChannel(
+          sub.bytes, channel.hw, sub.baseAddress, channel.labels, true)
+      end
+    end
+    specs[index] = {
+      hw = channel.hw,
+      program = CrystalMusicTranscoder.decodeChannel(
+        channel.bytes, channel.hw, channel.baseAddress, channel.labels, true),
+      subroutines = subroutines,
+    }
+  end
+  return ChipAsm.sfx({ channels = specs })
 end
 
 return CrystalMusicTranscoder
