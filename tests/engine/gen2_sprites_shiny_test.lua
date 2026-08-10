@@ -1,7 +1,7 @@
 -- Pins Sprites.path's shiny-sprite selection (docs/superpowers/plans/
 -- 2026-08-10-gen2-crystal-shiny-sprites.md, Task 2) against a fake data
 -- table -- no love.image needed, this only exercises path selection.
---   luajit tests/gen2_sprites_shiny_test.lua
+--   luajit tests/engine/gen2_sprites_shiny_test.lua
 
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
