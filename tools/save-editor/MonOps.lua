@@ -50,6 +50,26 @@ function MonOps.setDv(data, mon, key, value)
   MonOps.recalc(data, mon)
 end
 
+-- Gen1 has no separate shiny flag -- Stats.isShiny derives it purely from
+-- DVs (DEF/SPD/SPC == 10, ATK in the even-high set). "On" writes the
+-- simplest DV combination that satisfies it (ATK 15 -- one of the 8 valid
+-- values, not the only one, but picking a fixed one keeps this
+-- deterministic); "off" makes the single minimal change that breaks it
+-- (DEF off 10) and leaves every other DV untouched, so toggling shiny does
+-- not disturb ATK/SPD/SPC a player may have set deliberately.
+function MonOps.setShiny(data, mon, want)
+  if want then
+    mon.dvs.defense = 10
+    mon.dvs.speed = 10
+    mon.dvs.special = 10
+    mon.dvs.attack = 15
+  elseif Stats.isShiny(mon.dvs) then
+    mon.dvs.defense = mon.dvs.defense == 0 and 1 or mon.dvs.defense - 1
+  end
+  MonOps.syncHpDv(mon.dvs)
+  MonOps.recalc(data, mon)
+end
+
 -- Keep level; resync exp to the species growth curve (species changes).
 function MonOps.setSpecies(data, mon, species)
   assert(data.pokemon[species], "unknown species")

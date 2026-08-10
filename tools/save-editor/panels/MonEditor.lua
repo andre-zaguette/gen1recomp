@@ -18,6 +18,7 @@
 
 local Theme = require("Theme")
 local Ops = require("Ops")
+local Stats = require("src.pokemon.Stats")
 local PAL = Theme.PAL
 
 local MonEditor = {}
@@ -197,6 +198,7 @@ function MonEditor.draw(S, Kit, x, y, w, h)
   local rowGap = 8 * s
   local cellH = 52 * s
   local actH = 34 * s
+  local shinyH = 30 * s
 
   local hw = inner - sprite - 18 * s
   local levelInHeader = hw >= levelRowWidth(Kit, mon)
@@ -218,6 +220,7 @@ function MonEditor.draw(S, Kit, x, y, w, h)
   end
   local contentH = pad + headerH + 18 * s
     + capH + 10 * s + cellH + 18 * s
+    + shinyH + 14 * s
     + colsH + pad
 
   -- Called before the widgets so this frame already draws at the updated
@@ -281,8 +284,19 @@ function MonEditor.draw(S, Kit, x, y, w, h)
       value / STAT_SCALE * 100, PAL.blue)
   end
 
+  -- Gen1 has no separate shiny flag -- it is derived purely from DVs
+  -- (Stats.isShiny), so this is a checkbox over MonOps.setShiny rewriting
+  -- the DVs to (or off) the shiny combination, not a stored field. Sits
+  -- between the stat tiles and the DV rows those DVs feed, so the causal
+  -- link ("this checkbox and those DV numbers are the same data") reads
+  -- top to bottom.
+  local shinyY = statsY + cellH + 14 * s
+  local checked, changed = Kit.checkbox(cx, shinyY, inner, shinyH,
+    Stats.isShiny(mon.dvs), "Shiny (derived from DVs -- sets DEF/SPD/SPC/ATK)")
+  if changed then Ops.setShiny(S, mon, checked) end
+
   -- --------------------------------------------------- DVs | moves split
-  local colY = statsY + cellH + 18 * s
+  local colY = shinyY + shinyH + 14 * s
   if narrow then
     -- stacked: DVs first, then moves, then the two actions side by side at
     -- full width (#715)

@@ -166,6 +166,28 @@ do
   check(mon.dvs.hp >= 8, "syncHpDv sets high bit from odd attack")
 end
 
+do
+  local Stats = require("src.pokemon.Stats")
+  local mon = MonOps.create(Data, "MAGIKARP", 10)
+  MonOps.setDv(Data, mon, "defense", 3)
+  check(not Stats.isShiny(mon.dvs), "not shiny before setShiny(true)")
+  MonOps.setShiny(Data, mon, true)
+  check(Stats.isShiny(mon.dvs), "setShiny(true) produces a shiny DV combination")
+  eq(mon.dvs.defense, 10, "setShiny(true) sets DEF DV 10")
+  eq(mon.dvs.speed, 10, "setShiny(true) sets SPD DV 10")
+  eq(mon.dvs.special, 10, "setShiny(true) sets SPC DV 10")
+  eq(mon.dvs.attack, 15, "setShiny(true) sets ATK DV 15")
+  MonOps.setShiny(Data, mon, false)
+  check(not Stats.isShiny(mon.dvs), "setShiny(false) clears the shiny DV combination")
+  eq(mon.dvs.attack, 15, "setShiny(false) leaves ATK untouched")
+  eq(mon.dvs.speed, 10, "setShiny(false) leaves SPD untouched")
+  eq(mon.dvs.special, 10, "setShiny(false) leaves SPC untouched")
+  eq(mon.dvs.defense, 9, "setShiny(false) nudges DEF off 10")
+  -- already not shiny: a no-op, not a second nudge
+  MonOps.setShiny(Data, mon, false)
+  eq(mon.dvs.defense, 9, "setShiny(false) on an already-non-shiny mon is a no-op")
+end
+
 local State = require("State")
 
 do
@@ -262,6 +284,19 @@ do
      (mon.dvs.attack % 2) * 8 + (mon.dvs.defense % 2) * 4
      + (mon.dvs.speed % 2) * 2 + (mon.dvs.special % 2),
      "setDv re-derives the HP DV from the other four")
+
+  local Stats = require("src.pokemon.Stats")
+  S.dirty = false
+  Ops.setShiny(S, mon, true)
+  check(Stats.isShiny(mon.dvs), "Ops.setShiny(true) leaves the mon shiny")
+  check(S.dirty == true, "Ops.setShiny marks the save dirty")
+  S.dirty = false
+  Ops.setShiny(S, mon, true)
+  check(S.dirty == false, "Ops.setShiny(true) on an already-shiny mon does not dirty the save")
+  check(S.status:match("Already shiny") ~= nil, "a no-op setShiny explains itself")
+  Ops.setShiny(S, mon, false)
+  check(not Stats.isShiny(mon.dvs), "Ops.setShiny(false) clears shiny")
+  check(S.dirty == true, "Ops.setShiny(false) marks the save dirty")
 
   local moveBefore = mon.moves[1] and mon.moves[1].id
   Ops.cycleMove(S, mon, 1)

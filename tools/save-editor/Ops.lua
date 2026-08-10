@@ -15,6 +15,7 @@ local Pokemon = require("src.pokemon.Pokemon")
 local PartyMod = require("src.pokemon.Party")
 local BoxesMod = require("src.pokemon.Boxes")
 local Bag = require("src.inventory.Bag")
+local Stats = require("src.pokemon.Stats")
 local MonOps = require("MonOps")
 
 local Ops = {}
@@ -318,6 +319,17 @@ function Ops.setDv(S, mon, key, value)
   end
   MonOps.setDv(S.data, mon, key, want)
   return Ops.mark(S, ("%s DV %d  (HP DV now %d)"):format(key, mon.dvs[key], mon.dvs.hp))
+end
+
+function Ops.setShiny(S, mon, want)
+  if not mon then return false end
+  if want == Stats.isShiny(mon.dvs) then
+    return Ops.say(S, want and "Already shiny" or "Already not shiny")
+  end
+  MonOps.setShiny(S.data, mon, want)
+  return Ops.mark(S, want
+    and "Marked shiny (DEF/SPD/SPC DV set to 10, ATK DV set to 15)"
+    or "Cleared shiny (DEF DV nudged off 10)")
 end
 
 function Ops.cycleMove(S, mon, slot)
