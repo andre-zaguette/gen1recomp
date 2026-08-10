@@ -624,6 +624,31 @@ function RomExtractorGen2:parseCrystalSpecies(moves)
       self:save(ImageWriter.matteColor0(love.image.newImageData(backSource)),
         "pokemon/" .. frontStem .. "_back.png")
     end
+    local shinyPalSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/shiny.pal"
+    local normalGbcPalSource = "roms/pokecrystal/gfx/pokemon/" .. frontStem .. "/front.gbcpal"
+    local spriteFrontShiny, spriteBackShiny
+    if fileExists(shinyPalSource) and fileExists(normalGbcPalSource)
+        and fileExists(frontSource) then
+      local mapping = RomExtractorGen2._shinyRemapTable(
+        readTextFile(normalGbcPalSource), readTextFile(shinyPalSource))
+      -- re-derive the same cropped/matted front image the normal path
+      -- already built above, then remap it -- kept as a fresh decode
+      -- rather than threading the earlier local through, so this block
+      -- reads standalone against the same source files.
+      local full = love.image.newImageData(frontSource)
+      local size = full:getWidth()
+      local frame = ImageWriter.blank(size, size, 0, 0, 0, 0)
+      ImageWriter.blit(frame, full, 0, 0, 0, 0, size, size)
+      local shinyFront = ImageWriter.remapColors(ImageWriter.matteColor0(frame), mapping)
+      self:save(shinyFront, "pokemon/" .. frontStem .. "_front_shiny.png")
+      spriteFrontShiny = "assets/generated/pokemon/" .. frontStem .. "_front_shiny.png"
+      if fileExists(backSource) then
+        local shinyBack = ImageWriter.remapColors(
+          ImageWriter.matteColor0(love.image.newImageData(backSource)), mapping)
+        self:save(shinyBack, "pokemon/" .. frontStem .. "_back_shiny.png")
+        spriteBackShiny = "assets/generated/pokemon/" .. frontStem .. "_back_shiny.png"
+      end
+    end
     out[species] = {
       id = species,
       index = tonumber(dex),
@@ -644,6 +669,8 @@ function RomExtractorGen2:parseCrystalSpecies(moves)
         and ("assets/generated/pokemon/" .. frontStem .. "_front.png") or nil,
       spriteBack = fileExists(backSource)
         and ("assets/generated/pokemon/" .. frontStem .. "_back.png") or nil,
+      spriteFrontShiny = spriteFrontShiny,
+      spriteBackShiny = spriteBackShiny,
       trueColor = true,
     }
   end

@@ -9,6 +9,7 @@
 
 local Runtime = require("src.mods.Runtime")
 local FieldDefaults = require("src.world.FieldDefaults")
+local Stats = require("src.pokemon.Stats")
 
 local Sprites = {}
 
@@ -26,6 +27,10 @@ function Sprites.path(data, species, side, opts)
   local def = data and data.pokemon and data.pokemon[species]
   if not def then return nil, false end
   local path = side == "back" and def.spriteBack or def.spriteFront
+  if opts.mon and opts.mon.dvs and Stats.isShiny(opts.mon.dvs) then
+    local shinyPath = side == "back" and def.spriteBackShiny or def.spriteFrontShiny
+    if shinyPath then path = shinyPath end
+  end
   local ctx = {
     species = species,
     side = side == "back" and "back" or "front",
