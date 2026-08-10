@@ -110,6 +110,37 @@ function ImageWriter.matteColor0(image)
   return image
 end
 
+-- Swaps every pixel matching one of mapping's `from` colors (within a
+-- small tolerance -- rounding differences between this project's own GBC
+-- palette decode and however the source PNG was itself rendered) to its
+-- `to` color, leaving alpha and every non-matching pixel untouched.
+-- mapping: array of { from = {r,g,b}, to = {r,g,b} }, components 0-1
+-- (getPixel/setPixel's own range). Mutates and returns image, matching
+-- matteColor0's own convention.
+local COLOR_TOLERANCE = 1 / 512
+
+local function colorMatches(r, g, b, target)
+  return math.abs(r - target[1]) < COLOR_TOLERANCE
+    and math.abs(g - target[2]) < COLOR_TOLERANCE
+    and math.abs(b - target[3]) < COLOR_TOLERANCE
+end
+
+function ImageWriter.remapColors(image, mapping)
+  local width, height = image:getDimensions()
+  for y = 0, height - 1 do
+    for x = 0, width - 1 do
+      local r, g, b, a = image:getPixel(x, y)
+      for _, entry in ipairs(mapping) do
+        if colorMatches(r, g, b, entry.from) then
+          image:setPixel(x, y, entry.to[1], entry.to[2], entry.to[3], a)
+          break
+        end
+      end
+    end
+  end
+  return image
+end
+
 function ImageWriter.columnsToRows(raw, tilesWide, tilesHigh, bytesPerTile)
   bytesPerTile = bytesPerTile or 16
   local out = {}

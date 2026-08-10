@@ -242,6 +242,62 @@ local function fileExists(path)
   return false
 end
 
+-- Decodes a raw 8-byte GBC sprite palette (front.gbcpal/normal.gbcpal --
+-- 4 colors x 2 bytes, little-endian BGR555) into 4 {r,g,b} triples on the
+-- hardware's own 0-31 scale. Verified byte-for-byte against
+-- roms/pokecrystal/gfx/pokemon/unown/normal.pal, the one species with a
+-- checked-in TEXT normal palette to cross-check against -- see the
+-- plan's "Research already done" section.
+function RomExtractorGen2._decodeGbcPalette(bytes)
+  assert(#bytes == 8, "GBC palette must be exactly 8 bytes (4 colors)")
+  local colors = {}
+  for i = 0, 3 do
+    local lo, hi = bytes:byte(i * 2 + 1, i * 2 + 2)
+    local value = lo + hi * 256
+    colors[i + 1] = {
+      bit.band(value, 0x1F),
+      bit.band(bit.rshift(value, 5), 0x1F),
+      bit.band(bit.rshift(value, 10), 0x1F),
+    }
+  end
+  return colors
+end
+
+-- Decodes a shiny.pal's real pret source text (exactly 2 "RGB r, g, b"
+-- lines, 0-31 scale, colors 1 and 2 -- colors 0/3 are always white/black
+-- and never appear in this file) into 2 {r,g,b} triples on the same
+-- 0-31 scale decodeGbcPalette uses.
+function RomExtractorGen2._parseShinyPal(text)
+  local colors = {}
+  for r, g, b in text:gmatch("RGB%s+(%d+)%s*,%s*(%d+)%s*,%s*(%d+)") do
+    colors[#colors + 1] = { tonumber(r), tonumber(g), tonumber(b) }
+  end
+  assert(#colors == 2, ("shiny.pal must have exactly 2 RGB lines, got %d"):format(#colors))
+  return colors
+end
+
+-- 0-31 (GBC hardware scale) -> 0-1 float (getPixel/setPixel's own range).
+local function scale5to1(v)
+  return math.floor(v * 255 / 31 + 0.5) / 255
+end
+
+-- Combines a species' real normal + shiny palettes into the mapping
+-- ImageWriter.remapColors consumes directly: only colors 1 and 2 ever
+-- change (0/3 are always white/black, fixed across every species and
+-- every shiny variant -- see the plan's "Research already done" section).
+function RomExtractorGen2._shinyRemapTable(normalGbcPalBytes, shinyPalText)
+  local normal = RomExtractorGen2._decodeGbcPalette(normalGbcPalBytes)
+  local shiny = RomExtractorGen2._parseShinyPal(shinyPalText)
+  local mapping = {}
+  for i = 1, 2 do
+    mapping[i] = {
+      from = { scale5to1(normal[i + 1][1]), scale5to1(normal[i + 1][2]), scale5to1(normal[i + 1][3]) },
+      to = { scale5to1(shiny[i][1]), scale5to1(shiny[i][2]), scale5to1(shiny[i][3]) },
+    }
+  end
+  return mapping
+end
+
 local function splitCsv(text)
   local out = {}
   for part in text:gmatch("[^,]+") do
