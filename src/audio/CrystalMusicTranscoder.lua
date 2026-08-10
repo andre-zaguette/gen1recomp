@@ -63,11 +63,15 @@ end
 -- sound_loop target address is looked up in the same map; a missing
 -- entry is a hard error rather than a guess, matching
 -- CrystalCryTranscoder's "raise on anything unverified" stance. `isSfx`
--- (optional, defaults to false) marks the channel as a raw-record SFX
--- channel: when true, every byte below 0xD0 decodes as a squareNote/
--- noiseNote event (depending on hw), and $DD/$DF opcodes are available;
--- when false or omitted, the channel uses the normal packed-note music
--- scheme. Stops at sound_ret ($FF, Crystal's own value -- shared with
+-- (optional, defaults to false) is the channel's STARTING note-decoding
+-- mode, not a fixed whole-channel flag: when true, bytes below 0xD0
+-- decode as raw squareNote/noiseNote records (depending on hw); when
+-- false or omitted, they use the normal packed-note music scheme. A
+-- toggle_sfx ($DF) byte flips that mode mid-stream, exactly as real
+-- hardware does (see the $DF branch below) -- so an SFX channel that
+-- opens with toggle_sfx (Sfx_KeyItem_Ch5/Ch6/Ch7) decodes as normal
+-- music for its whole body. Stops at sound_ret ($FF, Crystal's own
+-- value -- shared with
 -- ChipAsm's dialect, unlike sound_call/sound_loop); the returned list's
 -- last entry is always {ret = true}.
 function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, isSfx)
@@ -75,6 +79,12 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
   local events = {}
   local i = 1
   local lastSpeed = 12 -- audio/music/titlescreen.asm's own fresh-channel default
+  -- Mutable per-channel note-decoding mode, seeded from `isSfx` and
+  -- flipped by every toggle_sfx ($DF) byte -- mirrors ChipSynth.lua's own
+  -- Channel.executeMusic (ChipSynth.lua:210 `executeMusic = not
+  -- isSfxChannel`, toggled at ChipSynth.lua:399), which is the same
+  -- state real hardware keeps in CHANNEL_FLAGS1's SOUND_SFX bit.
+  local rawMode = isSfx and true or false
 
   local function targetName(low, high)
     local addr = low + high * 0x100
@@ -173,17 +183,32 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
       -- "Research already done" section).
       local packed = bytes[i + 1]
       events[#events + 1] = { pitchSweep = {
-        pace = bit.rshift(packed, 4),
+        -- pace masked to 3 bits, matching this project's own native reader
+        -- (ChipSynth.lua:454) -- NR10's pace field is bits 4-6 and the byte's
+        -- top bit is unused, so real data like Sfx_JumpOverLedge_Ch5's
+        -- `pitch_sweep 9, 5` ($95) must decode to pace 1, not an
+        -- out-of-range 9 that ChipAsm's E.pitchSweep would reject.
+        pace = bit.band(bit.rshift(packed, 4), 7),
         subtract = bit.band(packed, 8) ~= 0,
         shift = bit.band(packed, 7),
       } }
       i = i + 2
-    elseif cmd == 0xDF then -- toggle_sfx_cmd: structural marker only. This
-      -- pipeline decides raw-vs-packed per channel via the isSfx
-      -- parameter (set by the caller for the whole channel), not via
-      -- Crystal's own mid-stream toggle, so the byte carries no
-      -- information this decoder needs -- dropped, same treatment as
-      -- volume_cmd/toggle_noise_cmd below.
+    elseif cmd == 0xDF then -- toggle_sfx_cmd: a REAL mode toggle, not a
+      -- no-op. _PlaySFX/PlayStereoSFX (audio/engine.asm:2561, :2614) SET
+      -- CHANNEL_FLAGS1's SOUND_SFX bit when an sfx channel starts, and
+      -- Music_ToggleSFX (engine.asm:1847-1853) TOGGLES it -- so a leading
+      -- toggle_sfx on an sfx channel CLEARS the bit, and ParseMusic's
+      -- .readnote branch (engine.asm:1155-1160) then falls through to
+      -- normal packed-note parsing for the rest of that channel. That is
+      -- exactly what Sfx_KeyItem_Ch5/Ch6/Ch7 rely on: they are fanfares
+      -- written in the octave/note_type/note scheme with no square_note/
+      -- noise_note anywhere. Flip the decoder's own mode to match, and
+      -- emit ChipAsm's executeMusic event so the assembled program carries
+      -- the real $F8 byte the native playback engine toggles its own
+      -- Channel.executeMusic on (ChipSynth.lua:399) -- emitted only where
+      -- a real $DF byte occurs, keeping the output 1:1 with the ROM.
+      rawMode = not rawMode
+      events[#events + 1] = { executeMusic = true }
       i = i + 1
     elseif cmd == 0xE1 then -- vibrato_cmd
       local packed = bytes[i + 2]
@@ -209,8 +234,8 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
     elseif cmd == 0xEF then -- stereo_panning_cmd
       events[#events + 1] = { pan = bytes[i + 1] }
       i = i + 2
-    elseif isSfx and cmd < 0xD0 then -- ParseSFXOrCry (audio/engine.asm):
-      -- on an sfx channel EVERY sub-$D0 byte is a raw square_note/
+    elseif rawMode and cmd < 0xD0 then -- ParseSFXOrCry (audio/engine.asm):
+      -- while SOUND_SFX is set EVERY sub-$D0 byte is a raw square_note/
       -- noise_note record, not a packed one-byte note -- no command-byte
       -- distinction exists in Crystal's own dialect (unlike Gen1's native
       -- $20-$2F prefix); the plan's "Research already done" section
@@ -298,8 +323,10 @@ end
 
 -- Sibling to buildSong: assembles onto Crystal's own SFX channel range
 -- (hardware+4, i.e. channels 5-8) via ChipAsm.sfx instead of
--- ChipAsm.song, and marks every channel isSfx so decodeChannel's raw
--- square_note/noise_note branch activates.
+-- ChipAsm.song, and STARTS every channel in decodeChannel's raw
+-- square_note/noise_note mode -- the same state _PlaySFX gives a real
+-- channel (SOUND_SFX set). A channel whose body opens with toggle_sfx
+-- flips straight back out of it, matching real hardware.
 function CrystalMusicTranscoder.buildSfx(channels)
   local specs = {}
   for index, channel in ipairs(channels) do

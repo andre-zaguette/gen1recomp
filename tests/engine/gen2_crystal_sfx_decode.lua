@@ -68,11 +68,28 @@ eq(doorEvents[2].noiseNote.len, 9, "noise_note 8,... masks to length nibble 8, +
 eq(doorEvents[2].noiseNote.parameter, 67, "second noise_note's parameter")
 check(doorEvents[3].ret == true, "terminates on sound_ret")
 
--- toggle_sfx is a structural no-op for this pipeline (dropped, not an event)
+-- toggle_sfx is a REAL mode toggle, not a dropped no-op: _PlaySFX sets
+-- CHANNEL_FLAGS1's SOUND_SFX bit when the channel starts and
+-- Music_ToggleSFX (audio/engine.asm:1847-1853) toggles it, so a leading
+-- toggle_sfx CLEARS it and the rest of the channel parses as normal
+-- packed-note music. It emits ChipAsm's executeMusic event so the
+-- assembled bytes carry the real $F8 the playback engine toggles its own
+-- Channel.executeMusic on (ChipSynth.lua:399).
 local toggleBytes = { 0xDF, 0xFF }
 local toggleEvents = Transcoder.decodeChannel(toggleBytes, 1, 0x0000, {}, true)
-eq(#toggleEvents, 1, "toggle_sfx produces no event of its own")
-check(toggleEvents[1].ret == true, "toggle_sfx is skipped, sound_ret still terminates")
+eq(#toggleEvents, 2, "toggle_sfx emits an event of its own, then sound_ret")
+check(toggleEvents[1].executeMusic == true, "toggle_sfx produces an executeMusic event")
+check(toggleEvents[2].ret == true, "sound_ret still terminates after a toggle_sfx")
+
+-- ...and it really flips the note-decoding mode: the same 0x1F byte that
+-- decodes as a raw squareNote on a fresh sfx channel must decode as a
+-- packed music note once a toggle_sfx has cleared SOUND_SFX.
+local flippedEvents = Transcoder.decodeChannel({ 0xDF, 0x1F, 0xFF }, 1, 0x0000, {}, true)
+eq(#flippedEvents, 3, "executeMusic, note, ret")
+check(flippedEvents[2].squareNote == nil,
+  "after toggle_sfx, a sub-0xD0 byte is no longer a raw squareNote record")
+eq(flippedEvents[2].pitch, 0, "after toggle_sfx it decodes as a packed note instead")
+eq(flippedEvents[2].len, 16, "after toggle_sfx the packed note's length nibble applies")
 
 -- regression guard: isSfx omitted/false must leave music decoding
 -- byte-for-byte unchanged -- a plain note byte must NOT become a
