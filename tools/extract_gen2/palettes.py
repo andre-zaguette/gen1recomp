@@ -58,6 +58,8 @@ TILESET_FILES = {
     "TILESET_PLAYERS_ROOM": ("gfx/tilesets/players_room_palette_map.asm", "indoor"),
     "TILESET_LAB": ("gfx/tilesets/lab_palette_map.asm", "indoor"),
     "TILESET_HOUSE": ("gfx/tilesets/house_palette_map.asm", "indoor"),
+    "TILESET_MART": ("gfx/tilesets/mart_palette_map.asm", "indoor"),
+    "TILESET_POKECENTER": ("gfx/tilesets/pokecenter_palette_map.asm", "indoor"),
 }
 
 

@@ -147,6 +147,8 @@ def _write_fixture(root):
     w("gfx/tilesets/players_room_palette_map.asm", HOUSE_PALETTE_MAP)
     w("gfx/tilesets/lab_palette_map.asm", HOUSE_PALETTE_MAP)
     w("gfx/tilesets/house_palette_map.asm", HOUSE_PALETTE_MAP)
+    w("gfx/tilesets/mart_palette_map.asm", HOUSE_PALETTE_MAP)
+    w("gfx/tilesets/pokecenter_palette_map.asm", HOUSE_PALETTE_MAP)
     w("data/maps/environment_colors.asm", ENVIRONMENT_COLORS)
     w("gfx/tilesets/bg_tiles.pal", BG_TILES_PAL)
     w("gfx/overworld/npc_sprites.pal", NPC_SPRITES_PAL)

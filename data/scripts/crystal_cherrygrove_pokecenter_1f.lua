@@ -1,12 +1,9 @@
 return {
   talk = {
-    TEXT_CHERRYGROVEPOKECENTER1F_NURSE = {
-      { "face_player" },
-      { "show_text",
-        "Welcome to our\nPOKéMON CENTER!\fWe heal your\nPOKéMON back to\vperfect health." },
-      { "heal_party" },
-      { "show_text", "OK. Your POKéMON\nare fighting fit!" },
-    },
+    TEXT_CHERRYGROVEPOKECENTER1F_NURSE = function(game, overworld, npc, onDone)
+      npc:facePlayer(overworld.player)
+      overworld:nurseHeal(onDone, npc)
+    end,
 
     TEXT_CHERRYGROVEPOKECENTER1F_FISHER = {
       { "face_player" },

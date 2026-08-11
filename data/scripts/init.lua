@@ -41,9 +41,22 @@ if GameVersion.isCrystal() then
   MapScripts.attachBase("ROUTE_29_ROUTE_46_GATE",
     require("data.scripts.crystal_route29_route46_gate"))
   MapScripts.attachBase("CHERRYGROVE_CITY", require("data.scripts.crystal_cherrygrove_city"))
+  MapScripts.attachBase("CHERRYGROVE_MART", require("data.scripts.crystal_cherrygrove_mart"))
+  MapScripts.attachBase("CHERRYGROVE_POKECENTER_1F",
+    require("data.scripts.crystal_cherrygrove_pokecenter_1f"))
+  MapScripts.attachBase("CHERRYGROVE_GYM_SPEECH_HOUSE",
+    require("data.scripts.crystal_cherrygrove_gym_speech_house"))
+  MapScripts.attachBase("GUIDE_GENTS_HOUSE",
+    require("data.scripts.crystal_guide_gents_house"))
+  MapScripts.attachBase("CHERRYGROVE_EVOLUTION_SPEECH_HOUSE",
+    require("data.scripts.crystal_cherrygrove_evolution_speech_house"))
   MapScripts.attachBase("MR_POKEMONS_HOUSE",
     require("data.scripts.crystal_mr_pokemons_house"))
   MapScripts.attachBase("ROUTE_30", require("data.scripts.crystal_route30"))
+  MapScripts.attachBase("ROUTE_30_BERRY_HOUSE",
+    require("data.scripts.crystal_route30_berry_house"))
+  MapScripts.attachBase("ROUTE_31_VIOLET_GATE",
+    require("data.scripts.crystal_route31_violet_gate"))
 end
 
 -- story-critical scripts, one table per map, in the order the old merge

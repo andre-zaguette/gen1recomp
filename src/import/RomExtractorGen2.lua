@@ -296,15 +296,26 @@ local START_NPC_SPRITES = {
   SPRITE_TEACHER = { file = "teacher.png", frames = 6, walker = true, palette = "red" },
   SPRITE_FISHER = { file = "fisher.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_MOM = { file = "mom.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_GRAMPS = { file = "gramps.png", frames = 6, walker = true, palette = "brown" },
   SPRITE_POKEFAN_F = { file = "pokefan_f.png", frames = 6, walker = true, palette = "brown" },
+  SPRITE_POKEFAN_M = { file = "pokefan_m.png", frames = 6, walker = true, palette = "brown" },
   SPRITE_COOLTRAINER_F = { file = "cooltrainer_f.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_BUG_CATCHER = { file = "bug_catcher.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_ELM = { file = "elm.png", frames = 6, walker = true, palette = "brown" },
   SPRITE_SCIENTIST = { file = "scientist.png", frames = 6, walker = true, palette = "blue" },
   SPRITE_OFFICER = { file = "officer.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_NURSE = { file = "nurse.png", frames = 6, walker = false, palette = "red" },
+  SPRITE_CLERK = { file = "clerk.png", frames = 6, walker = true, palette = "green" },
   SPRITE_POKE_BALL = { file = "poke_ball.png", frames = 1, walker = false, palette = "red" },
   SPRITE_COOLTRAINER_M = { file = "cooltrainer_m.png", frames = 6, walker = true, palette = "red" },
   SPRITE_YOUNGSTER = { file = "youngster.png", frames = 6, walker = true, palette = "green" },
+  SPRITE_LASS = { file = "lass.png", frames = 6, walker = true, palette = "red" },
+  SPRITE_SUPER_NERD = { file = "super_nerd.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_FISHING_GURU = { file = "fishing_guru.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_GYM_GUIDE = { file = "gym_guide.png", frames = 6, walker = true, palette = "blue" },
+  SPRITE_GAMEBOY_KID = { file = "gameboy_kid.png", frames = 6, walker = false, palette = "green" },
+  SPRITE_FRUIT_TREE = { file = "fruit_tree.png", frames = 1, walker = false, palette = "tree" },
+  SPRITE_MONSTER = { file = "monster.png", frames = 1, walker = false, palette = "red" },
   -- Mr. Pokémon's House's own two always-visible objects (object_event
   -- trailing flag -1 / a never-set flag -- both read visible-by-default,
   -- confirmed this session's Task 6). Both crashed a live playtest
@@ -1216,6 +1227,16 @@ local TILESET_SPECS = {
     coll = "TilesetFacilityColl", image = "facility.png",
     source = "ROM:TilesetFacilityGFX/Meta/Coll",
   },
+  TILESET_MART = {
+    gfx = "TilesetMartGFX", meta = "TilesetMartMeta",
+    coll = "TilesetMartColl", image = "mart.png",
+    source = "ROM:TilesetMartGFX/Meta/Coll",
+  },
+  TILESET_POKECENTER = {
+    gfx = "TilesetPokecenterGFX", meta = "TilesetPokecenterMeta",
+    coll = "TilesetPokecenterColl", image = "pokecenter.png",
+    source = "ROM:TilesetPokecenterGFX/Meta/Coll",
+  },
 }
 
 local function decodeBlocks(raw)
@@ -1476,7 +1497,7 @@ function RomExtractorGen2:extractMap()
         -- longer matches this array's own position. Warp.lua's resolve()
         -- matches on romIndex first for exactly this reason.
         warps[#warps + 1] = {
-          y = row[1], x = row[2], destWarp = row[3], destMap = destMap,
+          x = row[1], y = row[2], destWarp = row[3], destMap = destMap,
           romIndex = romIndex,
         }
       else
