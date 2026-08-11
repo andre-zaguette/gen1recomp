@@ -1360,7 +1360,15 @@
     "24:9": "ELMS_HOUSE",
     "26:1": "ROUTE_30",
     "26:10": "MR_POKEMONS_HOUSE",
-    "26:3": "CHERRYGROVE_CITY"
+    "26:11": "ROUTE_31_VIOLET_GATE",
+    "26:2": "ROUTE_31",
+    "26:3": "CHERRYGROVE_CITY",
+    "26:4": "CHERRYGROVE_MART",
+    "26:5": "CHERRYGROVE_POKECENTER_1F",
+    "26:6": "CHERRYGROVE_GYM_SPEECH_HOUSE",
+    "26:7": "GUIDE_GENTS_HOUSE",
+    "26:8": "CHERRYGROVE_EVOLUTION_SPEECH_HOUSE",
+    "26:9": "ROUTE_30_BERRY_HOUSE"
   },
   "maps": {
     "CHERRYGROVE_CITY": {
@@ -1470,6 +1478,221 @@
       "tileset": "TILESET_JOHTO",
       "warpCount": 5,
       "width": 20
+    },
+    "CHERRYGROVE_EVOLUTION_SPEECH_HOUSE": {
+      "bgEventCount": 2,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "CherrygroveEvolutionSpeechHouse",
+      "music": "Music_CherrygroveCity",
+      "number": 8,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "CHERRYGROVEEVOLUTIONSPEECHHOUSE_LASS",
+          "range": "LEFT",
+          "script": "CherrygroveEvolutionSpeechHouseLassScript",
+          "sprite": "SPRITE_LASS",
+          "text": "TEXT_CHERRYGROVEEVOLUTIONSPEECHHOUSE_LASS",
+          "x": 3,
+          "y": 5
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": "CHERRYGROVEEVOLUTIONSPEECHHOUSE_YOUNGSTER",
+          "range": "RIGHT",
+          "script": "CherrygroveEvolutionSpeechHouseYoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_CHERRYGROVEEVOLUTIONSPEECHHOUSE_YOUNGSTER",
+          "x": 2,
+          "y": 5
+        }
+      ],
+      "signs": [
+        {
+          "script": "CherrygroveEvolutionSpeechHouseBookshelf",
+          "text": "CherrygroveEvolutionSpeechHouseBookshelf",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "CherrygroveEvolutionSpeechHouseBookshelf",
+          "text": "CherrygroveEvolutionSpeechHouseBookshelf",
+          "x": 1,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_HOUSE",
+      "warpCount": 2,
+      "width": 4
+    },
+    "CHERRYGROVE_GYM_SPEECH_HOUSE": {
+      "bgEventCount": 2,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "CherrygroveGymSpeechHouse",
+      "music": "Music_CherrygroveCity",
+      "number": 6,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "CHERRYGROVEGYMSPEECHHOUSE_POKEFAN_M",
+          "range": "DOWN",
+          "script": "CherrygroveGymSpeechHousePokefanMScript",
+          "sprite": "SPRITE_POKEFAN_M",
+          "text": "TEXT_CHERRYGROVEGYMSPEECHHOUSE_POKEFAN_M",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "CHERRYGROVEGYMSPEECHHOUSE_BUG_CATCHER",
+          "range": "LEFT_RIGHT",
+          "script": "CherrygroveGymSpeechHouseBugCatcherScript",
+          "sprite": "SPRITE_BUG_CATCHER",
+          "text": "TEXT_CHERRYGROVEGYMSPEECHHOUSE_BUG_CATCHER",
+          "x": 5,
+          "y": 5
+        }
+      ],
+      "signs": [
+        {
+          "script": "CherrygroveGymSpeechHouseBookshelf",
+          "text": "CherrygroveGymSpeechHouseBookshelf",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "CherrygroveGymSpeechHouseBookshelf",
+          "text": "CherrygroveGymSpeechHouseBookshelf",
+          "x": 1,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_HOUSE",
+      "warpCount": 2,
+      "width": 4
+    },
+    "CHERRYGROVE_MART": {
+      "bgEventCount": 0,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "CherrygroveMart",
+      "music": "Music_CherrygroveCity",
+      "number": 4,
+      "objectCount": 3,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "CHERRYGROVEMART_CLERK",
+          "range": "RIGHT",
+          "script": "CherrygroveMartClerkScript",
+          "sprite": "SPRITE_CLERK",
+          "text": "TEXT_CHERRYGROVEMART_CLERK",
+          "x": 1,
+          "y": 3
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "CHERRYGROVEMART_COOLTRAINER_M",
+          "range": "LEFT_RIGHT",
+          "script": "CherrygroveMartCooltrainerMScript",
+          "sprite": "SPRITE_COOLTRAINER_M",
+          "text": "TEXT_CHERRYGROVEMART_COOLTRAINER_M",
+          "x": 7,
+          "y": 6
+        },
+        {
+          "index": 3,
+          "movement": "STAY",
+          "name": "CHERRYGROVEMART_YOUNGSTER",
+          "range": "DOWN",
+          "script": "CherrygroveMartYoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_CHERRYGROVEMART_YOUNGSTER",
+          "x": 2,
+          "y": 5
+        }
+      ],
+      "signs": [],
+      "tileset": "TILESET_MART",
+      "warpCount": 2,
+      "width": 6
+    },
+    "CHERRYGROVE_POKECENTER_1F": {
+      "bgEventCount": 0,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "CherrygrovePokecenter1F",
+      "music": "Music_PokemonCenter",
+      "number": 5,
+      "objectCount": 4,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "CHERRYGROVEPOKECENTER1F_NURSE",
+          "range": "DOWN",
+          "script": "CherrygrovePokecenter1FNurseScript",
+          "sprite": "SPRITE_NURSE",
+          "text": "TEXT_CHERRYGROVEPOKECENTER1F_NURSE",
+          "x": 3,
+          "y": 1
+        },
+        {
+          "index": 2,
+          "movement": "STAY",
+          "name": "CHERRYGROVEPOKECENTER1F_FISHER",
+          "range": "UP",
+          "script": "CherrygrovePokecenter1FFisherScript",
+          "sprite": "SPRITE_FISHER",
+          "text": "TEXT_CHERRYGROVEPOKECENTER1F_FISHER",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "index": 3,
+          "movement": "STAY",
+          "name": "CHERRYGROVEPOKECENTER1F_GENTLEMAN",
+          "range": "UP",
+          "script": "CherrygrovePokecenter1FGentlemanScript",
+          "sprite": "SPRITE_GENTLEMAN",
+          "text": "TEXT_CHERRYGROVEPOKECENTER1F_GENTLEMAN",
+          "x": 8,
+          "y": 6
+        },
+        {
+          "index": 4,
+          "movement": "STAY",
+          "name": "CHERRYGROVEPOKECENTER1F_TEACHER",
+          "range": "RIGHT",
+          "script": "CherrygrovePokecenter1FTeacherScript",
+          "sprite": "SPRITE_TEACHER",
+          "text": "TEXT_CHERRYGROVEPOKECENTER1F_TEACHER",
+          "x": 1,
+          "y": 6
+        }
+      ],
+      "signs": [],
+      "tileset": "TILESET_POKECENTER",
+      "warpCount": 3,
+      "width": 5
     },
     "ELMS_HOUSE": {
       "bgEventCount": 3,
@@ -1697,6 +1920,47 @@
       "tileset": "TILESET_LAB",
       "warpCount": 2,
       "width": 5
+    },
+    "GUIDE_GENTS_HOUSE": {
+      "bgEventCount": 2,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "GuideGentsHouse",
+      "music": "Music_CherrygroveCity",
+      "number": 7,
+      "objectCount": 1,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "GUIDEGENTSHOUSE_GRAMPS",
+          "range": "RIGHT",
+          "script": "GuideGentsHouseGuideGent",
+          "sprite": "SPRITE_GRAMPS",
+          "text": "TEXT_GUIDEGENTSHOUSE_GRAMPS",
+          "x": 2,
+          "y": 3
+        }
+      ],
+      "signs": [
+        {
+          "script": "GuideGentsHouseBookshelf",
+          "text": "GuideGentsHouseBookshelf",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "GuideGentsHouseBookshelf",
+          "text": "GuideGentsHouseBookshelf",
+          "x": 1,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_HOUSE",
+      "warpCount": 2,
+      "width": 4
     },
     "MR_POKEMONS_HOUSE": {
       "bgEventCount": 5,
@@ -2329,6 +2593,204 @@
       "tileset": "TILESET_JOHTO",
       "warpCount": 2,
       "width": 10
+    },
+    "ROUTE_30_BERRY_HOUSE": {
+      "bgEventCount": 2,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "Route30BerryHouse",
+      "music": "Music_CherrygroveCity",
+      "number": 9,
+      "objectCount": 1,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "ROUTE30BERRYHOUSE_POKEFAN_M",
+          "range": "DOWN",
+          "script": "Route30BerryHousePokefanMScript",
+          "sprite": "SPRITE_POKEFAN_M",
+          "text": "TEXT_ROUTE30BERRYHOUSE_POKEFAN_M",
+          "x": 2,
+          "y": 3
+        }
+      ],
+      "signs": [
+        {
+          "script": "Route30BerryHouseBookshelf",
+          "text": "Route30BerryHouseBookshelf",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "script": "Route30BerryHouseBookshelf",
+          "text": "Route30BerryHouseBookshelf",
+          "x": 1,
+          "y": 1
+        }
+      ],
+      "tileset": "TILESET_HOUSE",
+      "warpCount": 2,
+      "width": 4
+    },
+    "ROUTE_31": {
+      "bgEventCount": 2,
+      "connections": {
+        "south": {
+          "map": "ROUTE_30",
+          "offset": 10
+        },
+        "west": {
+          "map": "VIOLET_CITY",
+          "offset": -9
+        }
+      },
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 9,
+      "label": "Route31",
+      "music": "Music_Route30",
+      "number": 2,
+      "objectCount": 7,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "ROUTE31_FISHER",
+          "range": "DOWN",
+          "script": "Route31MailRecipientScript",
+          "sprite": "SPRITE_FISHER",
+          "text": "TEXT_ROUTE31_FISHER",
+          "x": 17,
+          "y": 7
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "ROUTE31_YOUNGSTER",
+          "range": "ANY_DIR",
+          "script": "Route31YoungsterScript",
+          "sprite": "SPRITE_YOUNGSTER",
+          "text": "TEXT_ROUTE31_YOUNGSTER",
+          "x": 9,
+          "y": 5
+        },
+        {
+          "hidden": true,
+          "index": 3,
+          "movement": "STAY",
+          "name": "ROUTE31_BUG_CATCHER",
+          "range": "LEFT",
+          "script": "TrainerBugCatcherWade1",
+          "sprite": "SPRITE_BUG_CATCHER",
+          "text": "ROUTE31_BUG_CATCHER",
+          "x": 21,
+          "y": 13
+        },
+        {
+          "index": 4,
+          "movement": "WALK",
+          "name": "ROUTE31_COOLTRAINER_M",
+          "range": "ANY_DIR",
+          "script": "Route31CooltrainerMScript",
+          "sprite": "SPRITE_COOLTRAINER_M",
+          "text": "TEXT_ROUTE31_COOLTRAINER_M",
+          "x": 33,
+          "y": 8
+        },
+        {
+          "hidden": true,
+          "index": 5,
+          "movement": "STAY",
+          "name": "ROUTE31_FRUIT_TREE",
+          "range": "NONE",
+          "script": "Route31FruitTree",
+          "sprite": "SPRITE_FRUIT_TREE",
+          "text": "ROUTE31_FRUIT_TREE",
+          "x": 16,
+          "y": 7
+        },
+        {
+          "index": 6,
+          "movement": "STAY",
+          "name": "ROUTE31_POKE_BALL1",
+          "range": "NONE",
+          "script": "Route31Potion",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ROUTE31_POTION",
+          "x": 29,
+          "y": 5
+        },
+        {
+          "index": 7,
+          "movement": "STAY",
+          "name": "ROUTE31_POKE_BALL2",
+          "range": "NONE",
+          "script": "Route31PokeBall",
+          "sprite": "SPRITE_POKE_BALL",
+          "text": "TEXT_ROUTE31_POKE_BALL",
+          "x": 19,
+          "y": 15
+        }
+      ],
+      "signs": [
+        {
+          "script": "Route31Sign",
+          "text": "Route31Sign",
+          "x": 7,
+          "y": 5
+        },
+        {
+          "script": "DarkCaveSign",
+          "text": "DarkCaveSign",
+          "x": 31,
+          "y": 5
+        }
+      ],
+      "tileset": "TILESET_JOHTO",
+      "warpCount": 3,
+      "width": 20
+    },
+    "ROUTE_31_VIOLET_GATE": {
+      "bgEventCount": 0,
+      "connections": {},
+      "coordEventCount": 0,
+      "group": 26,
+      "height": 4,
+      "label": "Route31VioletGate",
+      "music": "Music_Route30",
+      "number": 11,
+      "objectCount": 2,
+      "objects": [
+        {
+          "index": 1,
+          "movement": "STAY",
+          "name": "ROUTE31VIOLETGATE_OFFICER",
+          "range": "DOWN",
+          "script": "Route31VioletGateOfficerScript",
+          "sprite": "SPRITE_OFFICER",
+          "text": "TEXT_ROUTE31VIOLETGATE_OFFICER",
+          "x": 5,
+          "y": 2
+        },
+        {
+          "index": 2,
+          "movement": "WALK",
+          "name": "ROUTE31VIOLETGATE_COOLTRAINER_F",
+          "range": "ANY_DIR",
+          "script": "Route31VioletGateCooltrainerFScript",
+          "sprite": "SPRITE_COOLTRAINER_F",
+          "text": "TEXT_ROUTE31VIOLETGATE_COOLTRAINER_F",
+          "x": 1,
+          "y": 2
+        }
+      ],
+      "signs": [],
+      "tileset": "TILESET_GATE",
+      "warpCount": 4,
+      "width": 5
     }
   },
   "palettes": {
@@ -6604,6 +7066,38 @@
       103,
       18473
     ],
+    "CherrygroveEvolutionSpeechHouse_MapAttributes": [
+      37,
+      26240
+    ],
+    "CherrygroveEvolutionSpeechHouse_MapEvents": [
+      101,
+      27950
+    ],
+    "CherrygroveGymSpeechHouse_MapAttributes": [
+      37,
+      26216
+    ],
+    "CherrygroveGymSpeechHouse_MapEvents": [
+      101,
+      27601
+    ],
+    "CherrygroveMart_MapAttributes": [
+      37,
+      26192
+    ],
+    "CherrygroveMart_MapEvents": [
+      101,
+      26932
+    ],
+    "CherrygrovePokecenter1F_MapAttributes": [
+      37,
+      26204
+    ],
+    "CherrygrovePokecenter1F_MapEvents": [
+      101,
+      27286
+    ],
     "ChrisSpriteGFX": [
       48,
       16384
@@ -6643,6 +7137,14 @@
     "FontExtra": [
       62,
       16384
+    ],
+    "GuideGentsHouse_MapAttributes": [
+      37,
+      26228
+    ],
+    "GuideGentsHouse_MapEvents": [
+      101,
+      27785
     ],
     "KrisSpriteGFX": [
       49,
@@ -6964,6 +7466,14 @@
       104,
       21988
     ],
+    "Route30BerryHouse_MapAttributes": [
+      37,
+      26252
+    ],
+    "Route30BerryHouse_MapEvents": [
+      101,
+      28192
+    ],
     "Route30_MapAttributes": [
       37,
       20492
@@ -6971,6 +7481,22 @@
     "Route30_MapEvents": [
       104,
       23636
+    ],
+    "Route31VioletGate_MapAttributes": [
+      37,
+      26276
+    ],
+    "Route31VioletGate_MapEvents": [
+      101,
+      30348
+    ],
+    "Route31_MapAttributes": [
+      37,
+      20528
+    ],
+    "Route31_MapEvents": [
+      105,
+      23161
     ],
     "Sfx_BallPoof_Ch5": [
       60,
@@ -7088,6 +7614,18 @@
       8,
       21473
     ],
+    "TilesetMartColl": [
+      8,
+      25649
+    ],
+    "TilesetMartGFX": [
+      8,
+      22753
+    ],
+    "TilesetMartMeta": [
+      8,
+      24625
+    ],
     "TilesetPlayersHouseColl": [
       7,
       23852
@@ -7111,6 +7649,18 @@
     "TilesetPlayersRoomMeta": [
       6,
       30974
+    ],
+    "TilesetPokecenterColl": [
+      7,
+      19260
+    ],
+    "TilesetPokecenterGFX": [
+      7,
+      17164
+    ],
+    "TilesetPokecenterMeta": [
+      7,
+      18236
     ],
     "TitleCrystalGFX": [
       67,

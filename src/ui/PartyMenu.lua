@@ -10,6 +10,7 @@
 -- Pops itself on B.
 
 local Assets = require("src.render.Assets")
+local GameVersion = require("src.core.GameVersion")
 local Font = require("src.render.Font")
 local Logger = require("src.core.Logger")
 local Runtime = require("src.mods.Runtime")
@@ -46,8 +47,18 @@ function PartyMenu:sgbPalettes(game)
   local base = P.pal(game.data, "GREENBAR")
   if not base then return nil end
   local zones = { P.whole(base) }
-  local mew = P.pal(game.data, "MEWMON")
-  if mew then zones[#zones + 1] = P.zone(mew, 1, 0, 2, 11) end
+  if GameVersion.isCrystal() then
+    local party = self.party or (game.save and game.save.party) or {}
+    for i, mon in ipairs(party) do
+      local pal = P.monPal(game.data, mon.species) or P.pal(game.data, "MEWMON")
+      if pal then
+        zones[#zones + 1] = P.zone(pal, 1, (i - 1) * 2, 2, (i - 1) * 2 + 1)
+      end
+    end
+  else
+    local mew = P.pal(game.data, "MEWMON")
+    if mew then zones[#zones + 1] = P.zone(mew, 1, 0, 2, 11) end
+  end
   -- the TM/HM list prints ABLE / NOT ABLE where the bar would be, so those
   -- rows have no bar to color (party_menu.asm .teachMoveMenu; #210)
   if not self.tmhm then
@@ -662,7 +673,104 @@ function PartyMenu.entryY(i)
   return (i - 1) * 16
 end
 
+local function drawCrystalPrompt(self, prompt)
+  Font.drawBox(0, 12, 20, 6)
+  love.graphics.setColor(0, 0, 0, 1)
+  local ly = 112
+  for line in (prompt .. "\n"):gmatch("([^\n]*)\n") do
+    Font.draw(line, 8, ly)
+    ly = ly + 16
+  end
+end
+
+function PartyMenu:drawCrystal()
+  love.graphics.setColor(1, 1, 1, 1)
+  love.graphics.rectangle("fill", 0, 0, 160, 144)
+  love.graphics.setColor(0, 0, 0, 1)
+
+  local party = self.party or self.game.save.party
+  if #party == 0 then
+    Font.draw(Strings("No POKéMON!"), 16, 64)
+  end
+
+  local HudTiles = require("src.render.HudTiles")
+  local PaletteFX = require("src.render.PaletteFX")
+  local barZoned = PaletteFX.shader() ~= nil
+                   and PaletteFX.pal(self.game.data, "GREENBAR") ~= nil
+  for i, mon in ipairs(party) do
+    local def = self.game.data.pokemon[mon.species]
+    local rowY = (i - 1) * 16
+    local yName = 8 + rowY
+    local yInfo = 16 + rowY
+    love.graphics.setColor(1, 1, 1, 1)
+    drawIcon(self.game, mon, 8, yName - 2, i == self.index, self.blink or 0)
+    love.graphics.setColor(0, 0, 0, 1)
+    Font.draw(mon.nickname or def.name, 24, yName)
+    if mon.level < 100 then
+      HudTiles.tile(0x6E, 64, yInfo)
+      Font.draw(tostring(mon.level), 72, yInfo)
+    else
+      Font.draw(tostring(mon.level), 64, yInfo)
+    end
+    if self.tmhm then
+      local can = false
+      for _, m in ipairs(def.tmhm or {}) do
+        if m == self.tmhm.move then can = true break end
+      end
+      Font.draw(can and Strings("ABLE") or Strings("NOT ABLE"),
+        can and 96 or 72, yInfo)
+    else
+      if mon.hp <= 0 then
+        Font.draw(Strings("FNT"), 40, yInfo)
+      elseif mon.status then
+        Font.draw(mon.status, 40, yInfo)
+      end
+      local shown = mon
+      if self.heal and self.heal.mon == mon then
+        shown = { hp = math.floor(self.heal.shown), stats = mon.stats }
+      end
+      love.graphics.setColor(1, 1, 1, 1)
+      HudTiles.drawHPBar(self.game.data, 11, yInfo / 8, shown, 2, barZoned)
+      love.graphics.setColor(0, 0, 0, 1)
+      Font.draw(("%3d/%3d"):format(shown.hp, mon.stats.hp), 96, yName)
+    end
+    local cursorY = yName
+    if i == self.index then Font.drawCode(Theme.cursor, 0, cursorY) end
+    if i == self.swapFrom or i == self.softboiledFrom then
+      Font.drawCode(Theme.cursorHollow, 0, cursorY)
+    end
+  end
+
+  Font.draw(Strings("CANCEL"), 8, 8 + #party * 16)
+  if self.index == #party + 1 then Font.drawCode(Theme.cursor, 0, 8 + #party * 16) end
+
+  if self.swapFrom then
+    drawCrystalPrompt(self, Strings("Move to where?"))
+  elseif self.softboiledFrom or self.pickOnly then
+    drawCrystalPrompt(self, Strings("Use on which one?"))
+  elseif self.tmhm then
+    drawCrystalPrompt(self, self.game.data.text._PartyMenuUseTMText
+      or Strings("Use TM on which\nPOKéMON?"))
+  else
+    drawCrystalPrompt(self, self:bottomMessage())
+  end
+
+  if self.submenu then
+    local n = #self.subItems
+    Font.drawBox(9, 17 - n * 2 - 1, 11, n * 2 + 1)
+    local y0 = (17 - n * 2) * 8
+    for si, entry in ipairs(self.subItems) do
+      Font.draw(entry.label, 88, y0 + (si - 1) * 16)
+    end
+    Font.drawCode(Theme.cursor, 80, y0 + (self.subIndex - 1) * 16)
+  end
+  love.graphics.setColor(1, 1, 1, 1)
+end
+
 function PartyMenu:draw()
+  if GameVersion.isCrystal() then
+    return self:drawCrystal()
+  end
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.rectangle("fill", 0, 0, 160, 144)
   love.graphics.setColor(0, 0, 0, 1)

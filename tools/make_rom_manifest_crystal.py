@@ -40,6 +40,16 @@ REQUIRED_SYMBOLS = (
     "Route29Route46Gate_MapEvents",
     "CherrygroveCity_MapAttributes",
     "CherrygroveCity_MapEvents",
+    "CherrygroveMart_MapAttributes",
+    "CherrygroveMart_MapEvents",
+    "CherrygrovePokecenter1F_MapAttributes",
+    "CherrygrovePokecenter1F_MapEvents",
+    "CherrygroveGymSpeechHouse_MapAttributes",
+    "CherrygroveGymSpeechHouse_MapEvents",
+    "GuideGentsHouse_MapAttributes",
+    "GuideGentsHouse_MapEvents",
+    "CherrygroveEvolutionSpeechHouse_MapAttributes",
+    "CherrygroveEvolutionSpeechHouse_MapEvents",
     "MrPokemonsHouse_MapAttributes",
     "MrPokemonsHouse_MapEvents",
     # Route 30 -- data/maps/maps.asm: `map Route30, TILESET_JOHTO, ROUTE,
@@ -50,6 +60,12 @@ REQUIRED_SYMBOLS = (
     # resolve for real instead of silently skipping.
     "Route30_MapAttributes",
     "Route30_MapEvents",
+    "Route30BerryHouse_MapAttributes",
+    "Route30BerryHouse_MapEvents",
+    "Route31_MapAttributes",
+    "Route31_MapEvents",
+    "Route31VioletGate_MapAttributes",
+    "Route31VioletGate_MapEvents",
     "TilesetJohtoGFX",
     "TilesetJohtoMeta",
     "TilesetJohtoColl",
@@ -65,6 +81,12 @@ REQUIRED_SYMBOLS = (
     "TilesetHouseGFX",
     "TilesetHouseMeta",
     "TilesetHouseColl",
+    "TilesetMartGFX",
+    "TilesetMartMeta",
+    "TilesetMartColl",
+    "TilesetPokecenterGFX",
+    "TilesetPokecenterMeta",
+    "TilesetPokecenterColl",
     # data/maps/maps.asm: `map Route29Route46Gate, TILESET_GATE, GATE, ...`
     # -- this map's real tileset (id 8 in constants/tileset_constants.asm).
     "TilesetGateGFX",
@@ -379,6 +401,36 @@ MAP_SPECS = {
         "tileset": "TILESET_JOHTO",
         "music": "Music_CherrygroveCity",  # maps.asm:529, MUSIC_CHERRYGROVE_CITY
     },
+    "CHERRYGROVE_MART": {
+        "label": "CherrygroveMart",
+        "asm": "CherrygroveMart.asm",
+        "tileset": "TILESET_MART",
+        "music": "Music_CherrygroveCity",  # maps.asm:530, MUSIC_CHERRYGROVE_CITY
+    },
+    "CHERRYGROVE_POKECENTER_1F": {
+        "label": "CherrygrovePokecenter1F",
+        "asm": "CherrygrovePokecenter1F.asm",
+        "tileset": "TILESET_POKECENTER",
+        "music": "Music_PokemonCenter",  # maps.asm:531, MUSIC_POKEMON_CENTER
+    },
+    "CHERRYGROVE_GYM_SPEECH_HOUSE": {
+        "label": "CherrygroveGymSpeechHouse",
+        "asm": "CherrygroveGymSpeechHouse.asm",
+        "tileset": "TILESET_HOUSE",
+        "music": "Music_CherrygroveCity",  # maps.asm:532, MUSIC_CHERRYGROVE_CITY
+    },
+    "GUIDE_GENTS_HOUSE": {
+        "label": "GuideGentsHouse",
+        "asm": "GuideGentsHouse.asm",
+        "tileset": "TILESET_HOUSE",
+        "music": "Music_CherrygroveCity",  # maps.asm:533, MUSIC_CHERRYGROVE_CITY
+    },
+    "CHERRYGROVE_EVOLUTION_SPEECH_HOUSE": {
+        "label": "CherrygroveEvolutionSpeechHouse",
+        "asm": "CherrygroveEvolutionSpeechHouse.asm",
+        "tileset": "TILESET_HOUSE",
+        "music": "Music_CherrygroveCity",  # maps.asm:534, MUSIC_CHERRYGROVE_CITY
+    },
     "MR_POKEMONS_HOUSE": {
         "label": "MrPokemonsHouse",
         "asm": "MrPokemonsHouse.asm",
@@ -405,6 +457,24 @@ MAP_SPECS = {
         # time, re-confirmed correctly here via maps.asm directly.
         "tileset": "TILESET_JOHTO",
         "music": "Music_Route30",  # maps.asm:527, MUSIC_ROUTE_30
+    },
+    "ROUTE_30_BERRY_HOUSE": {
+        "label": "Route30BerryHouse",
+        "asm": "Route30BerryHouse.asm",
+        "tileset": "TILESET_HOUSE",
+        "music": "Music_CherrygroveCity",  # maps.asm:535, MUSIC_CHERRYGROVE_CITY
+    },
+    "ROUTE_31": {
+        "label": "Route31",
+        "asm": "Route31.asm",
+        "tileset": "TILESET_JOHTO",
+        "music": "Music_Route30",  # maps.asm:528, MUSIC_ROUTE_30
+    },
+    "ROUTE_31_VIOLET_GATE": {
+        "label": "Route31VioletGate",
+        "asm": "Route31VioletGate.asm",
+        "tileset": "TILESET_GATE",
+        "music": "Music_Route30",  # maps.asm:537, MUSIC_ROUTE_30
     },
 }
 
@@ -751,6 +821,88 @@ START_MAP_CONTENT = {
             },
         ],
     },
+    "CHERRYGROVE_MART": {
+        "signs": [],
+        "objects": [
+            {
+                "name": "CHERRYGROVEMART_CLERK",
+                "text": "TEXT_CHERRYGROVEMART_CLERK",
+            },
+            {
+                "name": "CHERRYGROVEMART_COOLTRAINER_M",
+                "text": "TEXT_CHERRYGROVEMART_COOLTRAINER_M",
+            },
+            {
+                "name": "CHERRYGROVEMART_YOUNGSTER",
+                "text": "TEXT_CHERRYGROVEMART_YOUNGSTER",
+            },
+        ],
+    },
+    "CHERRYGROVE_POKECENTER_1F": {
+        "signs": [],
+        "objects": [
+            {
+                "name": "CHERRYGROVEPOKECENTER1F_NURSE",
+                "text": "TEXT_CHERRYGROVEPOKECENTER1F_NURSE",
+            },
+            {
+                "name": "CHERRYGROVEPOKECENTER1F_FISHER",
+                "text": "TEXT_CHERRYGROVEPOKECENTER1F_FISHER",
+            },
+            {
+                "name": "CHERRYGROVEPOKECENTER1F_GENTLEMAN",
+                "text": "TEXT_CHERRYGROVEPOKECENTER1F_GENTLEMAN",
+            },
+            {
+                "name": "CHERRYGROVEPOKECENTER1F_TEACHER",
+                "text": "TEXT_CHERRYGROVEPOKECENTER1F_TEACHER",
+            },
+        ],
+    },
+    "CHERRYGROVE_GYM_SPEECH_HOUSE": {
+        "signs": [
+            {"text": "CherrygroveGymSpeechHouseBookshelf"},
+            {"text": "CherrygroveGymSpeechHouseBookshelf"},
+        ],
+        "objects": [
+            {
+                "name": "CHERRYGROVEGYMSPEECHHOUSE_POKEFAN_M",
+                "text": "TEXT_CHERRYGROVEGYMSPEECHHOUSE_POKEFAN_M",
+            },
+            {
+                "name": "CHERRYGROVEGYMSPEECHHOUSE_BUG_CATCHER",
+                "text": "TEXT_CHERRYGROVEGYMSPEECHHOUSE_BUG_CATCHER",
+            },
+        ],
+    },
+    "GUIDE_GENTS_HOUSE": {
+        "signs": [
+            {"text": "GuideGentsHouseBookshelf"},
+            {"text": "GuideGentsHouseBookshelf"},
+        ],
+        "objects": [
+            {
+                "name": "GUIDEGENTSHOUSE_GRAMPS",
+                "text": "TEXT_GUIDEGENTSHOUSE_GRAMPS",
+            },
+        ],
+    },
+    "CHERRYGROVE_EVOLUTION_SPEECH_HOUSE": {
+        "signs": [
+            {"text": "CherrygroveEvolutionSpeechHouseBookshelf"},
+            {"text": "CherrygroveEvolutionSpeechHouseBookshelf"},
+        ],
+        "objects": [
+            {
+                "name": "CHERRYGROVEEVOLUTIONSPEECHHOUSE_LASS",
+                "text": "TEXT_CHERRYGROVEEVOLUTIONSPEECHHOUSE_LASS",
+            },
+            {
+                "name": "CHERRYGROVEEVOLUTIONSPEECHHOUSE_YOUNGSTER",
+                "text": "TEXT_CHERRYGROVEEVOLUTIONSPEECHHOUSE_YOUNGSTER",
+            },
+        ],
+    },
     "MR_POKEMONS_HOUSE": {
         # Sign "text" values below are pure documentation (see the bg_event
         # loop's own comment above ElmsLab's entry) -- only the count (5,
@@ -919,6 +1071,69 @@ START_MAP_CONTENT = {
                 # give_item/set_flag shape as Route 29's Potion ball.
                 "name": "ROUTE30_POKE_BALL",
                 "text": "TEXT_ROUTE30_ANTIDOTE",
+            },
+        ],
+    },
+    "ROUTE_30_BERRY_HOUSE": {
+        "signs": [
+            {"text": "Route30BerryHouseBookshelf"},
+            {"text": "Route30BerryHouseBookshelf"},
+        ],
+        "objects": [
+            {
+                "name": "ROUTE30BERRYHOUSE_POKEFAN_M",
+                "text": "TEXT_ROUTE30BERRYHOUSE_POKEFAN_M",
+            },
+        ],
+    },
+    "ROUTE_31": {
+        "signs": [
+            {"text": "Route31Sign"},
+            {"text": "DarkCaveSign"},
+        ],
+        "objects": [
+            {
+                "name": "ROUTE31_FISHER",
+                "text": "TEXT_ROUTE31_FISHER",
+            },
+            {
+                "name": "ROUTE31_YOUNGSTER",
+                "text": "TEXT_ROUTE31_YOUNGSTER",
+            },
+            {
+                "name": "ROUTE31_BUG_CATCHER",
+                "text": "ROUTE31_BUG_CATCHER",
+                "hidden": True,
+            },
+            {
+                "name": "ROUTE31_COOLTRAINER_M",
+                "text": "TEXT_ROUTE31_COOLTRAINER_M",
+            },
+            {
+                "name": "ROUTE31_FRUIT_TREE",
+                "text": "ROUTE31_FRUIT_TREE",
+                "hidden": True,
+            },
+            {
+                "name": "ROUTE31_POKE_BALL1",
+                "text": "TEXT_ROUTE31_POTION",
+            },
+            {
+                "name": "ROUTE31_POKE_BALL2",
+                "text": "TEXT_ROUTE31_POKE_BALL",
+            },
+        ],
+    },
+    "ROUTE_31_VIOLET_GATE": {
+        "signs": [],
+        "objects": [
+            {
+                "name": "ROUTE31VIOLETGATE_OFFICER",
+                "text": "TEXT_ROUTE31VIOLETGATE_OFFICER",
+            },
+            {
+                "name": "ROUTE31VIOLETGATE_COOLTRAINER_F",
+                "text": "TEXT_ROUTE31VIOLETGATE_COOLTRAINER_F",
             },
         ],
     },

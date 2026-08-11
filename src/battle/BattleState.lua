@@ -16,6 +16,7 @@ local Damage = require("src.battle.Damage")
 local EffectRegistry = require("src.battle.EffectRegistry")
 local Experience = require("src.battle.Experience")
 local Font = require("src.render.Font")
+local GameVersion = require("src.core.GameVersion")
 local Logger = require("src.core.Logger")
 local MoveEffects = require("src.battle.MoveEffects")
 local Party = require("src.pokemon.Party")
@@ -700,7 +701,8 @@ function BattleState.newTrainer(game, oppClass, partyIndex)
   -- (engine/battle/core.asm:6682, engine/gfx/palettes.asm SetPal_Battle)
   self.trainerPic = getImage(
     BattleState.trainerPicPath(game.data, self.trainer, oppClass, partyIndex),
-    BattleState.trainerPalette(game.data, self.trainer))
+    BattleState.trainerPalette(game.data, self.trainer),
+    GameVersion.isCrystal())
   self.introText = Strings("%s wants\nto fight!", self.trainer.name)
   return self
 end
@@ -1437,7 +1439,7 @@ function BattleState:enter()
         battle = self,
         gender = self.game.save.player and self.game.save.player.gender })
   self.playerBackPic = getImage(backPath,
-    namedPalette(self.data, "MEWMON"), backTrueColor)
+    namedPalette(self.data, "MEWMON"), backTrueColor or GameVersion.isCrystal())
   self.showPlayerBack = self.playerBackPic ~= nil
   -- the enemy's cry as it appears (data/pokemon/cries.asm); PlayCry sits at
   -- a different point in each battle kind, so queue it per branch
@@ -4525,6 +4527,7 @@ end
 local HudTiles = require("src.render.HudTiles")
 local hudTile = HudTiles.tile
 local drawHPBar = HudTiles.drawHPBar
+local drawExpBar = HudTiles.drawExpBar
 
 -- CenterMonName: 1-2 letter names print two tiles right, 3-4 one tile.
 -- Counted in glyphs, not bytes: a nickname carrying "é" or "♂" is one
@@ -4532,6 +4535,27 @@ local drawHPBar = HudTiles.drawHPBar
 local function nameX(tx, name)
   local n = #Font.split(name)
   return tx * 8 + (n <= 2 and 16 or n <= 4 and 8 or 0)
+end
+
+local function fitName(text, pixels)
+  local spans = Font.split(text or "")
+  local n = Font.spansFitting(spans, pixels)
+  if n >= #spans then return text or "" end
+  local out = {}
+  for i = 1, math.max(0, n - 1) do
+    out[#out + 1] = (text or ""):sub(spans[i].from, spans[i].to)
+  end
+  return table.concat(out) .. "."
+end
+
+local function crystalExpFill(data, mon)
+  local def = data and data.pokemon and mon and data.pokemon[mon.species]
+  if not (def and mon) then return 0 end
+  local Growth = require("src.pokemon.Growth")
+  local cur = Growth.expForLevel(def.growthRate, mon.level, data.growth_rates)
+  local nxt = Growth.expForLevel(def.growthRate, math.min(100, mon.level + 1), data.growth_rates)
+  if nxt <= cur then return 1 end
+  return math.max(0, math.min(1, ((mon.exp or cur) - cur) / (nxt - cur)))
 end
 
 -- Party pokeball row (SetupPokeballs tiles: ball / status ball /
@@ -5243,6 +5267,7 @@ function BattleState:drawHUDs(slide)
   local barData = self.data
   local fx = self.fx
   local hudShake = (fx and fx.hudShakeX) or 0
+  local crystal = GameVersion.isCrystal()
   -- FaintEnemyPokemon clears the enemy HUD area; it stays blank through
   -- TrainerAboutToUseText until DrawEnemyHUDAndHPBar after the next send-out
   -- ...and it is not up yet during the intro text either: a wild battle's
@@ -5260,7 +5285,8 @@ function BattleState:drawHUDs(slide)
       love.graphics.translate(hudShake, 0)
     end
     love.graphics.setColor(0, 0, 0, 1)
-    Font.draw(self.enemy.name, nameX(1, self.enemy.name), 0)
+    Font.draw(crystal and fitName(self.enemy.name, 64) or self.enemy.name,
+      nameX(1, self.enemy.name), 0)
     if self.enemy.shownStatus then
       Font.draw(self:statusLabel({ status = self.enemy.shownStatus }), 40, 8)
     else
@@ -5342,7 +5368,8 @@ function BattleState:drawHUDs(slide)
     -- (14,8), HP bar (10,9), HP numbers row 10, underline row 11 with
     -- the tick at (18,10) and the triangle at (9,11)
     love.graphics.setColor(0, 0, 0, 1)
-    Font.draw(self.player.name, nameX(10, self.player.name), 56)
+    Font.draw(crystal and fitName(self.player.name, 48) or self.player.name,
+      nameX(10, self.player.name), 56)
     if self.player.shownStatus then
       Font.draw(self:statusLabel({ status = self.player.shownStatus }), 120, 64)
     else
@@ -5357,6 +5384,9 @@ function BattleState:drawHUDs(slide)
     hudTile(0x77, 144, 88)
     for i = 10, 17 do hudTile(0x76, i * 8, 88) end
     hudTile(0x6F, 72, 88)
+    if crystal then
+      drawExpBar(barData, 10, 10, crystalExpFill(barData, self.player.mon), grayFill)
+    end
   end
 end
 
@@ -5397,7 +5427,8 @@ function BattleState:drawTextArea()
     love.graphics.setColor(0, 0, 0, 1)
     Font.draw(Strings("FIGHT"), 80, 112)
     Font.drawCode(0xE1, 128, 112); Font.drawCode(0xE2, 136, 112)
-    Font.draw(Strings("ITEM"), 80, 128); Font.draw(Strings("RUN"), 128, 128)
+    Font.draw(Strings(GameVersion.isCrystal() and "PACK" or "ITEM"), 80, 128)
+    Font.draw(Strings("RUN"), 128, 128)
     Font.drawCode(0xED, 72, (self.demoTimer or 0) <= 80 and 112 or 128)
   elseif self.phase == "menu" then
     local col = (self.menuIndex - 1) % 2
@@ -5416,11 +5447,12 @@ function BattleState:drawTextArea()
       Font.drawCode(0xED, (col == 0 and 8 or 104), 112 + row * 16)
     else
       -- BATTLE_MENU_TEMPLATE: box (8,12)-(19,17), "FIGHT <PK><MN> /
-      -- ITEM  RUN" from (10,14); cursor columns 9 / 15
+      -- PACK/ITEM  RUN" from (10,14); cursor columns 9 / 15
       Font.drawBox(8, 12, 12, 6)
       Font.draw(Strings("FIGHT"), 80, 112)
       Font.drawCode(0xE1, 128, 112); Font.drawCode(0xE2, 136, 112)
-      Font.draw(Strings("ITEM"), 80, 128); Font.draw(Strings("RUN"), 128, 128)
+      Font.draw(Strings(GameVersion.isCrystal() and "PACK" or "ITEM"), 80, 128)
+      Font.draw(Strings("RUN"), 128, 128)
       Font.drawCode(0xED, (col == 0 and 72 or 120), 112 + row * 16)
     end
   elseif self.phase == "moveSelect" then

@@ -11,6 +11,7 @@
 -- docs/superpowers/plans/2026-08-03-gen2-crystal-extraction-skeleton.md.
 
 local bit = require("bit")
+local ChipAsm = require("src.audio.ChipAsm")
 local CrystalCryTranscoder = require("src.audio.CrystalCryTranscoder")
 local CrystalMusicTranscoder = require("src.audio.CrystalMusicTranscoder")
 local ImageWriter = require("src.import.ImageWriter")
@@ -35,7 +36,6 @@ local STAGE_COUNT = 10
 -- placeholder content: an empty table is the honest "not extracted yet".
 local STUB_MODULES = {
   "constants", "text_pointers", "trainer_headers",
-  "battle_anims",
 }
 
 -- COLL_* -> CollisionPermissionTable base permission, ported verbatim from
@@ -104,15 +104,172 @@ function RomExtractorGen2.new(romData, manifest, progress)
     rom = Rom.new(romData),
     manifest = manifest,
     symbols = manifest.symbols,
+    symCache = {},
+    skippedWarps = {},
     progress = progress,
     stage = 0,
   }, RomExtractorGen2)
 end
 
+local function parseSymLine(line)
+  local bankHex, addrHex, label = line:match("^(%x+):(%x+)%s+(.+)$")
+  if not bankHex then return nil end
+  return {
+    bank = tonumber(bankHex, 16),
+    address = tonumber(addrHex, 16),
+    name = label,
+  }
+end
+
+local function hwFromSfxChannel(channel)
+  return ({ [5] = 1, [6] = 2, [7] = 3, [8] = 4 })[channel]
+end
+
+local function crystalSfxKey(constant)
+  local stem = constant and constant:match("^SFX_(.+)$")
+  return stem
+end
+
+local function crystalSfxHeaderName(key)
+  if not key then return nil end
+  if key:match("^[A-Z0-9_]+$") then
+    local out = {}
+    for part in key:gmatch("[A-Z0-9]+") do
+      out[#out + 1] = part:sub(1, 1) .. part:sub(2):lower()
+    end
+    return table.concat(out)
+  end
+  return key
+end
+
+local function parseCrystalSfxHeaders()
+  local handle = assert(io.open("roms/pokecrystal/audio/sfx.asm", "rb"))
+  local text = handle:read("*a")
+  handle:close()
+  local headers = {}
+  local current
+  local channelsBySymbol = {}
+  local activeChannel
+  local function localLabelName(symbol, label)
+    return symbol .. label
+  end
+  local function addChannelTarget(spec, target, isSubroutine)
+    if not (spec and target) then return end
+    local full = target:sub(1, 1) == "."
+      and localLabelName(spec.symbol, target) or target
+    spec.labels[full] = true
+    if isSubroutine then spec.subroutines[full] = true end
+  end
+  for line in text:gmatch("[^\r\n]+") do
+    local label = line:match("^(Sfx_[A-Za-z0-9_]+):$")
+    local channelLabel = label and channelsBySymbol[label] or nil
+    if label and not label:match("_Ch%d+$") then
+      current = label:match("^Sfx_(.+)$")
+      headers[current] = headers[current] or { channels = {} }
+      activeChannel = nil
+    elseif channelLabel then
+      activeChannel = channelLabel
+    end
+    if activeChannel then
+      local localLabel = line:match("^%s*(%.[A-Za-z0-9_]+):$")
+      if localLabel then
+        addChannelTarget(activeChannel, localLabel, false)
+      else
+        local opcode, args = line:match("^%s*(sound_[a-z_]+)%s+(.-)%s*$")
+        if opcode == "sound_call" then
+          addChannelTarget(activeChannel, args:match("([%.A-Za-z0-9_]+)%s*$"), true)
+        elseif opcode == "sound_loop" then
+          addChannelTarget(activeChannel, args:match(",%s*([%.A-Za-z0-9_]+)%s*$")
+            or args:match("([%.A-Za-z0-9_]+)%s*$"), false)
+        elseif opcode == "sound_jump" then
+          addChannelTarget(activeChannel, args:match("([%.A-Za-z0-9_]+)%s*$"), false)
+        elseif opcode == "sound_ret" then
+          activeChannel = nil
+        end
+      end
+    end
+    if current then
+      local hwChannel, sym = line:match("^%s*channel%s+(%d+),%s*(Sfx_[A-Za-z0-9_]+)")
+      if hwChannel and sym then
+        local spec = {
+          hw = assert(hwFromSfxChannel(tonumber(hwChannel)),
+                      "unsupported Crystal SFX channel " .. tostring(hwChannel)),
+          symbol = sym,
+          labels = { [sym] = true },
+          subroutines = {},
+        }
+        headers[current].channels[#headers[current].channels + 1] = spec
+        channelsBySymbol[sym] = spec
+      end
+    end
+  end
+  return headers
+end
+
+RomExtractorGen2._parseCrystalSfxHeaders = parseCrystalSfxHeaders
+
+local function parseCrystalMoveAnimMeta()
+  local handle = assert(io.open("roms/pokecrystal/data/moves/animations.asm", "rb"))
+  local text = handle:read("*a")
+  handle:close()
+  local out = {}
+  local current, lines = nil, nil
+  local function flush()
+    if not current then return end
+    local entry = { effect = "SE_DELAY_ANIMATION_10" }
+    for _, row in ipairs(lines) do
+      local pitch, tempo, sfx = row:match("anim_sound%s+(%d+),%s*(%d+),%s*(SFX_[A-Z0-9_]+)")
+      if pitch and tempo and sfx and not entry.sound then
+        entry.sound = crystalSfxKey(sfx)
+        entry.pitch = tonumber(pitch)
+        entry.tempo = tonumber(tempo)
+      end
+      if row:match("BATTLE_BG_EFFECT_FLASH") then
+        entry.effect = "SE_DARK_SCREEN_FLASH"
+      elseif row:match("BATTLE_BG_EFFECT_SHAKE_SCREEN")
+          or row:match("BATTLE_BG_EFFECT_ROCK_THROW")
+          or row:match("BATTLE_BG_EFFECT_BODY_SLAM")
+          or row:match("BATTLE_BG_EFFECT_TACKLE") then
+        entry.effect = "SE_SHAKE_SCREEN"
+      end
+    end
+    out[current] = entry
+  end
+  for line in text:gmatch("[^\r\n]+") do
+    local label = line:match("^(BattleAnim_[A-Za-z0-9_]+):$")
+    if label then
+      flush()
+      current = label:gsub("^BattleAnim_", ""):upper()
+      lines = {}
+    elseif current then
+      lines[#lines + 1] = line
+    end
+  end
+  flush()
+  return out
+end
+
 function RomExtractorGen2:symbol(name)
   local location = self.symbols[name]
-  if not location then error("required symbol is missing: " .. tostring(name)) end
-  return { bank = location[1], address = location[2], name = name }
+  if location then
+    return { bank = location[1], address = location[2], name = name }
+  end
+  local cached = self.symCache[name]
+  if cached then return cached end
+  local symPath = "roms/pokecrystal/pokecrystal.sym"
+  local handle = io.open(symPath, "rb")
+  if handle then
+    for line in handle:lines() do
+      local parsed = parseSymLine(line)
+      if parsed and parsed.name == name then
+        handle:close()
+        self.symCache[name] = parsed
+        return parsed
+      end
+    end
+    handle:close()
+  end
+  error("required symbol is missing: " .. tostring(name))
 end
 
 function RomExtractorGen2:beginStage(name)
@@ -231,6 +388,21 @@ end
 
 local function trim(s)
   return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function parseRgbPalFile(path)
+  local colors = {}
+  for line in readTextFile(path):gmatch("[^\r\n]+") do
+    local r, g, b = line:match("RGB%s+(%d+),%s*(%d+),%s*(%d+)")
+    if r then
+      colors[#colors + 1] = {
+        math.floor(tonumber(r) * 255 / 31 + 0.5),
+        math.floor(tonumber(g) * 255 / 31 + 0.5),
+        math.floor(tonumber(b) * 255 / 31 + 0.5),
+      }
+    end
+  end
+  return colors
 end
 
 local function fileExists(path)
@@ -498,6 +670,7 @@ function RomExtractorGen2:parseCrystalMoves()
   local path = "roms/pokecrystal/data/moves/moves.asm"
   local out = {}
   local index = 0
+  local animMeta = parseCrystalMoveAnimMeta()
   for line in readTextFile(path):gmatch("[^\r\n]+") do
     local id, effect, power, moveType, accuracy, pp, chance =
       line:match("^%s*move%s+([A-Z0-9_]+),%s*(EFFECT_[A-Z0-9_]+),%s*(-?%d+),%s*([A-Z0-9_]+),%s*(%d+),%s*(%d+),%s*(%d+)")
@@ -515,11 +688,61 @@ function RomExtractorGen2:parseCrystalMoves()
         effectChance = tonumber(chance),
         originalEffect = effect,
       }
+      local anim = animMeta[id]
+      if anim and anim.sound then
+        out[id].anim = {
+          sound = anim.sound,
+          pitch = anim.pitch or 0,
+          tempo = anim.tempo or 0x80,
+        }
+        if anim.effect == "SE_SHAKE_SCREEN" then out[id].anim.shake = true end
+        if anim.effect == "SE_DARK_SCREEN_FLASH" then out[id].anim.flash = true end
+      end
       if FIXED_DAMAGE_MOVES[id] ~= nil then
         out[id].fixedDamage = FIXED_DAMAGE_MOVES[id]
       end
     end
   end
+  return out
+end
+
+function RomExtractorGen2:extractBattleAnimations(moves)
+  self:beginStage("Battle animations")
+  local moveAnims = {}
+  local animMeta = parseCrystalMoveAnimMeta()
+  for moveId in pairs(moves or {}) do
+    local meta = animMeta[moveId]
+    local row = { effect = (meta and meta.effect) or "SE_DELAY_ANIMATION_10" }
+    if meta and meta.sound then row.sound = moveId end
+    moveAnims[moveId] = {
+      source = "decomp:roms/pokecrystal/data/moves/animations.asm",
+      seq = { row },
+    }
+  end
+  for _, name in ipairs({
+    "POOF_ANIM", "HIDEPIC_ANIM", "SHOWPIC_ANIM",
+    "TOSS_ANIM", "GREATTOSS_ANIM", "ULTRATOSS_ANIM",
+    "SHAKE_ANIM", "BLOCKBALL_ANIM",
+    "SLP_ANIM", "SLP_PLAYER_ANIM", "CONF_ANIM", "CONF_PLAYER_ANIM",
+    "XSTATITEM_ANIM", "XSTATITEM_DUPLICATE_ANIM",
+    "TELEPORT", "DIG", "FLY",
+  }) do
+    if not moveAnims[name] then
+      moveAnims[name] = {
+        source = "Crystal fallback battle anim",
+        seq = { { effect = "SE_DELAY_ANIMATION_10" } },
+      }
+    end
+  end
+  local out = {
+    tilesheets = {},
+    baseCoords = {},
+    frameBlocks = {},
+    subanims = {},
+    moveAnims = moveAnims,
+  }
+  self:write("battle_anims", out)
+  self:tick("Battle animations", 1, 1)
   return out
 end
 
@@ -840,8 +1063,9 @@ function RomExtractorGen2:parseCrystalItems()
     if priceText:sub(1, 1) == "$" then
       priceText = tostring(tonumber(priceText:sub(2), 16) or 0)
     end
-    local keyItem = attr.pocket == "KEY_ITEM"
-      or (meta.machine and meta.machine.kind == "HM")
+    local pocket = trim(attr.pocket or
+      (meta.machine and "TM_HM" or "ITEM"))
+    local keyItem = pocket == "KEY_ITEM"
     out[meta.id] = {
       id = meta.id,
       index = meta.index,
@@ -849,8 +1073,9 @@ function RomExtractorGen2:parseCrystalItems()
       price = tonumber(priceText) or 0,
       source = "decomp:data/items/{names,attributes}.asm",
       machine = meta.machine,
+      pocket = pocket,
       keyItem = keyItem or nil,
-      tossable = attr.property and not attr.property:find("CANT_TOSS", 1, true) or not keyItem,
+      tossable = not (attr.property and attr.property:find("CANT_TOSS", 1, true)),
     }
   end
   return out
@@ -1261,8 +1486,10 @@ function RomExtractorGen2:extractMap()
         -- registered too. Not asserted: unlike a dimension/count mismatch,
         -- this is an expected, incremental-coverage gap, not a sign the
         -- ROM read something wrong.
-        Logger.warn("%s: skipping warp to unregistered map %d:%d",
-          mapId, row[4], row[5])
+        local skipped = self.skippedWarps[mapId] or {}
+        self.skippedWarps[mapId] = skipped
+        local key = ("%d:%d"):format(row[4], row[5])
+        skipped[key] = (skipped[key] or 0) + 1
       end
       addr = addr + 5
     end
@@ -1336,6 +1563,16 @@ function RomExtractorGen2:extractFont()
     charmap = self.manifest.fontCharmap,
   }
   self:write("font", data)
+  self:save(love.image.newImageData("roms/pokecrystal/gfx/font/font_battle_extra.png"),
+    "battle/font_battle_extra.png")
+  self:save(love.image.newImageData("roms/pokecrystal/gfx/battle/enemy_hp_bar_border.png"),
+    "battle/battle_hud_1.png")
+  self:save(love.image.newImageData("roms/pokecrystal/gfx/battle/hp_exp_bar_border.png"),
+    "battle/battle_hud_2.png")
+  self:save(love.image.newImageData("roms/pokecrystal/gfx/battle/hp_exp_bar_border.png"),
+    "battle/battle_hud_3.png")
+  self:save(love.image.newImageData("roms/pokecrystal/gfx/battle/balls.png"),
+    "battle/balls.png")
   return data
 end
 
@@ -1370,9 +1607,150 @@ function RomExtractorGen2:extractPalettes()
       tileGroups[tonumber(tilesetId)] = groups
     end
   end
-  local out = { tileGroups = tileGroups, byTime = data.byTime }
+  local hpBar = parseRgbPalFile("roms/pokecrystal/gfx/battle/hp_bar.pal")
+  local expBar = parseRgbPalFile("roms/pokecrystal/gfx/battle/exp_bar.pal")
+  local out = {
+    tileGroups = tileGroups,
+    byTime = data.byTime,
+    battle = {
+      GREENBAR = { hpBar[1], hpBar[2] },
+      YELLOWBAR = { hpBar[3], hpBar[4] },
+      REDBAR = { hpBar[5], hpBar[6] },
+      EXPBAR = { expBar[1], expBar[2] },
+    },
+  }
   self:write("palettes", out)
   return out
+end
+
+local function extractCrystalSong(self, title, channels)
+  self:beginStage(title)
+  local compiled = {}
+  for _, ch in ipairs(channels) do
+    local sym = self:symbol(ch.symbol)
+    local mainSize = math.max(ch.size or 0, 2048)
+    local spec = {
+      hw = ch.hw,
+      baseAddress = sym.address,
+      bytes = self.rom:bytes(sym.bank, sym.address, mainSize),
+    }
+    if ch.labels then
+      local labels = {}
+      for _, labelName in ipairs(ch.labels) do
+        local label = self:symbol(labelName)
+        labels[label.address] = labelName:match("%.([^.]+)$") or labelName
+      end
+      spec.labels = labels
+    end
+    if ch.subroutines then
+      spec.subroutines = {}
+      spec.labels = spec.labels or {}
+      local subSize = math.max(ch.subSize or 0, 256)
+      for _, subName in ipairs(ch.subroutines) do
+        local sub = self:symbol(subName)
+        local short = subName:match("%.([^.]+)$") or subName
+        spec.subroutines[short] = {
+          baseAddress = sub.address,
+          bytes = self.rom:bytes(sub.bank, sub.address, subSize),
+        }
+        spec.labels[sub.address] = short
+      end
+    end
+    compiled[#compiled + 1] = spec
+  end
+  local song = CrystalMusicTranscoder.buildSong(compiled)
+  self:tick(title, 1, 1)
+  return song
+end
+
+local function decodeCrystalSegment(self, spec, isSfx)
+  local sym = self:symbol(spec.symbol)
+  local labels = {}
+  for _, labelName in ipairs(spec.labels or {}) do
+    local label = self:symbol(labelName)
+    labels[label.address] = labelName:match("%.([^.]+)$") or labelName
+  end
+  return CrystalMusicTranscoder.decodeChannel(
+    self.rom:bytes(sym.bank, sym.address, spec.size),
+    spec.hw, sym.address, labels, isSfx)
+end
+
+local function concatEvents(...)
+  local out = {}
+  for i = 1, select("#", ...) do
+    local events = select(i, ...)
+    for _, event in ipairs(events or {}) do
+      out[#out + 1] = event
+    end
+  end
+  return out
+end
+
+local function extractCrystalWildNightSong(self)
+  self:beginStage("Johto wild battle night music")
+
+  local ch1Prelude = decodeCrystalSegment(self, {
+    hw = 1, symbol = "Music_JohtoWildBattleNight_Ch1", size = 64,
+    labels = { "Music_JohtoWildBattle_Ch1.body" },
+  })
+  local ch1Body = decodeCrystalSegment(self, {
+    hw = 1, symbol = "Music_JohtoWildBattle_Ch1.body", size = 512,
+    labels = { "Music_JohtoWildBattle_Ch1.body", "Music_JohtoWildBattle_Ch1.mainloop" },
+  })
+
+  local ch2Prelude = decodeCrystalSegment(self, {
+    hw = 2, symbol = "Music_JohtoWildBattleNight_Ch2", size = 96,
+    labels = { "Music_JohtoWildBattle_Ch2.body", "Music_JohtoWildBattle_Ch2.sub1" },
+  })
+  local ch2Body = decodeCrystalSegment(self, {
+    hw = 2, symbol = "Music_JohtoWildBattle_Ch2.body", size = 512,
+    labels = { "Music_JohtoWildBattle_Ch2.body", "Music_JohtoWildBattle_Ch2.mainloop" },
+  })
+  local ch2Sub1 = decodeCrystalSegment(self, {
+    hw = 2, symbol = "Music_JohtoWildBattle_Ch2.sub1", size = 96,
+    labels = { "Music_JohtoWildBattle_Ch2.sub1" },
+  })
+
+  local ch3Prelude = decodeCrystalSegment(self, {
+    hw = 3, symbol = "Music_JohtoWildBattleNight_Ch3", size = 64,
+    labels = { "Music_JohtoWildBattle_Ch3.body" },
+  })
+  local ch3Body = decodeCrystalSegment(self, {
+    hw = 3, symbol = "Music_JohtoWildBattle_Ch3.body", size = 512,
+    labels = {
+      "Music_JohtoWildBattle_Ch3.body", "Music_JohtoWildBattle_Ch3.loop1",
+      "Music_JohtoWildBattle_Ch3.loop2", "Music_JohtoWildBattle_Ch3.mainloop",
+      "Music_JohtoWildBattle_Ch3.loop3", "Music_JohtoWildBattle_Ch3.loop4",
+      "Music_JohtoWildBattle_Ch3.loop5", "Music_JohtoWildBattle_Ch3.loop6",
+      "Music_JohtoWildBattle_Ch3.loop7", "Music_JohtoWildBattle_Ch3.loop8",
+      "Music_JohtoWildBattle_Ch3.loop9", "Music_JohtoWildBattle_Ch3.loop10",
+      "Music_JohtoWildBattle_Ch3.sub1", "Music_JohtoWildBattle_Ch3.sub1loop1",
+    },
+  })
+  local ch3Sub1 = decodeCrystalSegment(self, {
+    hw = 3, symbol = "Music_JohtoWildBattle_Ch3.sub1", size = 48,
+    labels = {
+      "Music_JohtoWildBattle_Ch3.sub1", "Music_JohtoWildBattle_Ch3.sub1loop1",
+    },
+  })
+
+  local song = ChipAsm.song({
+    channels = {
+      { hw = 1, program = concatEvents(ch1Prelude, ch1Body) },
+      {
+        hw = 2,
+        program = concatEvents(ch2Prelude, ch2Body),
+        subroutines = { sub1 = ch2Sub1 },
+      },
+      {
+        hw = 3,
+        program = concatEvents(ch3Prelude, ch3Body),
+        subroutines = { sub1 = ch3Sub1 },
+      },
+    },
+  })
+  self:tick("Johto wild battle night music", 1, 1)
+  return song
 end
 
 -- Ported from src/import/RomExtractor.lua's textGlyph/decodeTextCommands
@@ -2036,6 +2414,154 @@ function RomExtractorGen2:extractRoute30Music()
   return song
 end
 
+function RomExtractorGen2:extractBattleMusic()
+  return {
+    wild = extractCrystalSong(self, "Johto wild battle music", {
+      { hw = 1, symbol = "Music_JohtoWildBattle_Ch1", size = 320,
+        labels = { "Music_JohtoWildBattle_Ch1.body", "Music_JohtoWildBattle_Ch1.mainloop" } },
+      { hw = 2, symbol = "Music_JohtoWildBattle_Ch2", size = 320,
+        labels = { "Music_JohtoWildBattle_Ch2.body", "Music_JohtoWildBattle_Ch2.mainloop" },
+        subroutines = { "Music_JohtoWildBattle_Ch2.sub1" }, subSize = 80 },
+      { hw = 3, symbol = "Music_JohtoWildBattle_Ch3", size = 320,
+        labels = {
+          "Music_JohtoWildBattle_Ch3.body", "Music_JohtoWildBattle_Ch3.loop1",
+          "Music_JohtoWildBattle_Ch3.loop2", "Music_JohtoWildBattle_Ch3.mainloop",
+          "Music_JohtoWildBattle_Ch3.loop3", "Music_JohtoWildBattle_Ch3.loop4",
+          "Music_JohtoWildBattle_Ch3.loop5", "Music_JohtoWildBattle_Ch3.loop6",
+          "Music_JohtoWildBattle_Ch3.loop7", "Music_JohtoWildBattle_Ch3.loop8",
+          "Music_JohtoWildBattle_Ch3.loop9", "Music_JohtoWildBattle_Ch3.loop10",
+        },
+        subroutines = { "Music_JohtoWildBattle_Ch3.sub1", "Music_JohtoWildBattle_Ch3.sub1loop1" },
+        subSize = 48 },
+    }),
+    wildNight = extractCrystalWildNightSong(self),
+    trainer = extractCrystalSong(self, "Johto trainer battle music", {
+      { hw = 1, symbol = "Music_JohtoTrainerBattle_Ch1", size = 520,
+        labels = { "Music_JohtoTrainerBattle_Ch1.mainloop", "Music_JohtoTrainerBattle_Ch1.loop1" },
+        subroutines = { "Music_JohtoTrainerBattle_Ch1.sub1" }, subSize = 96 },
+      { hw = 2, symbol = "Music_JohtoTrainerBattle_Ch2", size = 560,
+        labels = {
+          "Music_JohtoTrainerBattle_Ch2.mainloop", "Music_JohtoTrainerBattle_Ch2.loop1",
+          "Music_JohtoTrainerBattle_Ch2.loop2", "Music_JohtoTrainerBattle_Ch2.loop3",
+        },
+        subroutines = {
+          "Music_JohtoTrainerBattle_Ch2.sub1", "Music_JohtoTrainerBattle_Ch2.sub2",
+          "Music_JohtoTrainerBattle_Ch2.sub3", "Music_JohtoTrainerBattle_Ch2.sub4",
+          "Music_JohtoTrainerBattle_Ch2.sub5",
+        }, subSize = 96 },
+      { hw = 3, symbol = "Music_JohtoTrainerBattle_Ch3", size = 720,
+        labels = {
+          "Music_JohtoTrainerBattle_Ch3.loop1", "Music_JohtoTrainerBattle_Ch3.mainloop",
+          "Music_JohtoTrainerBattle_Ch3.loop2", "Music_JohtoTrainerBattle_Ch3.loop3",
+          "Music_JohtoTrainerBattle_Ch3.loop4", "Music_JohtoTrainerBattle_Ch3.loop5",
+          "Music_JohtoTrainerBattle_Ch3.loop6", "Music_JohtoTrainerBattle_Ch3.loop7",
+          "Music_JohtoTrainerBattle_Ch3.loop8", "Music_JohtoTrainerBattle_Ch3.loop9",
+          "Music_JohtoTrainerBattle_Ch3.loop10", "Music_JohtoTrainerBattle_Ch3.loop11",
+        },
+        subroutines = {
+          "Music_JohtoTrainerBattle_Ch3.sub1", "Music_JohtoTrainerBattle_Ch3.sub2",
+          "Music_JohtoTrainerBattle_Ch3.sub3", "Music_JohtoTrainerBattle_Ch3.sub4",
+          "Music_JohtoTrainerBattle_Ch3.sub4loop1", "Music_JohtoTrainerBattle_Ch3.sub5",
+          "Music_JohtoTrainerBattle_Ch3.sub5loop1", "Music_JohtoTrainerBattle_Ch3.sub6",
+          "Music_JohtoTrainerBattle_Ch3.sub6loop1", "Music_JohtoTrainerBattle_Ch3.sub7",
+        }, subSize = 80 },
+    }),
+    gym = extractCrystalSong(self, "Johto gym battle music", {
+      { hw = 1, symbol = "Music_JohtoGymBattle_Ch1", size = 400,
+        labels = { "Music_JohtoGymBattle_Ch1.loop1", "Music_JohtoGymBattle_Ch1.loop2", "Music_JohtoGymBattle_Ch1.mainloop" } },
+      { hw = 2, symbol = "Music_JohtoGymBattle_Ch2", size = 400,
+        labels = { "Music_JohtoGymBattle_Ch2.loop1", "Music_JohtoGymBattle_Ch2.loop2", "Music_JohtoGymBattle_Ch2.mainloop" } },
+      { hw = 3, symbol = "Music_JohtoGymBattle_Ch3", size = 520,
+        labels = { "Music_JohtoGymBattle_Ch3.mainloop" },
+        subroutines = {
+          "Music_JohtoGymBattle_Ch3.sub1", "Music_JohtoGymBattle_Ch3.sub2",
+          "Music_JohtoGymBattle_Ch3.sub2loop1", "Music_JohtoGymBattle_Ch3.sub3",
+          "Music_JohtoGymBattle_Ch3.sub3loop1", "Music_JohtoGymBattle_Ch3.sub4",
+          "Music_JohtoGymBattle_Ch3.sub4loop1", "Music_JohtoGymBattle_Ch3.sub5",
+          "Music_JohtoGymBattle_Ch3.sub6", "Music_JohtoGymBattle_Ch3.sub7",
+          "Music_JohtoGymBattle_Ch3.sub8", "Music_JohtoGymBattle_Ch3.sub9",
+          "Music_JohtoGymBattle_Ch3.sub9loop1", "Music_JohtoGymBattle_Ch3.sub10",
+          "Music_JohtoGymBattle_Ch3.sub10loop1", "Music_JohtoGymBattle_Ch3.sub11",
+        }, subSize = 48 },
+    }),
+    final = extractCrystalSong(self, "Champion battle music", {
+      { hw = 1, symbol = "Music_ChampionBattle_Ch1", size = 520,
+        labels = {
+          "Music_ChampionBattle_Ch1.loop1", "Music_ChampionBattle_Ch1.loop2",
+          "Music_ChampionBattle_Ch1.loop3", "Music_ChampionBattle_Ch1.mainloop",
+          "Music_ChampionBattle_Ch1.loop4", "Music_ChampionBattle_Ch1.loop5",
+          "Music_ChampionBattle_Ch1.loop6",
+        },
+        subroutines = {
+          "Music_ChampionBattle_Ch1.sub1", "Music_ChampionBattle_Ch1.sub2",
+          "Music_ChampionBattle_Ch1.sub3", "Music_ChampionBattle_Ch1.sub4",
+          "Music_ChampionBattle_Ch1.sub5", "Music_ChampionBattle_Ch1.sub6",
+        }, subSize = 80 },
+      { hw = 2, symbol = "Music_ChampionBattle_Ch2", size = 400,
+        labels = { "Music_ChampionBattle_Ch2.mainloop", "Music_ChampionBattle_Ch2.loop1" },
+        subroutines = {
+          "Music_ChampionBattle_Ch2.sub1", "Music_ChampionBattle_Ch2.sub2",
+          "Music_ChampionBattle_Ch2.sub3",
+        }, subSize = 80 },
+      { hw = 3, symbol = "Music_ChampionBattle_Ch3", size = 520,
+        labels = {
+          "Music_ChampionBattle_Ch3.loop1", "Music_ChampionBattle_Ch3.loop2",
+          "Music_ChampionBattle_Ch3.mainloop", "Music_ChampionBattle_Ch3.loop3",
+          "Music_ChampionBattle_Ch3.loop4", "Music_ChampionBattle_Ch3.loop5",
+          "Music_ChampionBattle_Ch3.loop6", "Music_ChampionBattle_Ch3.loop7",
+          "Music_ChampionBattle_Ch3.loop8", "Music_ChampionBattle_Ch3.loop9",
+          "Music_ChampionBattle_Ch3.loop10", "Music_ChampionBattle_Ch3.loop11",
+          "Music_ChampionBattle_Ch3.loop12",
+        },
+        subroutines = {
+          "Music_ChampionBattle_Ch3.sub1", "Music_ChampionBattle_Ch3.sub1loop1",
+          "Music_ChampionBattle_Ch3.sub2", "Music_ChampionBattle_Ch3.sub3",
+          "Music_ChampionBattle_Ch3.sub4",
+        }, subSize = 64 },
+    }),
+    wildWin = extractCrystalSong(self, "Wild victory music", {
+      { hw = 1, symbol = "Music_WildPokemonVictory_Ch1", size = 160,
+        labels = { "Music_WildPokemonVictory_Ch1.body", "Music_WildPokemonVictory_Ch1.mainloop" },
+        subroutines = { "Music_WildPokemonVictory_Ch1.sub1" }, subSize = 48 },
+      { hw = 2, symbol = "Music_WildPokemonVictory_Ch2", size = 160,
+        labels = { "Music_WildPokemonVictory_Ch2.body", "Music_WildPokemonVictory_Ch2.mainloop" },
+        subroutines = { "Music_WildPokemonVictory_Ch2.sub1" }, subSize = 48 },
+      { hw = 3, symbol = "Music_WildPokemonVictory_Ch3", size = 160,
+        labels = { "Music_WildPokemonVictory_Ch3.body", "Music_WildPokemonVictory_Ch3.mainloop" },
+        subroutines = { "Music_WildPokemonVictory_Ch3.sub1" }, subSize = 48 },
+    }),
+    trainerWin = extractCrystalSong(self, "Trainer victory music", {
+      { hw = 1, symbol = "Music_TrainerVictory_Ch1", size = 180,
+        labels = { "Music_TrainerVictory_Ch1.loop1", "Music_TrainerVictory_Ch1.mainloop",
+          "Music_TrainerVictory_Ch1.loop2", "Music_TrainerVictory_Ch1.loop3" },
+        subroutines = { "Music_TrainerVictory_Ch1.sub1" }, subSize = 48 },
+      { hw = 2, symbol = "Music_TrainerVictory_Ch2", size = 160,
+        labels = { "Music_TrainerVictory_Ch2.loop1", "Music_TrainerVictory_Ch2.mainloop" },
+        subroutines = { "Music_TrainerVictory_Ch2.sub1" }, subSize = 48 },
+      { hw = 3, symbol = "Music_TrainerVictory_Ch3", size = 160,
+        labels = { "Music_TrainerVictory_Ch3.loop1", "Music_TrainerVictory_Ch3.mainloop" },
+        subroutines = { "Music_TrainerVictory_Ch3.sub1" }, subSize = 48 },
+    }),
+    gymWin = extractCrystalSong(self, "Gym victory music", {
+      { hw = 1, symbol = "Music_GymLeaderVictory_Ch1", size = 220,
+        labels = { "Music_GymLeaderVictory_Ch1.loop1", "Music_GymLeaderVictory_Ch1.mainloop" },
+        subroutines = { "Music_GymLeaderVictory_Ch1.sub1", "Music_GymLeaderVictory_Ch1.sub2" },
+        subSize = 64 },
+      { hw = 2, symbol = "Music_GymLeaderVictory_Ch2", size = 180,
+        labels = { "Music_GymLeaderVictory_Ch2.mainloop" },
+        subroutines = { "Music_GymLeaderVictory_Ch2.sub1", "Music_GymLeaderVictory_Ch2.sub2" },
+        subSize = 48 },
+      { hw = 3, symbol = "Music_GymLeaderVictory_Ch3", size = 220,
+        labels = { "Music_GymLeaderVictory_Ch3.loop1", "Music_GymLeaderVictory_Ch3.mainloop" },
+        subroutines = { "Music_GymLeaderVictory_Ch3.sub1" }, subSize = 96 },
+      { hw = 4, symbol = "Music_GymLeaderVictory_Ch4", size = 120,
+        labels = { "Music_GymLeaderVictory_Ch4.mainloop", "Music_GymLeaderVictory_Ch4.loop1" },
+        subroutines = { "Music_GymLeaderVictory_Ch4.sub1", "Music_GymLeaderVictory_Ch4.sub1loop1" },
+        subSize = 48 },
+    }),
+  }
+end
+
 -- The first batch of Crystal SFX: the 9 names this project's own code
 -- already calls by name (Sound.play/Sound.startLoop call sites across
 -- src/ and data/scripts/), mapped to their real Crystal SFX_* constants
@@ -2046,44 +2572,91 @@ end
 -- loop forever.
 function RomExtractorGen2:extractSfx()
   self:beginStage("Sound effects")
+  local headers = parseCrystalSfxHeaders()
+  local sfx = {}
 
-  local function ch(symbolName, hw)
+  local function ch(symbolName, hw, size)
     local sym = self:symbol(symbolName)
     return { hw = hw, baseAddress = sym.address,
-      bytes = self.rom:bytes(sym.bank, sym.address, 40) }
+      bytes = self.rom:bytes(sym.bank, sym.address, size or 128) }
   end
 
-  local sfx = {
-    Collision = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_Bump_Ch5", 1),
-    }),
-    Cut = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_Cut_Ch8", 4),
-    }),
-    Denied = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_Wrong_Ch5", 1), ch("Sfx_Wrong_Ch6", 2),
-    }),
-    Ball_Poof = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_BallPoof_Ch5", 1), ch("Sfx_BallPoof_Ch8", 4),
-    }),
-    Ledge_Jump = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_JumpOverLedge_Ch5", 1),
-    }),
-    Withdraw_Deposit = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_Transaction_Ch5", 1), ch("Sfx_Transaction_Ch6", 2),
-    }),
-    Go_Inside = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_EnterDoor_Ch8", 4),
-    }),
-    -- Ch8 (a noise drum tail) deliberately excluded -- see the plan's
-    -- "Research already done" section.
-    Get_Key_Item = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_KeyItem_Ch5", 1), ch("Sfx_KeyItem_Ch6", 2), ch("Sfx_KeyItem_Ch7", 3),
-    }),
-    Intro_Whoosh = CrystalMusicTranscoder.buildSfx({
-      ch("Sfx_IntroWhoosh_Ch8", 4),
-    }),
-  }
+  local function buildByHeader(headerName)
+    local header = headers[headerName]
+    assert(header and #header.channels > 0,
+      "missing Crystal SFX header " .. tostring(headerName))
+    local channels = {}
+    for _, spec in ipairs(header.channels) do
+      local labels = {}
+      for labelName in pairs(spec.labels or {}) do
+        local sym = self:symbol(labelName)
+        labels[sym.address] = labelName
+      end
+      local subroutines
+      if next(spec.subroutines or {}) then
+        subroutines = {}
+        for labelName in pairs(spec.subroutines) do
+          local sym = self:symbol(labelName)
+          subroutines[labelName] = {
+            baseAddress = sym.address,
+            bytes = self.rom:bytes(sym.bank, sym.address, 128),
+          }
+        end
+      end
+      local channel = ch(spec.symbol, spec.hw, 128)
+      channel.labels = labels
+      channel.subroutines = subroutines
+      channels[#channels + 1] = channel
+    end
+    return CrystalMusicTranscoder.buildSfx(channels)
+  end
+
+  local function tryAdd(targetKey, headerName)
+    local ok, built = pcall(buildByHeader, headerName)
+    if ok and built then
+      sfx[targetKey] = built
+      return true
+    end
+    Logger.warn("Crystal SFX %s skipped: %s", tostring(targetKey), tostring(built))
+    return false
+  end
+
+  for targetKey, headerName in pairs({
+    Collision = "Bump",
+    Cut = "Cut",
+    Denied = "Wrong",
+    Ball_Poof = "BallPoof",
+    Ledge_Jump = "JumpOverLedge",
+    Withdraw_Deposit = "Transaction",
+    Go_Inside = "EnterDoor",
+    Go_Outside = "ExitBuilding",
+    Get_Key_Item = "KeyItem",
+    Intro_Whoosh = "IntroWhoosh",
+    Faint_Fall = "Faint",
+    Press_AB = "PushButton",
+    Tink = "SwitchPockets",
+    Trade_Machine = "GiveTrademon",
+    Heal_HP = "Potion",
+    Get_Item2 = "Item",
+    Safari_Zone_PA = "Call",
+    Shooting_Star = "TitleScreenEntrance",
+    Slots_New_Spin = "SlotMachineStart",
+    Slots_Stop_Wheel = "StopSlot",
+    Slots_Reward = "GetCoinFromSlots",
+    Shrink = "WarpTo",
+  }) do
+    tryAdd(targetKey, headerName)
+  end
+
+  local seen = {}
+  for _, move in pairs(self:parseCrystalMoves()) do
+    local anim = move.anim
+    local key = anim and anim.sound
+    if key and not seen[key] then
+      seen[key] = true
+      tryAdd(key, crystalSfxHeaderName(key))
+    end
+  end
 
   self:tick("Sound effects", 1, 1)
   return sfx
@@ -2094,7 +2667,7 @@ function RomExtractorGen2:extractStubs()
     self:write(name, {})
   end
   -- Cache-generation marker for Crystal's expanded start-area extraction.
-  self:write("crystal_start_marker_v5", { version = 5 })
+  self:write("crystal_start_marker_v6", { version = 6 })
 end
 
 function RomExtractorGen2:run()
@@ -2105,6 +2678,7 @@ function RomExtractorGen2:run()
   results.trainers = intro.trainers
   results.pokemon = intro.pokemon
   results.moves = intro.moves
+  results.battle_anims = self:extractBattleAnimations(results.moves)
   results.type_chart = intro.typeChart
   results.items = intro.items
   results.encounters = intro.encounters
@@ -2122,26 +2696,55 @@ function RomExtractorGen2:run()
   local route29Song = self:extractRoute29Music()
   local newBarkTownSong = self:extractNewBarkTownMusic()
   local route30Song = self:extractRoute30Music()
+  local battleMusic = self:extractBattleMusic()
   local sfx = self:extractSfx()
   local mapSongs = {}
   for mapId, expected in pairs(self.manifest.maps) do
     if expected.music then mapSongs[mapId] = expected.music end
   end
+  local songs = {
+    Music_TitleScreen = titleSong,
+    Music_ElmsLab = elmsLabSong,
+    Music_CherrygroveCity = cherrygroveCitySong,
+    Music_Route29 = route29Song,
+    Music_NewBarkTown = newBarkTownSong,
+    Music_Route30 = route30Song,
+    Music_JohtoWildBattle = battleMusic.wild,
+    Music_JohtoWildBattleNight = battleMusic.wildNight,
+    Music_JohtoTrainerBattle = battleMusic.trainer,
+    Music_JohtoGymBattle = battleMusic.gym,
+    Music_ChampionBattle = battleMusic.final,
+    Music_WildPokemonVictory = battleMusic.wildWin,
+    Music_TrainerVictory = battleMusic.trainerWin,
+    Music_GymLeaderVictory = battleMusic.gymWin,
+  }
   results.audio = {
     cries = cries.cries,
-    songs = {
-      Music_TitleScreen = titleSong,
-      Music_ElmsLab = elmsLabSong,
-      Music_CherrygroveCity = cherrygroveCitySong,
-      Music_Route29 = route29Song,
-      Music_NewBarkTown = newBarkTownSong,
-      Music_Route30 = route30Song,
+    songs = songs,
+    battle = {
+      wild = "Music_JohtoWildBattle",
+      wildNight = "Music_JohtoWildBattleNight",
+      trainer = "Music_JohtoTrainerBattle",
+      gym = "Music_JohtoGymBattle",
+      final = "Music_ChampionBattle",
+      wildWin = "Music_WildPokemonVictory",
+      trainerWin = "Music_TrainerVictory",
+      gymWin = "Music_GymLeaderVictory",
     },
     mapSongs = mapSongs,
     sfx = sfx,
   }
   self:write("audio", results.audio)
   self:extractStubs()
+  for mapId, rows in pairs(self.skippedWarps) do
+    local parts = {}
+    for key, count in pairs(rows) do
+      parts[#parts + 1] = count > 1 and (key .. " x" .. count) or key
+    end
+    table.sort(parts)
+    Logger.info("%s: skipped warps to unregistered maps (%s)",
+      mapId, table.concat(parts, ", "))
+  end
   if self.progress then
     self.progress(STAGE_COUNT, STAGE_COUNT, "Ready", 1, 1)
   end

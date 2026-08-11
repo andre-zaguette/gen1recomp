@@ -170,6 +170,17 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
         } }
         i = i + 3
       end
+    elseif cmd == 0xD9 then -- transpose_cmd: persistently offsets future
+      -- note pitches by N octaves + M semitones. ChipAsm/ChipSynth have no
+      -- native Crystal opcode here, so this transcoder maps it to the
+      -- project's own synthetic `transpose` event, encoded in an otherwise
+      -- unused command byte on the assembled side.
+      local packed = bytes[i + 1]
+      events[#events + 1] = { transpose = {
+        octaves = bit.rshift(packed, 4),
+        pitches = bit.band(packed, 0x0F),
+      } }
+      i = i + 2
     elseif cmd >= 0xD0 and cmd <= 0xD7 then -- octave_cmd: octave_cmd = $D0 +
       -- 8-octave (plan's "Research already done" section, byte-verified:
       -- octave 3 -> d5, octave 2 -> d6, octave 1 -> d7). Missing from
@@ -191,6 +202,15 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
         pace = bit.band(bit.rshift(packed, 4), 7),
         subtract = bit.band(packed, 8) ~= 0,
         shift = bit.band(packed, 7),
+      } }
+      i = i + 2
+    elseif cmd == 0xDE then -- duty_cycle_pattern_cmd
+      local packed = bytes[i + 1]
+      events[#events + 1] = { dutyPattern = {
+        bit.band(bit.rshift(packed, 6), 3),
+        bit.band(bit.rshift(packed, 4), 3),
+        bit.band(bit.rshift(packed, 2), 3),
+        bit.band(packed, 3),
       } }
       i = i + 2
     elseif cmd == 0xDF then -- toggle_sfx_cmd: a REAL mode toggle, not a
@@ -285,6 +305,11 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
     elseif cmd == 0xFE then -- sound_call_cmd (Crystal) -> ChipAsm {call=...}
       events[#events + 1] = { call = targetName(bytes[i + 1], bytes[i + 2]) }
       i = i + 3
+    elseif cmd == 0xF0 then -- sfx_toggle_noise_cmd: the SFX-side sibling of
+      -- toggle_noise_cmd, with the same optional drum-kit byte. ChipSynth
+      -- already treats the assembled 0xF0 as a consumed no-op parameter
+      -- carrier, so preserve that behavior by skipping the single payload.
+      i = i + 2
     else
       error(("CrystalMusicTranscoder: unsupported opcode $%02X at byte %d " ..
         "(address $%04X) -- outside the set Music_TitleScreen's real " ..

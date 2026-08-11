@@ -9,6 +9,7 @@
 -- HudTiles.statusTile the status one -- see STATUS_PAGES below. #280
 
 local Assets = require("src.render.Assets")
+local GameVersion = require("src.core.GameVersion")
 
 local HudTiles = {}
 
@@ -17,16 +18,32 @@ local HudTiles = {}
 -- { image = ..., base = 0x6D }) reskins the HP bar.  These are the
 -- vanilla pages the importer's cache carries, in the order the asm
 -- overlays them ($6D lands on top of font_battle_extra's tail).
-local PAGES = {
-  { id = "font_battle_extra",
-    image = "assets/generated/battle/font_battle_extra.png", base = 0x62 },
-  { id = "battle_hud_1",
-    image = "assets/generated/battle/battle_hud_1.png", base = 0x6D },
-  { id = "battle_hud_2",
-    image = "assets/generated/battle/battle_hud_2.png", base = 0x73 },
-  { id = "battle_hud_3",
-    image = "assets/generated/battle/battle_hud_3.png", base = 0x76 },
-}
+local function battlePages()
+  if GameVersion.isCrystal() then
+    return {
+      { id = "battle_exp_bar",
+        image = "roms/pokecrystal/gfx/battle/expbar.png", base = 0x55, count = 8 },
+      { id = "battle_exp_bar_end",
+        image = "roms/pokecrystal/gfx/battle/expbarend.png", base = 0x5D, count = 1 },
+      { id = "font_battle_extra",
+        image = "roms/pokecrystal/gfx/font/font_battle_extra.png", base = 0x62 },
+      { id = "battle_hud_1",
+        image = "roms/pokecrystal/gfx/battle/enemy_hp_bar_border.png", base = 0x6C, count = 4 },
+      { id = "battle_hud_2",
+        image = "roms/pokecrystal/gfx/battle/hp_exp_bar_border.png", base = 0x73, count = 6 },
+    }
+  end
+  return {
+    { id = "font_battle_extra",
+      image = "assets/generated/battle/font_battle_extra.png", base = 0x62 },
+    { id = "battle_hud_1",
+      image = "assets/generated/battle/battle_hud_1.png", base = 0x6D },
+    { id = "battle_hud_2",
+      image = "assets/generated/battle/battle_hud_2.png", base = 0x73 },
+    { id = "battle_hud_3",
+      image = "assets/generated/battle/battle_hud_3.png", base = 0x76 },
+  }
+end
 
 -- The STATUS SCREEN overlays the SAME sheets differently, and the layout
 -- above would break it: engine/pokemon/status_screen.asm:86-97 copies 3
@@ -38,16 +55,26 @@ local PAGES = {
 -- burying № under a line tile, so the status screen needs its own table.
 -- The line glyphs land identically either way -- $76 ─, $77 ┘, $6F the
 -- halfarrow -- only the vertical bar moves ($73 in battle, $78 here). #280
-local STATUS_PAGES = {
-  { id = "font_battle_extra",
-    image = "assets/generated/battle/font_battle_extra.png", base = 0x62 },
-  { id = "battle_hud_1",
-    image = "assets/generated/battle/battle_hud_1.png", base = 0x6D },
-  { id = "battle_hud_3",
-    image = "assets/generated/battle/battle_hud_3.png", base = 0x76, count = 2 },
-  { id = "battle_hud_2",
-    image = "assets/generated/battle/battle_hud_2.png", base = 0x78, count = 1 },
-}
+local function statusPages()
+  return {
+    { id = "font_battle_extra",
+      image = GameVersion.isCrystal()
+        and "roms/pokecrystal/gfx/font/font_battle_extra.png"
+        or "assets/generated/battle/font_battle_extra.png", base = 0x62 },
+    { id = "battle_hud_1",
+      image = GameVersion.isCrystal()
+        and "roms/pokecrystal/gfx/battle/enemy_hp_bar_border.png"
+        or "assets/generated/battle/battle_hud_1.png", base = 0x6D },
+    { id = "battle_hud_3",
+      image = GameVersion.isCrystal()
+        and "roms/pokecrystal/gfx/battle/hp_exp_bar_border.png"
+        or "assets/generated/battle/battle_hud_3.png", base = 0x76, count = 2 },
+    { id = "battle_hud_2",
+      image = GameVersion.isCrystal()
+        and "roms/pokecrystal/gfx/battle/hp_exp_bar_border.png"
+        or "assets/generated/battle/battle_hud_2.png", base = 0x78, count = 1 },
+  }
+end
 
 local tiles, statusTiles
 
@@ -92,7 +119,7 @@ local function put(t, x, y, tint)
 end
 
 function HudTiles.tile(code, x, y, tint)
-  if not tiles then tiles = build(PAGES) end
+  if not tiles then tiles = build(battlePages()) end
   put(tiles[code], x, y, tint)
 end
 
@@ -100,7 +127,7 @@ end
 -- bar codes $62-$6D are identical in both layouts, so drawHPBar below keeps
 -- using the battle table. #280
 function HudTiles.statusTile(code, x, y, tint)
-  if not statusTiles then statusTiles = build(STATUS_PAGES, true) end
+  if not statusTiles then statusTiles = build(statusPages(), true) end
   put(statusTiles[code], x, y, tint)
 end
 
@@ -158,8 +185,12 @@ function HudTiles.drawHPBar(data, tx, ty, mon, barType, grayFill, segments)
     local name = px >= green and "GREENBAR"
                  or px >= yellow and "YELLOWBAR" or "REDBAR"
     local colors = PaletteFX.pal(data, name)
+    if not colors and GameVersion.isCrystal() then
+      colors = data and data.palettes and data.palettes.battle
+        and data.palettes.battle[name] or nil
+    end
     if colors then
-      local c = colors[3] -- GB color 2 is the fill shade
+      local c = colors[2] or colors[3] -- Crystal stores the 2-color ramp directly.
       -- the fill pixels are the 2/3-gray shade; divide so they land on
       -- the palette color exactly (the black outline stays black)
       tint = { math.min(1, c[1] / 170), math.min(1, c[2] / 170),
@@ -171,6 +202,34 @@ function HudTiles.drawHPBar(data, tx, ty, mon, barType, grayFill, segments)
     HudTiles.tile(seg >= 8 and 0x6B or 0x63 + seg, x + 16 + i * 8, y, tint)
   end
   HudTiles.tile(HudTiles.capTile(barType), x + 16 + segments * 8, y)
+end
+
+function HudTiles.drawExpBar(data, tx, ty, fill, grayFill)
+  local x, y = tx * 8, ty * 8
+  local px = math.max(0, math.min(64, math.floor((fill or 0) * 64 + 0.5)))
+  local tint
+  if not grayFill then
+    local PaletteFX = require("src.render.PaletteFX")
+    local colors = PaletteFX.pal(data, "EXPBAR")
+    if colors then
+      local c = colors[2] or colors[3]
+      tint = { math.min(1, c[1] / 170), math.min(1, c[2] / 170),
+               math.min(1, c[3] / 170), 1 }
+    elseif GameVersion.isCrystal() then
+      colors = data and data.palettes and data.palettes.battle
+        and data.palettes.battle.EXPBAR or nil
+      if colors then
+        local c = colors[2] or colors[1]
+        tint = { math.min(1, c[1] / 170), math.min(1, c[2] / 170),
+                 math.min(1, c[3] / 170), 1 }
+      end
+    end
+  end
+  for i = 0, 7 do
+    local seg = math.min(8, math.max(0, px - i * 8))
+    HudTiles.tile(seg >= 8 and 0x5C or 0x54 + seg, x + i * 8, y, tint)
+  end
+  HudTiles.tile(0x5D, x + 64, y, tint)
 end
 
 return HudTiles

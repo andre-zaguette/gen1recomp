@@ -84,7 +84,7 @@ local VERSION_REQUIRED_FILES = {
     -- Older caches can have the start-area maps/tilesets but still carry
     -- the old Johto-only palette shape, so stamp a marker file with that
     -- import revision and require it here to force one clean reimport.
-    "data/generated/crystal_start_marker_v5.lua",
+    "data/generated/crystal_start_marker_v6.lua",
   },
 }
 

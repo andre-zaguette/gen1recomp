@@ -210,6 +210,7 @@ function Channel.new(engine, spec, options)
     executeMusic = not isSfxChannel,
     allowLoops = options.allowLoops ~= false,
     frequencyOffset = options.frequencyOffset or 0,
+    transpose = 0,
     frameTicks = options.frameTicks or FRAME_TICKS,
     speed = 12,
     volume = 12,
@@ -246,9 +247,13 @@ function Channel:word()
 end
 
 function Channel:frequency(note, octave)
+  local total = ((octave or self.octave) - 1) * 12 + note + (self.transpose or 0)
+  if total < 0 then total = 0 end
+  octave = math.floor(total / 12) + 1
+  note = total % 12
   local signed = PITCHES[note + 1] - 0x10000
   local register = bit.band(
-    bit.arshift(signed, math.max(0, (octave or self.octave) - 1)), 0x7FF)
+    bit.arshift(signed, math.max(0, octave - 1)), 0x7FF)
   if self.perfectPitch then register = bit.band(register + 1, 0x7FF) end
   return bit.band(register + self.frequencyOffset, 0x7FF)
 end
@@ -366,7 +371,8 @@ function Channel:nextEvent()
     elseif command == 0xE8 then
       self.perfectPitch = not self.perfectPitch
     elseif command == 0xE9 then
-      -- Unused command.
+      local packed = self:byte()
+      self.transpose = bit.rshift(packed, 4) * 12 + bit.band(packed, 0x0F)
     elseif command == 0xEA then
       local delay, packed = self:byte(), self:byte()
       local depth = bit.rshift(packed, 4)

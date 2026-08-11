@@ -133,6 +133,13 @@ local function emitters(cur, hw)
     out[#out + 1] = 0xE8
   end
 
+  function E.transpose(event, out)
+    local spec = event.transpose
+    out[#out + 1] = 0xE9
+    out[#out + 1] = cur:int(spec.octaves or 0, 0, 15, "transpose octaves") * 16
+      + cur:int(spec.pitches or 0, 0, 15, "transpose pitches")
+  end
+
   function E.vibrato(event, out)
     local spec = event.vibrato
     out[#out + 1] = 0xEA
@@ -229,7 +236,7 @@ end
 -- event carrying `len` alongside `note` is still a note
 local KEYS = {
   "label", "note", "pitch", "rest", "drum", "notetype", "octave",
-  "perfectPitch", "vibrato", "slide", "duty", "dutyPattern", "tempo", "pan",
+  "perfectPitch", "transpose", "vibrato", "slide", "duty", "dutyPattern", "tempo", "pan",
   "executeMusic", "call", "ret", "loop", "squareNote", "noiseNote",
   "pitchSweep",
 }

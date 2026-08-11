@@ -8,6 +8,7 @@
 -- themes with the bike song until dismount.
 
 local Logger = require("src.core.Logger")
+local GameVersion = require("src.core.GameVersion")
 local Runtime = require("src.mods.Runtime")
 
 local Music = {}
@@ -357,7 +358,15 @@ end
 function Music.playBattle(data, kind, trainerId)
   local b = data.audio and data.audio.battle
   if b then
-    Music.play(data, b[kind] or b.wild, nil,
+    local song = b[kind] or b.wild
+    if kind == "wild" and GameVersion.isCrystal() and b.wildNight then
+      local ok, Game = pcall(require, "src.core.Game")
+      local tod = ok and Game and Game.overworld and Game.overworld.tod or nil
+      if tod == "NIGHT" or tod == "NITE" then
+        song = b.wildNight
+      end
+    end
+    Music.play(data, song, nil,
       { reason = "battle", kind = kind, trainerId = trainerId })
   end
 end

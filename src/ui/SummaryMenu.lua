@@ -5,6 +5,7 @@
 -- A on page 2) closes.
 
 local Font = require("src.render.Font")
+local GameVersion = require("src.core.GameVersion")
 -- status_screen.asm PrintMonType prints the type's DISPLAY name from the
 -- TypeNames table, not the constant: species types are stored as pokered
 -- constants (RomExtractor:typesById) and PSYCHIC's is "PSYCHIC_TYPE" (so it
@@ -41,7 +42,13 @@ function SummaryMenu.new(game, mon)
   -- SaveData.validate has run over a loaded save, but this is the site the
   -- original recomputes at, and it also covers a mon handed in by a mod.
   Stats.ensure(game.data.pokemon[mon.species], mon)
-  local self = setmetatable({ game = game, mon = mon, page = 1 }, SummaryMenu)
+  local self = setmetatable({
+    game = game,
+    mon = mon,
+    page = 1,
+    maxPage = GameVersion.isCrystal() and 3 or 2,
+    screenId = "SummaryMenu",
+  }, SummaryMenu)
   local Sprites = require("src.pokemon.Sprites")
   local path, trueColor = Sprites.path(game.data, mon.species, "front",
     { mon = mon, kind = "summary" })
@@ -56,10 +63,20 @@ end
 
 function SummaryMenu:update(dt)
   local input = self.game.input
+  if GameVersion.isCrystal() then
+    if input:wasPressed("left") then
+      self.page = self.page > 1 and (self.page - 1) or self.maxPage
+      return
+    end
+    if input:wasPressed("right") then
+      self.page = self.page < self.maxPage and (self.page + 1) or 1
+      return
+    end
+  end
   -- both A and B advance the pages (WaitForTextScrollButtonPress)
   if input:wasPressed("a") or input:wasPressed("b") then
-    if self.page == 1 then
-      self.page = 2
+    if self.page < self.maxPage then
+      self.page = self.page + 1
     else
       self.game.stack:pop()
     end
@@ -98,7 +115,143 @@ local function printLevel(tx, ty, level)
   Font.draw(tostring(level), x, ty * 8)
 end
 
+local function crystalPageColor(page)
+  if page == 1 then return { 1.0, 0.92, 0.96, 1 } end
+  if page == 2 then return { 0.9, 1.0, 0.92, 1 } end
+  return { 0.92, 0.96, 1.0, 1 }
+end
+
+function SummaryMenu:drawCrystalSprite()
+  if not self.sprite then return end
+  local pw, ph = self.sprite:getDimensions()
+  local scale = math.min(1, math.min(56 / math.max(1, pw), 64 / math.max(1, ph)))
+  local dx = 0 + math.floor((56 - pw * scale) / 2)
+  local dy = 0 + math.floor((64 - ph * scale) / 2)
+  love.graphics.draw(self.sprite, dx, dy, 0, scale, scale)
+  if self.spriteTrueColor then
+    require("src.render.PaletteFX").markTrueColor(dx, dy, pw * scale, ph * scale)
+  end
+end
+
+function SummaryMenu:drawCrystalHeader(mon, def)
+  local HudTiles = require("src.render.HudTiles")
+  love.graphics.setColor(crystalPageColor(self.page))
+  love.graphics.rectangle("fill", 0, 0, 160, 144)
+  love.graphics.setColor(0, 0, 0, 1)
+  self:drawCrystalSprite()
+  HudTiles.statusTile(0x74, 64, 0)
+  Font.drawCode(0xF2, 72, 0)
+  Font.draw(("%03d"):format(def.dex or 0), 80, 0)
+  printLevel(14, 0, mon.level)
+  Font.draw(mon.nickname or def.name, 64, 16)
+  Font.draw("/", 72, 32)
+  Font.draw(def.name, 80, 32)
+  for x = 0, 152, 8 do
+    HudTiles.statusTile(0x62, x, 56)
+  end
+  Font.drawCode(0x71, 96, 48)  -- ◀
+  Font.drawCode(0xED, 152, 48) -- ▶
+  if Stats.isShiny(mon.dvs) then
+    Font.drawCode(0x3F, 152, 0) -- ⁂
+  end
+end
+
+function SummaryMenu:drawCrystalPink(mon, def)
+  local data = self.game.data
+  local HudTiles = require("src.render.HudTiles")
+  HudTiles.drawHPBar(data, 0, 9, mon, 1)
+  HudTiles.statusTile(0x6C, 64, 72)
+  Font.draw(("%3d/%3d"):format(mon.hp, mon.stats.hp), 0, 80)
+  Font.draw(Strings("STATUS/"), 8, 96)
+  Font.draw(mon.status or "OK", 56, 104)
+  Font.draw(Strings("TYPE/"), 8, 120)
+  Font.draw(def.types[1] and TypeChart.displayName(def.types[1]) or "", 16, 128)
+  if def.types[2] then
+    Font.draw(def.types[2] and TypeChart.displayName(def.types[2]) or "", 16, 136)
+  end
+  for y = 64, 136, 8 do
+    love.graphics.rectangle("fill", 72, y, 1, 8)
+  end
+  Font.draw(Strings("EXP POINTS"), 80, 72)
+  Font.draw(("%7d"):format(mon.exp), 96, 80)
+  Font.draw(Strings("LEVEL UP"), 80, 96)
+  local Growth = require("src.pokemon.Growth")
+  local nextExp = mon.level < 100
+    and (Growth.expForLevel(def.growthRate, mon.level + 1) - mon.exp) or 0
+  Font.draw(("%7d"):format(math.max(0, nextExp)), 96, 104)
+  Font.draw(Strings("TO"), 112, 120)
+  printLevel(17, 14, math.min(100, mon.level + 1))
+  Font.draw("-", 80, 128)
+  for i = 1, 8 do
+    love.graphics.rectangle("line", 88 + i * 7, 129, 6, 6)
+  end
+end
+
+function SummaryMenu:drawCrystalGreen(mon)
+  local data = self.game.data
+  Font.draw(Strings("ITEM"), 8, 64)
+  local item = mon.item and data.items and data.items[mon.item]
+  Font.draw(item and item.name or "---", 64, 64)
+  Font.draw(Strings("MOVE"), 8, 80)
+  for i = 1, 4 do
+    local mv = mon.moves[i]
+    local y = 80 + (i - 1) * 16
+    if mv then
+      local mdef = data.moves[mv.id]
+      local maxPP = mdef.pp + (mv.ppUps or 0) * math.floor(mdef.pp / 5)
+      Font.draw(mdef.name, 64, y)
+      Font.draw(Strings("PP"), 96, y + 8)
+      Font.draw(("%2d/%2d"):format(mv.pp, maxPP), 120, y + 8)
+    else
+      Font.draw("-", 64, y)
+      Font.draw(Strings("PP"), 96, y + 8)
+      Font.draw("--", 120, y + 8)
+    end
+  end
+end
+
+function SummaryMenu:drawCrystalBlue(mon)
+  local HudTiles = require("src.render.HudTiles")
+  Font.draw(Strings("ID"), 8, 72)
+  HudTiles.statusTile(0x74, 24, 72)
+  Font.drawCode(0xF2, 32, 72)
+  Font.draw(("%05d"):format(mon.otId or self.game.save.player.id or 0), 16, 80)
+  Font.draw(Strings("OT/"), 8, 96)
+  Font.draw(mon.ot or self.game.save.player.name or "KRIS", 16, 104)
+  for y = 64, 136, 8 do
+    love.graphics.rectangle("fill", 80, y, 1, 8)
+  end
+  local stats = {
+    { "ATTACK", mon.stats.attack },
+    { "DEFENSE", mon.stats.defense },
+    { "SPEED", mon.stats.speed },
+    { "SPECIAL", mon.stats.special },
+  }
+  for i, row in ipairs(stats) do
+    local y = 64 + (i - 1) * 16
+    Font.draw(Strings(row[1]), 88, y)
+    Font.draw(("%3d"):format(row[2]), 128, y + 8)
+  end
+end
+
+function SummaryMenu:drawCrystal()
+  local mon = self.mon
+  local def = self.game.data.pokemon[mon.species]
+  self:drawCrystalHeader(mon, def)
+  if self.page == 1 then
+    self:drawCrystalPink(mon, def)
+  elseif self.page == 2 then
+    self:drawCrystalGreen(mon)
+  else
+    self:drawCrystalBlue(mon)
+  end
+  love.graphics.setColor(1, 1, 1, 1)
+end
+
 function SummaryMenu:draw()
+  if GameVersion.isCrystal() then
+    return self:drawCrystal()
+  end
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.rectangle("fill", 0, 0, 160, 144)
   local mon = self.mon

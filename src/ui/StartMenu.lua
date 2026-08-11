@@ -5,6 +5,7 @@
 -- opens, so mods insert or remove rows without patching this file.
 
 local Font = require("src.render.Font")
+local GameVersion = require("src.core.GameVersion")
 local Logger = require("src.core.Logger")
 local Menu = require("src.ui.Menu")
 local Renderer = require("src.render.Renderer")
@@ -39,7 +40,7 @@ function StartMenu.new(game)
     Screens.push(game, "PartyMenu", { onCancel = reopen })
   end })
 
-  table.insert(items, { label = Strings("ITEM"), onSelect = function()
+  table.insert(items, { label = Strings(GameVersion.isCrystal() and "PACK" or "ITEM"), onSelect = function()
     Screens.push(game, "BagMenu", { onCancel = reopen })
   end })
 
