@@ -1,4 +1,13 @@
 return {
+  onInteract = function(game, overworld, fx, fy)
+    if overworld.player.facing == "up"
+       and fx >= 0 and fx <= 1
+       and fy >= 1 and fy <= 2 then
+      overworld:openPC()
+      return true
+    end
+    return false
+  end,
   talk = {
     TEXT_CHERRYGROVEPOKECENTER1F_NURSE = function(game, overworld, npc, onDone)
       npc:facePlayer(overworld.player)

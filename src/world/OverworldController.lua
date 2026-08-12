@@ -36,6 +36,7 @@ local mapScripts -- registry of hand-ported map scripts
 
 local COMPASS = { up = "north", down = "south", left = "west", right = "east" }
 local DIRVEC = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
+local SERVICE_COUNTER_SPRITES = { SPRITE_NURSE = true, SPRITE_CLERK = true }
 
 -- healing machine ball screen positions (PokeCenterOAMData dbsprite
 -- rows are raw shadow-OAM bytes, so the hardware's -8/-16 OAM origin
@@ -76,6 +77,17 @@ local function isDarkMap(mapId)
     if m == mapId then return true end
   end
   return false
+end
+
+local function hiddenExtraCells(extras, key, mapId)
+  local bucket = extras and extras[key]
+  return (bucket and bucket[mapId]) or {}
+end
+
+local function healMachineOrigin(npc, player)
+  local anchor = npc or player
+  if not anchor then return 0, 0 end
+  return anchor.cellX * 16 - 36, anchor.cellY * 16 - 8
 end
 
 -- object_event spawn filter (toggleable_objects, items taken, beaten
@@ -904,7 +916,11 @@ function OverworldState:update(dt)
     local ha = self.healAnim
     local ev = OverworldState.stepHealAnim(ha)
     if ev == "ball" then
-      require("src.core.Sound").play(Game.data, "Healing_Machine")
+      local Sound = require("src.core.Sound")
+      local played = Sound.play(Game.data, "Healing_Machine")
+      if not played then
+        Sound.play(Game.data, "Get_Item1")
+      end
     elseif ev == "jingle" then
       -- playOnce restores the map theme when the jingle ends; we no longer
       -- block the fighting-fit text on that (#157)
@@ -1150,6 +1166,15 @@ function OverworldState:handleInput()
         if self:checkEdgeExit(dir) then return end
         if self:checkLedgeHop(dir) then return end
         if self:checkBoulderPush(dir) then return end
+      end
+      local tx, ty = Collision.target(self.player.cellX, self.player.cellY, dir)
+      if self.map:inBounds(tx, ty) and self:isForcedBlockedCell(tx, ty) then
+        self.player.bumpFrames = self.player.stepFrames or 16
+        if (self.bumpCooldown or 0) <= 0 then
+          require("src.core.Sound").play(Game.data, "Collision")
+          self.bumpCooldown = 16
+        end
+        return "blocked"
       end
       local result, why = self.player:tryMove(dir, self.map, self.entities)
       -- a collision while standing on a warp square fires the warp when the
@@ -1732,12 +1757,45 @@ local function interacted(self, fx, fy, kind, target)
                                      kind = kind, target = target })
 end
 
+function OverworldState:serviceCounterNPCAt(cx, cy)
+  for _, npc in ipairs(self.npcs or {}) do
+    if SERVICE_COUNTER_SPRITES[npc.def and npc.def.sprite]
+       and not npc.moving then
+      local tx, ty = Collision.target(npc.cellX, npc.cellY, npc.facing)
+      if tx == cx and ty == cy then return npc end
+    end
+  end
+  return nil
+end
+
+function OverworldState:isForcedBlockedCell(cx, cy)
+  local extras = FieldDefaults.field(Game.data, "hiddenExtras")
+  for _, h in ipairs(hiddenExtraCells(extras, "blockedCells", self.map.id)) do
+    if h.x == cx and h.y == cy then return true end
+  end
+  if GameVersion.isCrystal() then
+    for _, h in ipairs(hiddenExtraCells(extras, "pcTiles", self.map.id)) do
+      if h.x == cx and h.y == cy then return true end
+    end
+    if self:serviceCounterNPCAt(cx, cy) then return true end
+  end
+  return false
+end
+
+function OverworldState:isForcedCounterCell(cx, cy)
+  local extras = FieldDefaults.field(Game.data, "hiddenExtras")
+  for _, h in ipairs(hiddenExtraCells(extras, "counterCells", self.map.id)) do
+    if h.x == cx and h.y == cy then return true end
+  end
+  return GameVersion.isCrystal() and self:serviceCounterNPCAt(cx, cy) ~= nil
+end
+
 function OverworldState:interact()
   local p = self.player
   local fx, fy = p:facingCell()
 
   local npc = self:npcAtCell(fx, fy)
-  if not npc and self.map:isCounterCell(fx, fy) then
+  if not npc and (self.map:isCounterCell(fx, fy) or self:isForcedCounterCell(fx, fy)) then
     -- talk across counters (mart clerks, nurses); uses the tileset's
     -- counter tiles from tileset_headers.asm
     local fx2, fy2 = Collision.target(fx, fy, p.facing)
@@ -2636,6 +2694,14 @@ end
 
 local function sameItems(_, items) return items end
 
+function OverworldState:pushInteractionText(text, onDone, opts)
+  opts = opts or {}
+  if opts.noSound == nil then
+    opts.noSound = true
+  end
+  Game.stack:push(TextBox.new(Game, text, onDone, opts))
+end
+
 -- The Pokémon Center PC: BILL's PC (boxes), the player's item storage,
 -- and PROF.OAK's dex rating (engine/menus/players_pc.asm,
 -- engine/events/pokedex_rating.asm).  The assembled entries run through
@@ -2723,12 +2789,12 @@ function OverworldState:openOaksPC(onDone)
   local closed = text._ClosedOaksPCText
     or Strings("Closed link to\nPROF.OAK's PC.")
   local function close()
-    Game.stack:push(TextBox.new(Game, closed, done))
+    self:pushInteractionText(closed, done)
   end
-  Game.stack:push(TextBox.new(Game, accessed, function()
+  self:pushInteractionText(accessed, function()
     -- _GetDexRatedText ends with `done`, so the YES/NO pops as soon as the
     -- text has typed out, with no button wait in between (YesNoChoice)
-    Game.stack:push(TextBox.new(Game, rated, nil, {
+    self:pushInteractionText(rated, nil, {
       choice = function(yes)
         if not yes then
           close()
@@ -2736,8 +2802,8 @@ function OverworldState:openOaksPC(onDone)
         end
         self:dexRating(close)
       end,
-    }))
-  end))
+    })
+  end)
 end
 
 -- Prof. Oak's dex rating service (engine/events/pokedex_rating.asm):
@@ -2821,9 +2887,9 @@ function OverworldState:nurseHeal(onDone, npc)
   end
   -- Yellow's companion has its own beat threaded through this sequence
   local Follower = require("src.world.PikachuFollower")
-  Game.stack:push(TextBox.new(Game, hello, nil, { choice = function(yes)
+  self:pushInteractionText(hello, nil, { choice = function(yes)
     if not yes then
-      Game.stack:push(TextBox.new(Game, bye, onDone))
+      self:pushInteractionText(bye, onDone)
       return
     end
     local need = t._NeedYourPokemonText or Strings("OK. We'll need\nyour POKéMON.")
@@ -2833,7 +2899,7 @@ function OverworldState:nurseHeal(onDone, npc)
     -- to finish before the text box goes up because only the top state
     -- updates.  No follower (or not Yellow) calls straight through (#417).
     Follower.hopToCounter(self, function()
-      Game.stack:push(TextBox.new(Game, need, function()
+      self:pushInteractionText(need, function()
         -- the nurse turns to the machine, the map music stops, and the
         -- party heals before the machine runs (predef HealParty)
         if npc then npc.facing = "left" end
@@ -2853,13 +2919,13 @@ function OverworldState:nurseHeal(onDone, npc)
             and { id = self.lastOutdoor.id, x = self.lastOutdoor.x, y = self.lastOutdoor.y }
             or nil,
         }
+        local machineX, machineY = healMachineOrigin(npc, self.player)
         self.healAnim = { balls = #Game.save.party, lit = 0, timer = 0,
                           visible = true,
-                          -- map anchor: the player's cell when healing
-                          -- began (the GB's fixed screen coords assume it
-                          -- BG-aligned at (64,64))
                           px = self.player.cellX * 16,
-                          py = self.player.cellY * 16 }
+                          py = self.player.cellY * 16,
+                          machineX = machineX,
+                          machineY = machineY }
         self.healAnim.onDone = function()
           -- EnablePikachuOverworldSpriteDrawing, before the fighting-fit
           -- line: it comes back on the counter facing the player
@@ -2867,15 +2933,15 @@ function OverworldState:nurseHeal(onDone, npc)
           if npc then npc:facePlayer(self.player) end
           self:finishNurseHeal(bye, onDone)
         end
-      end))
+      end)
     end)
-  end }))
+  end })
 end
 
 function OverworldState:finishNurseHeal(bye, onDone)
   local t = Game.data.text
   local fit = t._PokemonFightingFitText or Strings("Your POKéMON are\nfighting fit!")
-  Game.stack:push(TextBox.new(Game, fit .. "\f" .. bye, onDone))
+  self:pushInteractionText(fit .. "\f" .. bye, onDone)
 end
 
 -- The Cable Club link receptionist (TX_SCRIPT_CABLE_CLUB_RECEPTIONIST ->
@@ -2889,18 +2955,18 @@ function OverworldState:cableClubReceptionist(onDone)
   local welcome = t._CableClubNPCWelcomeText or romText(Game.data, "_CableClubNPCWelcomeText", "Welcome to the\nCable Club!")
   if not Game.save.flags.EVENT_GOT_POKEDEX then
     -- CableClubNPC .didNotConnect path before the pokedex
-    Game.stack:push(TextBox.new(Game, welcome .. "\f"
+    self:pushInteractionText(welcome .. "\f"
       .. (t._CableClubNPCMakingPreparationsText
-          or romText(Game.data, "_CableClubNPCMakingPreparationsText", "We're making\npreparations.\vPlease wait.")), onDone))
+          or romText(Game.data, "_CableClubNPCMakingPreparationsText", "We're making\npreparations.\vPlease wait.")), onDone)
     return
   end
   local apply = t._CableClubNPCPleaseApplyHereHaveToSaveText
     or romText(Game.data, "_CableClubNPCPleaseApplyHereHaveToSaveText", "Please apply here.\fBefore opening\nthe link, we have\vto save the game.")
-  Game.stack:push(TextBox.new(Game, welcome .. "\f" .. apply, nil,
+  self:pushInteractionText(welcome .. "\f" .. apply, nil,
     { choice = function(yes)
       if not yes then
-        Game.stack:push(TextBox.new(Game,
-          t._CableClubNPCPleaseComeAgainText or romText(Game.data, "_CableClubNPCPleaseComeAgainText", "Please come\nagain!"), onDone))
+        self:pushInteractionText(
+          t._CableClubNPCPleaseComeAgainText or romText(Game.data, "_CableClubNPCPleaseComeAgainText", "Please come\nagain!"), onDone)
         return
       end
       Game:writeSave()
@@ -2910,7 +2976,7 @@ function OverworldState:cableClubReceptionist(onDone)
         Game.stack:push(LinkState.new(Game))
       end
       if onDone then onDone() end
-    end }))
+    end })
 end
 
 -- -------------------------------------------------------------------------
@@ -3179,7 +3245,7 @@ function OverworldState:showMapText(textConst, npc, onDone)
                   mapLabel, textConst)
     end
     if npc then npc:facePlayer(self.player) end
-    Game.stack:push(TextBox.new(Game, text, onDone))
+    self:pushInteractionText(text, onDone)
   else
     Logger.warn("no text for %s/%s", mapLabel, textConst)
     if onDone then onDone() end
@@ -4302,9 +4368,11 @@ function OverworldState:drawWorld()
   local function fxHeal()
     if not self.healAnim then return end
     local ha = self.healAnim
-    local fxDef = Game.data.field.overworldFx
-    if self.healMachineImg == nil and fxDef and fxDef.healMachine then
-      local ok, img = pcall(love.graphics.newImage, fxDef.healMachine.path)
+      local fxDef = Game.data.field.overworldFx
+    local healPath = fxDef and fxDef.healMachine and fxDef.healMachine.path
+      or (GameVersion.isCrystal() and "roms/pokecrystal/gfx/overworld/heal_machine.png")
+    if self.healMachineImg == nil and healPath then
+      local ok, img = pcall(love.graphics.newImage, healPath)
       self.healMachineImg = ok and img or false
     end
     local img = self.healMachineImg
@@ -4332,10 +4400,16 @@ function OverworldState:drawWorld()
       -- TileRenderer windows with -floor(cam), so the overlay must use the
       -- same snap or a fractional camera (odd fill/tilt view sizes) parks
       -- the balls a pixel off the machine tiles
-      local ox = ha.px - 64 - math.floor(cam.x)
-      local oy = ha.py - 64 - math.floor(cam.y)
+      local ox, oy
+      if ha.machineX and ha.machineY then
+        ox = ha.machineX - math.floor(cam.x)
+        oy = ha.machineY - math.floor(cam.y)
+      else
+        ox = ha.px - 64 - math.floor(cam.x)
+        oy = ha.py - 64 - math.floor(cam.y)
+      end
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(img, self.healMachineQuads[1], ox + 44, oy + 20)
+      love.graphics.draw(img, self.healMachineQuads[1], ox, oy)
       for i = 1, math.min(ha.lit, #HEAL_BALL_XY) do
         local b = HEAL_BALL_XY[i]
         if b[3] then -- right column: OAM_XFLIP
@@ -4571,7 +4645,10 @@ function OverworldState:drawWorld()
         at(fxCutTree, self.cutAnim.x * 16 + 8, self.cutAnim.y * 16 + 16)
       end
       if self.healAnim then
-        at(fxHeal, self.healAnim.px + 8, self.healAnim.py + 16)
+        local ha = self.healAnim
+        local wx = (ha.machineX or ha.px) + 8
+        local wy = (ha.machineY or ha.py) + 16
+        at(fxHeal, wx, wy)
       end
       -- standing effects anchor at the foot of whoever they belong to
       if self.emote and self.emote.npc then

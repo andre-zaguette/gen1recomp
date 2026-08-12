@@ -5,11 +5,22 @@ return {
       { "show_text", "Hi there!\nMay I help you?" },
       { "check_flag", "EVENT_GAVE_MYSTERY_EGG_TO_ELM" },
       { "jump_if_true", "dex_stock" },
-      { "push_screen", "ShopMenu", { "POTION", "ANTIDOTE", "PARLYZ_HEAL", "AWAKENING" } },
+      { "push_screen", "ShopMenu", {
+        { id = "POTION", name = "POTION", price = 300 },
+        { id = "ANTIDOTE", name = "ANTIDOTE", price = 100 },
+        { id = "PARLYZ_HEAL", name = "PARLYZ HEAL", price = 200 },
+        { id = "AWAKENING", name = "AWAKENING", price = 250 },
+      } },
       { "jump", "end" },
 
       { "label", "dex_stock" },
-      { "push_screen", "ShopMenu", { "POKE_BALL", "POTION", "ANTIDOTE", "PARLYZ_HEAL", "AWAKENING" } },
+      { "push_screen", "ShopMenu", {
+        { id = "POKE_BALL", name = "POKE BALL", price = 200 },
+        { id = "POTION", name = "POTION", price = 300 },
+        { id = "ANTIDOTE", name = "ANTIDOTE", price = 100 },
+        { id = "PARLYZ_HEAL", name = "PARLYZ HEAL", price = 200 },
+        { id = "AWAKENING", name = "AWAKENING", price = 250 },
+      } },
     },
 
     TEXT_CHERRYGROVEMART_COOLTRAINER_M = {

@@ -166,6 +166,11 @@ FieldDefaults.FIELD = {
   },
   -- VermilionGymSetDoorTile opens the motorized door once both locks are hit
   hiddenExtras = {
+    pcTiles = {},
+    benchGuys = {},
+    gymStatues = {},
+    blockedCells = {},
+    counterCells = {},
     -- PrintTrashText bins (#188); seeds stale caches missing the key
     printTrash = {
       SS_ANNE_KITCHEN = {

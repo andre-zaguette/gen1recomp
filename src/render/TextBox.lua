@@ -46,7 +46,8 @@ function TextBox.new(game, text, onDone, opts)
   self.onDone = onDone
   self.choice = opts and opts.choice
   self.defaultNo = opts and opts.defaultNo
-  self.choiceNoSound = opts and opts.noSound
+  self.noSound = (opts and opts.noSound) or false
+  self.choiceNoSound = self.noSound
   self.auto = opts and opts.auto
   self.stay = opts and opts.stay
   local box = Theme.textBox or {}
@@ -266,7 +267,9 @@ function TextBox:update(dt)
       return
     end
     if input:wasPressed("a") or input:wasPressed("b") then
-      require("src.core.Sound").play(self.game.data, "Press_AB")
+      if not self.noSound then
+        require("src.core.Sound").play(self.game.data, "Press_AB")
+      end
       self.game.stack:pop()
       if self.onDone then self.onDone() end
     end
@@ -281,7 +284,9 @@ function TextBox:update(dt)
       return
     end
     if input:wasPressed("a") or input:wasPressed("b") then
-      require("src.core.Sound").play(self.game.data, "Press_AB")
+      if not self.noSound then
+        require("src.core.Sound").play(self.game.data, "Press_AB")
+      end
       self.waiting = false
       if self.contAdvance then
         -- ContText / ManualTextScroll: keep the box, scroll one line

@@ -22,13 +22,23 @@ end
 
 local function buy(game, stock)
   local items = {}
-  for _, id in ipairs(stock) do
+  for _, entry in ipairs(stock) do
+    local id = type(entry) == "table" and entry.id or entry
     local def = game.data.items[id]
-    if def then
+    local name = type(entry) == "table" and entry.name or nil
+    local price = type(entry) == "table" and entry.price or nil
+    if def or (name and price) then
+      local itemName = (def and def.name) or name or id
+      local itemPrice = (def and def.price) or price or 0
+      if def then
+        name = def.name
+        price = def.price
+      end
       table.insert(items, {
         value = id,
-        label = def.name,
-        right = ("¥%d"):format(def.price),
+        label = itemName,
+        right = ("¥%d"):format(itemPrice),
+        price = itemPrice,
       })
     end
   end
@@ -42,22 +52,24 @@ local function buy(game, stock)
     footer = greet,
     onChoose = function(item)
       local def = game.data.items[item.value]
-      if game.save.money < def.price then
+      local unitPrice = item.price or (def and def.price) or 0
+      local itemName = item.label
+      if game.save.money < unitPrice then
         list.footer = notEnough
         return
       end
-      local affordable = math.min(99, math.floor(game.save.money / math.max(1, def.price)))
+      local affordable = math.min(99, math.floor(game.save.money / math.max(1, unitPrice)))
       game.stack:push(QuantityBox.new(game, {
         max = affordable,
-        unitPrice = def.price,
+        unitPrice = unitPrice,
         onDone = function(qty)
           if not qty then
             list.footer = greet
             return
           end
-          local cost = qty * def.price
+          local cost = qty * unitPrice
           -- _PokemartTellBuyPriceText + yes/no confirm
-          list.footer = Strings("%s?\nThat will be\n¥%d. OK?", def.name, cost)
+          list.footer = Strings("%s?\nThat will be\n¥%d. OK?", itemName, cost)
           game.stack:push(ChoiceBox.new(game, function(yes)
             if not yes then
               list.footer = greet

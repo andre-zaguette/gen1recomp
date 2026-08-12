@@ -10,6 +10,8 @@
 local Map = {}
 Map.__index = Map
 
+local bit = require("bit")
+
 -- Stale-cache fallbacks for the tileset properties the importer does not
 -- stamp yet (item_effects.asm IsNextTileShoreOrWater, home/overworld.asm
 -- CollisionCheckOnWater): $14 is water everywhere; the shore tiles $32 and
@@ -112,6 +114,7 @@ function Map.new(def, tilesetDef)
 
   self.walkable = {}
   for _, t in ipairs(tilesetDef.walkable) do self.walkable[t] = true end
+  self.cellPermissions = tilesetDef.cellPermissions or {}
   -- block id -> quadrant (0-3) -> {up=,down=,left=,right=} allowed
   -- hop-facing set (Gen2 ledges, RomExtractorGen2.lua's COLL_HOP_*
   -- extraction) -- already keyed this way at extraction time, no rebuild
@@ -204,6 +207,15 @@ function Map:cellTile(cx, cy)
   return self:tileAt(cx * 2, cy * 2 + 1)
 end
 
+function Map:cellPermission(cx, cy)
+  local tx, ty = cx * 2, cy * 2 + 1
+  local bx, by = math.floor(tx / 4), math.floor(ty / 4)
+  local block = self.cellPermissions[self:blockAt(bx, by)]
+  if not block then return nil end
+  local cellIndex = (ty % 4 == 3 and 2 or 0) + (tx % 4 == 2 and 1 or 0)
+  return block[cellIndex]
+end
+
 function Map:inBounds(cx, cy)
   return cx >= 0 and cy >= 0 and cx < self.widthCells and cy < self.heightCells
 end
@@ -239,6 +251,10 @@ function Map:isWalkableCell(cx, cy)
   -- TILESET_JOHTO) -- tile identity alone would otherwise wrongly let
   -- the player walk straight through from the disallowed side.
   if self:hopFacingAt(cx, cy) then return false end
+  local permission = self:cellPermission(cx, cy)
+  if permission ~= nil then
+    return bit.band(permission, 0x0F) == 0x00
+  end
   return self.walkable[self:cellTile(cx, cy)] or false
 end
 
@@ -327,6 +343,11 @@ end
 
 -- counter tiles allow talking to NPCs across them (mart clerks, nurses)
 function Map:isCounterCell(cx, cy)
+  local permission = self:cellPermission(cx, cy)
+  if permission ~= nil then
+    return bit.band(permission, 0x10) == 0x10
+       and bit.band(permission, 0x0F) == 0x0F
+  end
   local t = self:cellTile(cx, cy)
   for _, c in ipairs(self.tileset.counterTiles or {}) do
     if c == t then return true end

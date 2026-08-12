@@ -134,6 +134,11 @@ function Commands.show_text(ctx, textId, subs, extraOpts)
       opts[k] = v
     end
   end
+  if ctx.overworld and opts and opts.noSound == nil then
+    opts.noSound = true
+  elseif ctx.overworld and not opts then
+    opts = { noSound = true }
+  end
   ctx.game.stack:push(TextBox.new(ctx.game, text, function()
     runner:resume()
   end, opts))

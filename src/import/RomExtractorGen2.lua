@@ -1270,11 +1270,15 @@ function RomExtractorGen2:extractTileset()
     local blocks = decodeBlocks(self.rom:bytes(meta.bank, meta.address, 2048))
     local collRaw = self.rom:bytes(coll.bank, coll.address, #blocks * 4)
     local walkableSet, grassSet, hopSet = {}, {}, {}
+    local cellPermissions = {}
     for blockIndex, block in ipairs(blocks) do
+      local blockId = blockIndex - 1
+      cellPermissions[blockId] = {}
       for cellIndex = 0, 3 do
         local collValue = collRaw[(blockIndex - 1) * 4 + cellIndex + 1]
         local permission = COLLISION_PERMISSION[collValue]
         assert(permission, "unknown COLL_* value " .. tostring(collValue))
+        cellPermissions[blockId][cellIndex] = permission
         if bit.band(permission, 0x0F) == LAND_TILE then
           local row = cellIndex < 2 and 1 or 3
           local col = (cellIndex % 2) * 2
@@ -1296,7 +1300,6 @@ function RomExtractorGen2:extractTileset()
           -- own 0-based convention (Map.lua indexes tileset.blocks with
           -- blockId + 1, the same +1 this file's decodeBlocks output
           -- already expects).
-          local blockId = blockIndex - 1
           hopSet[blockId] = hopSet[blockId] or {}
           hopSet[blockId][cellIndex] = HOP_FACINGS[collValue]
         end
@@ -1322,6 +1325,7 @@ function RomExtractorGen2:extractTileset()
       image = "assets/generated/tilesets/" .. spec.image,
       imageWidth = width, imageHeight = height, tilesPerRow = width / 8,
       blocks = blocks, walkable = walkable,
+      cellPermissions = cellPermissions,
       counterTiles = {}, grassTile = grassTile, doorTiles = {}, warpTiles = {},
       hopFacing = hopFacing,
       animation = nil,
@@ -1497,7 +1501,7 @@ function RomExtractorGen2:extractMap()
         -- longer matches this array's own position. Warp.lua's resolve()
         -- matches on romIndex first for exactly this reason.
         warps[#warps + 1] = {
-          x = row[1], y = row[2], destWarp = row[3], destMap = destMap,
+          x = row[2], y = row[1], destWarp = row[3], destMap = destMap,
           romIndex = romIndex,
         }
       else
@@ -1929,6 +1933,9 @@ function RomExtractorGen2:extractField(title)
       back = "assets/generated/battle/chris_back.png",
       backAlt = "assets/generated/battle/kris_back.png",
     },
+    overworldFx = {
+      healMachine = { path = "roms/pokecrystal/gfx/overworld/heal_machine.png" },
+    },
     -- tryCardKeyDoor (OverworldController.lua:2002-2005) reads
     -- Game.data.field.cardKeyDoors.maps unguarded (`ipairs(ck.maps)`) on
     -- every interact-button press, on any map -- unlike closedDoors/
@@ -1956,7 +1963,23 @@ function RomExtractorGen2:extractField(title)
     -- incomplete default in and left all three permanently nil. Empty
     -- tables here merge in alongside the inherited printTrash/trashCans,
     -- same shape as every other stub above.
-    hiddenExtras = { pcTiles = {}, benchGuys = {}, gymStatues = {} },
+    hiddenExtras = {
+      pcTiles = {
+        CHERRYGROVE_POKECENTER_1F = {
+          { x = 0, y = 2, facing = "up" },
+          { x = 1, y = 2, facing = "up" },
+        },
+      },
+      benchGuys = {},
+      gymStatues = {},
+      blockedCells = {
+        CHERRYGROVE_POKECENTER_1F = {
+          { x = 0, y = 2 },
+          { x = 1, y = 2 },
+        },
+      },
+      counterCells = {},
+    },
   }
   self:write("field", out)
   return out
@@ -2435,6 +2458,51 @@ function RomExtractorGen2:extractRoute30Music()
   return song
 end
 
+function RomExtractorGen2:extractPokemonCenterMusic()
+  self:beginStage("Pokemon Center music")
+  local song = extractCrystalSong(self, "Pokemon Center music", {
+    { hw = 1, symbol = "Music_PokemonCenter_Ch1", size = 900,
+      labels = { "Music_PokemonCenter_Ch1.mainloop" } },
+    { hw = 2, symbol = "Music_PokemonCenter_Ch2", size = 420,
+      labels = { "Music_PokemonCenter_Ch2.mainloop" },
+      subroutines = { "Music_PokemonCenter_Ch2.sub1", "Music_PokemonCenter_Ch2.sub2" },
+      subSize = 64 },
+    { hw = 3, symbol = "Music_PokemonCenter_Ch3", size = 420,
+      labels = { "Music_PokemonCenter_Ch3.mainloop" },
+      subroutines = {
+        "Music_PokemonCenter_Ch3.sub1",
+        "Music_PokemonCenter_Ch3.sub2",
+        "Music_PokemonCenter_Ch3.sub3",
+      },
+      subSize = 64 },
+    { hw = 4, symbol = "Music_PokemonCenter_Ch4", size = 80,
+      labels = { "Music_PokemonCenter_Ch4.mainloop" } },
+  })
+
+  self:tick("Pokemon Center music", 1, 1)
+  return song
+end
+
+function RomExtractorGen2:extractHealPokemonMusic()
+  self:beginStage("Heal Pokemon music")
+
+  local ch1 = self:symbol("Music_HealPokemon_Ch1")
+  local ch2 = self:symbol("Music_HealPokemon_Ch2")
+  local ch3 = self:symbol("Music_HealPokemon_Ch3")
+
+  local song = CrystalMusicTranscoder.buildSong({
+    { hw = 1, baseAddress = ch1.address,
+      bytes = self.rom:bytes(ch1.bank, ch1.address, 80) },
+    { hw = 2, baseAddress = ch2.address,
+      bytes = self.rom:bytes(ch2.bank, ch2.address, 80) },
+    { hw = 3, baseAddress = ch3.address,
+      bytes = self.rom:bytes(ch3.bank, ch3.address, 80) },
+  })
+
+  self:tick("Heal Pokemon music", 1, 1)
+  return song
+end
+
 function RomExtractorGen2:extractBattleMusic()
   return {
     wild = extractCrystalSong(self, "Johto wild battle music", {
@@ -2658,6 +2726,7 @@ function RomExtractorGen2:extractSfx()
     Tink = "SwitchPockets",
     Trade_Machine = "GiveTrademon",
     Heal_HP = "Potion",
+    Healing_Machine = "FullHeal",
     Get_Item2 = "Item",
     Safari_Zone_PA = "Call",
     Shooting_Star = "TitleScreenEntrance",
@@ -2688,7 +2757,7 @@ function RomExtractorGen2:extractStubs()
     self:write(name, {})
   end
   -- Cache-generation marker for Crystal's expanded start-area extraction.
-  self:write("crystal_start_marker_v6", { version = 6 })
+  self:write("crystal_start_marker_v9", { version = 9 })
 end
 
 function RomExtractorGen2:run()
@@ -2717,6 +2786,8 @@ function RomExtractorGen2:run()
   local route29Song = self:extractRoute29Music()
   local newBarkTownSong = self:extractNewBarkTownMusic()
   local route30Song = self:extractRoute30Music()
+  local pokemonCenterSong = self:extractPokemonCenterMusic()
+  local healPokemonSong = self:extractHealPokemonMusic()
   local battleMusic = self:extractBattleMusic()
   local sfx = self:extractSfx()
   local mapSongs = {}
@@ -2730,6 +2801,8 @@ function RomExtractorGen2:run()
     Music_Route29 = route29Song,
     Music_NewBarkTown = newBarkTownSong,
     Music_Route30 = route30Song,
+    Music_PokemonCenter = pokemonCenterSong,
+    Music_PkmnHealed = healPokemonSong,
     Music_JohtoWildBattle = battleMusic.wild,
     Music_JohtoWildBattleNight = battleMusic.wildNight,
     Music_JohtoTrainerBattle = battleMusic.trainer,

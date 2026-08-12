@@ -230,6 +230,21 @@ function CrystalMusicTranscoder.decodeChannel(bytes, hw, baseAddress, labels, is
       rawMode = not rawMode
       events[#events + 1] = { executeMusic = true }
       i = i + 1
+    elseif cmd == 0xE0 then -- pitch_slide_cmd: Crystal stores a one-byte
+      -- slide duration-minus-1 plus a packed target octave/pitch nibble.
+      -- This project's own audio engine already has a first-class synthetic
+      -- `slide` event (ChipAsm E.slide -> ChipSynth pendingSlide), so decode
+      -- straight into that existing representation instead of dropping the
+      -- effect. The second byte's high nibble is `8 - octave`, low nibble is
+      -- pitch 0-11 exactly like the plain note encoding before the
+      -- transcoder's own "-1 because 0 means rest" adjustment.
+      local packed = bytes[i + 2]
+      events[#events + 1] = { slide = {
+        len = bytes[i + 1],
+        octave = 8 - bit.rshift(packed, 4),
+        pitch = bit.band(packed, 0x0F),
+      } }
+      i = i + 3
     elseif cmd == 0xE1 then -- vibrato_cmd
       local packed = bytes[i + 2]
       events[#events + 1] = { vibrato = {
@@ -328,18 +343,23 @@ end
 function CrystalMusicTranscoder.buildSong(channels)
   local specs = {}
   for index, channel in ipairs(channels) do
+    local labels = {}
+    for address, name in pairs(channel.labels or {}) do
+      labels[address] = name
+    end
     local subroutines
     if channel.subroutines then
       subroutines = {}
       for name, sub in pairs(channel.subroutines) do
+        labels[sub.baseAddress] = labels[sub.baseAddress] or name
         subroutines[name] = CrystalMusicTranscoder.decodeChannel(
-          sub.bytes, channel.hw, sub.baseAddress, channel.labels)
+          sub.bytes, channel.hw, sub.baseAddress, labels)
       end
     end
     specs[index] = {
       hw = channel.hw,
       program = CrystalMusicTranscoder.decodeChannel(
-        channel.bytes, channel.hw, channel.baseAddress, channel.labels),
+        channel.bytes, channel.hw, channel.baseAddress, labels),
       subroutines = subroutines,
     }
   end
@@ -355,18 +375,23 @@ end
 function CrystalMusicTranscoder.buildSfx(channels)
   local specs = {}
   for index, channel in ipairs(channels) do
+    local labels = {}
+    for address, name in pairs(channel.labels or {}) do
+      labels[address] = name
+    end
     local subroutines
     if channel.subroutines then
       subroutines = {}
       for name, sub in pairs(channel.subroutines) do
+        labels[sub.baseAddress] = labels[sub.baseAddress] or name
         subroutines[name] = CrystalMusicTranscoder.decodeChannel(
-          sub.bytes, channel.hw, sub.baseAddress, channel.labels, true)
+          sub.bytes, channel.hw, sub.baseAddress, labels, true)
       end
     end
     specs[index] = {
       hw = channel.hw,
       program = CrystalMusicTranscoder.decodeChannel(
-        channel.bytes, channel.hw, channel.baseAddress, channel.labels, true),
+        channel.bytes, channel.hw, channel.baseAddress, labels, true),
       subroutines = subroutines,
     }
   end
