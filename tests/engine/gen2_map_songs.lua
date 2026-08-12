@@ -30,7 +30,7 @@ local EXPECTED_MAP_SONGS = {
 
 -- This test cannot import a real ROM (no data/generated/ in this
 -- checkout, gitignored /roms/), so it checks the manifest's own "music"
--- field directly -- the same source RomExtractorGen2.lua's mapSongs loop
+-- field directly -- the same source RomExtractorCrystal.lua's mapSongs loop
 -- reads from at runtime -- rather than a live Data:load().
 local Json = require("src.link.Json")
 local f = io.open("tools/rom_manifest_crystal.json", "r")

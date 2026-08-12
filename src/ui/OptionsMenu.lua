@@ -19,6 +19,7 @@ local TileRenderer = require("src.render.TileRenderer")
 local GameSpeed = require("src.core.GameSpeed")
 local GameVersion = require("src.core.GameVersion")
 local VideoMode = require("src.core.VideoMode")
+local Orientation = require("src.core.Orientation")
 local FaithfulRes = require("src.core.FaithfulRes")
 local FrameCap = require("src.core.FrameCap")
 local Performance = require("src.core.Performance")
@@ -48,6 +49,30 @@ local Rulesets = {
   modern_clean = require("src.battle.rulesets.modern_clean"),
 }
 local FILTERS = { "OFF", "1X", "2X", "3X" }
+local DATE_FORMATS = {
+  { "device", "DEVICE" }, { "dmy", "DD-MM-YYYY" },
+  { "mdy", "MM-DD-YYYY" }, { "ymd", "YYYY-MM-DD" },
+}
+local TIME_FORMATS = {
+  { "device", "DEVICE" }, { "24h", "24 HOUR" }, { "12h", "12 HOUR" },
+}
+
+local function preferenceIndex(rows, value)
+  for index, row in ipairs(rows) do
+    if row[1] == value then return index end
+  end
+  return 1
+end
+
+local function preferenceStep(rows, value, direction)
+  local index = preferenceIndex(rows, value)
+  direction = direction and direction < 0 and -1 or 1
+  return rows[((index - 1 + direction) % #rows) + 1][1]
+end
+
+local function preferenceLabel(rows, value)
+  return rows[preferenceIndex(rows, value)][2]
+end
 
 local function speedIndex(game)
   -- default matches InitOptions' TEXT_DELAY_MEDIUM in wOptions
@@ -350,6 +375,19 @@ local function buildRows(game)
         VideoMode.apply(o.videoMode)
         return true
       end },
+    -- Android orientation lock (#592): AUTO / PORTRAIT / LANDSCAPE /
+    -- REVERSE LANDSCAPE, live-applied through SDL's orientation hint.
+    -- Filtered out below on everything that is not Android.
+    { id = "orientation", label = Strings("ORIENTATION"),
+      value = function(g)
+        return Strings(Orientation.modeLabel(g.save.options.orientation))
+      end,
+      step = function(g, dir)
+        local o = g.save.options
+        o.orientation = Orientation.cycle(o.orientation, dir)
+        Orientation.apply(o.orientation)
+        return true
+      end },
     -- Lock the window to an exact 160x144 multiple, so the surface IS the
     -- Game Boy screen with no letterbox at all.  Sits next to VIDEO MODE
     -- because it overrides it: holding an exact size means dropping
@@ -378,14 +416,35 @@ local function buildRows(game)
         return true
       end },
     -- fast-forward the logic clock only; music and sfx keep their tempo
-    -- (src/core/GameSpeed.lua), so this is safe to leave on
-    { id = "speed", label = Strings("GAME SPEED"),
+    -- (src/core/GameSpeed.lua), so this is safe to leave on. Per-category
+    -- (RFC 0007): overworld walking, battle turns and menu navigation each
+    -- cycle their own multiplier -- GameSpeed.CATEGORIES is the single
+    -- source of truth for which three rows exist.
+    { id = "speedOverworld", label = Strings("OVERWORLD SPEED"),
       value = function(g)
-        return GameSpeed.levelLabel(g.save.options.speed)
+        return GameSpeed.levelLabel(g.save.options.speedOverworld)
       end,
       step = function(g, dir)
         local o = g.save.options
-        o.speed = GameSpeed.cycle(o.speed, dir)
+        o.speedOverworld = GameSpeed.cycle(o.speedOverworld, dir)
+        return true
+      end },
+    { id = "speedBattle", label = Strings("BATTLE SPEED"),
+      value = function(g)
+        return GameSpeed.levelLabel(g.save.options.speedBattle)
+      end,
+      step = function(g, dir)
+        local o = g.save.options
+        o.speedBattle = GameSpeed.cycle(o.speedBattle, dir)
+        return true
+      end },
+    { id = "speedMenu", label = Strings("MENU SPEED"),
+      value = function(g)
+        return GameSpeed.levelLabel(g.save.options.speedMenu)
+      end,
+      step = function(g, dir)
+        local o = g.save.options
+        o.speedMenu = GameSpeed.cycle(o.speedMenu, dir)
         return true
       end },
     -- the manager's discoverable home (18-mod-manager-ux); inert until
@@ -403,6 +462,24 @@ local function buildRows(game)
     { id = "controls", label = Strings("CONTROLS"),
       activate = function(g)
         require("src.ui.Screens").push(g, "BindingsMenu")
+      end },
+    { id = "dateFormat", label = Strings("DATE FORMAT"),
+      value = function(g)
+        return Strings(preferenceLabel(DATE_FORMATS, g.save.options.dateFormat))
+      end,
+      step = function(g, dir)
+        g.save.options.dateFormat = preferenceStep(
+          DATE_FORMATS, g.save.options.dateFormat, dir)
+        return true
+      end },
+    { id = "timeFormat", label = Strings("TIME FORMAT"),
+      value = function(g)
+        return Strings(preferenceLabel(TIME_FORMATS, g.save.options.timeFormat))
+      end,
+      step = function(g, dir)
+        g.save.options.timeFormat = preferenceStep(
+          TIME_FORMATS, g.save.options.timeFormat, dir)
+        return true
       end },
     -- permanent on-screen pad toggle (#327); layout editing stays in the
     -- launcher.  Hidden where the overlay never appears (desktop without
@@ -423,6 +500,25 @@ local function buildRows(game)
         require("src.core.TouchControls"):applyOptions(o)
         return true
       end },
+    -- Haptic feedback for on-screen pad presses (#806): OFF / LIGHT /
+    -- MEDIUM / HEAVY, where the intensity is a vibration duration --
+    -- love.system.vibrate takes nothing else.  Hidden with TOUCH PAD below,
+    -- since the only thing that buzzes is a virtual button press.
+    { id = "haptics", label = Strings("VIBRATION"),
+      value = function(g)
+        local TC = require("src.core.TouchControls")
+        return Strings(TC.hapticLabel(g.save.options.haptics))
+      end,
+      step = function(g, dir)
+        local o = g.save.options
+        local TC = require("src.core.TouchControls")
+        o.haptics = TC.cycleHaptics(o.haptics, dir)
+        TC:applyOptions(o)
+        -- sample the level being selected: stepping the row is the only way
+        -- to compare LIGHT against HEAVY without leaving the menu
+        TC.buzz(o.haptics)
+        return true
+      end },
   }
   -- issue #136: hide GBC FX on Android/iOS -- the present shader soft-bricks
   if not GBCFX.isSupported() then
@@ -432,8 +528,18 @@ local function buildRows(game)
     end
     rows = filtered
   end
-  -- TOUCH PAD only where the overlay can appear (mobile, or desktop with
-  -- POKEPORT_TOUCH=1).  POKEPORT_TOUCH=0 forces it off everywhere.
+  -- ORIENTATION only on Android, the one platform Orientation.apply reaches.
+  if not Orientation.isAndroid() then
+    local filtered = {}
+    for _, row in ipairs(rows) do
+      if row.id ~= "orientation" then filtered[#filtered + 1] = row end
+    end
+    rows = filtered
+  end
+  -- TOUCH PAD and VIBRATION only where the overlay can appear (mobile, or
+  -- desktop with POKEPORT_TOUCH=1).  POKEPORT_TOUCH=0 forces it off
+  -- everywhere.  VIBRATION rides the same gate: nothing else in the port
+  -- vibrates, and love.system.vibrate is a no-op on desktop anyway.
   do
     local env = os.getenv("POKEPORT_TOUCH")
     local osName = love.system and love.system.getOS and love.system.getOS()
@@ -442,7 +548,9 @@ local function buildRows(game)
     if not show then
       local filtered = {}
       for _, row in ipairs(rows) do
-        if row.id ~= "touchControls" then filtered[#filtered + 1] = row end
+        if row.id ~= "touchControls" and row.id ~= "haptics" then
+          filtered[#filtered + 1] = row
+        end
       end
       rows = filtered
     end
@@ -540,8 +648,14 @@ function OptionsMenu:update(dt)
 end
 
 function OptionsMenu:draw()
+  -- Through Strings, like every other label on this menu.  CANCEL is
+  -- appended AFTER the rows hook (see the header), which is what keeps a mod
+  -- from orphaning the exit -- but it also means a translation mod never sees
+  -- this string, and cannot: there is no row for it to rewrite.  So the one
+  -- word a Spanish player could not read on a fully translated OPTIONS menu
+  -- was the way out of it.
   OptionRows.draw(self.game, self.rows, self.index, self.scroll or 0,
-                  "CANCEL", #self.rows + 1)
+                  Strings("CANCEL"), #self.rows + 1)
 end
 
 return OptionsMenu

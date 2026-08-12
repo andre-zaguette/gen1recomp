@@ -284,7 +284,7 @@ do
   local pressed = {}
   local tb = freshBattle()
   tb.game = { input = { wasPressed = function(_, k) return pressed[k] or false end,
-                        isDown = function() return false end },
+                        isDown = function(_, k) return pressed[k] or false end },
               stack = { top = function() return tb end },
               save = Game.save }
   tb.kind = "wild"
@@ -361,7 +361,7 @@ do
     data = Data,
     save = require("src.core.SaveData").newGame(),
     input = { wasPressed = function(_, k) return pressed[k] or false end,
-              isDown = function() return false end },
+              isDown = function(_, k) return pressed[k] or false end },
     stack = stack,
   }
   fg.save.party = { Pokemon.new(Data, "BULBASAUR", 20) }
@@ -428,15 +428,15 @@ do
     bag:update(1 / 60)
   end
   check(stack:top() ~= bag, "the ball is thrown without input")
-  -- Catching pops BattleState and pushes Transition.battleReturn's fade;
-  -- onFinish only fires once that fade completes (BattleState.lua:4513-4514).
-  -- Drive whatever is actually on top (matching the bag-hover loop above),
-  -- not a stale direct reference to `demo` once it's no longer there.
+  -- Battle exit now rides Transition.battleReturn (MapEntryAfterBattle's
+  -- GBFadeInFromWhite, home/overworld.asm:749-753): the battle pops itself
+  -- and pushes the fade, which fires onFinish only once ITS update counts
+  -- down -- so pump whatever sits on top of the stack, not the demo state.
   for _ = 1, 2000 do
     if finished then break end
     pressed.a = true
     local top = stack:top()
-    if top then top:update(1 / 60) end
+    if top then top:update(1 / 60) else break end
   end
   pressed.a = false
   check(finished, "the throw ends the demo battle")
@@ -450,6 +450,52 @@ do
   eq(#fg.save.party, 1, "the caught Weedle is NOT added to the party")
   check(not (fg.save.pokedex and fg.save.pokedex.owned and fg.save.pokedex.owned.WEEDLE),
         "the caught Weedle is NOT added to the dex")
+end
+
+-- (5b) Yellow's SimulatedInputBattleItemList (core.asm:2316-2319) drops
+-- the same canned bag to a single POKé BALL, x1 -- pokered's
+-- OldManItemList (core.asm:2212-2214, checked above) stays x50.  Only
+-- the item count changes; the scripted no-input menu flow is identical
+-- and already covered above, so this jumps straight to the bag.
+do
+  local GameVersion = require("src.core.GameVersion")
+  local oldVersion = GameVersion.get()
+  GameVersion.set("yellow")
+  local ok, err = pcall(function()
+    local pressed = {}
+    local stack = { states = {} }
+    function stack:push(s) table.insert(self.states, s) end
+    function stack:pop() return table.remove(self.states) end
+    function stack:top() return self.states[#self.states] end
+    local fg = {
+      data = Data,
+      save = require("src.core.SaveData").newGame(),
+      input = { wasPressed = function(_, k) return pressed[k] or false end,
+                isDown = function(_, k) return pressed[k] or false end },
+      stack = stack,
+    }
+    fg.save.party = { Pokemon.new(Data, "BULBASAUR", 20) }
+    local demo = BattleState.newWild(fg, "PIKACHU", 5)
+    demo:makeOldManDemo("PROF.OAK")
+    stack:push(demo)
+    demo:enter()
+    for _ = 1, 300 do
+      if demo.phase == "menu" then break end
+      pressed.a = true
+      demo:update(1 / 60)
+    end
+    pressed.a = false
+    eq(demo.phase, "menu", "Yellow: the demo reaches the battle menu")
+    for _ = 1, 200 do
+      if stack:top() ~= demo then break end
+      demo:update(1 / 60)
+    end
+    local bag = stack:top()
+    eq(bag.items and bag.items[1] and bag.items[1].right, "x1",
+       "Yellow's old-man-style bag lists x1 (SimulatedInputBattleItemList)")
+  end)
+  GameVersion.set(oldVersion)
+  if not ok then error(err, 0) end
 end
 
 S.finish()

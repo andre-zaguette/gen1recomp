@@ -287,7 +287,8 @@ local WANT_IDS = { "textSpeed", "animations", "battleStyle", "battleLayout",
                    "performance", "colors",
                    "tilt", "gbcfx", "zoom", "voidFill", "videoMode",
                    "faithfulRes", "fpsCap",
-                   "speed", "mods", "controls" }
+                   "speedOverworld", "speedBattle", "speedMenu",
+                   "mods", "controls", "dateFormat", "timeFormat" }
 check(#om.rows == #WANT_IDS, "vanilla options row count (plus MODS/CONTROLS)")
 for i, id in ipairs(WANT_IDS) do
   check(om.rows[i].id == id, "options row order: " .. id)
@@ -333,7 +334,8 @@ for _ = 1, 10 do musicVolRow.step(om.game, -1) end
 check(om.game.save.options.musicVol == 0, "music volume clamps at 0")
 
 -- ZOOM / VOID FILL rows, looked up by id since more rows have been spliced
--- in ahead of them over time (battleFit/battleBg/uiLayout, PERFORMANCE)
+-- in ahead of them over time (battleFit/battleBg/uiLayout, PERFORMANCE,
+-- and upstream's DATE FORMAT / TIME FORMAT rows)
 local Zoom = require("src.render.Zoom")
 local TileRenderer = require("src.render.TileRenderer")
 local zoomRow = rowById(om.rows, "zoom")
@@ -418,6 +420,23 @@ check(bm.items[1].label == "UP" and bm.items[1].right == "UP/D-UP"
   "with no rebind the rows mirror the fixed map, key and pad both (#589)")
 check(cbGame.save.options.bindings == nil,
   "opening the screen alone writes nothing")
+
+-- shared date/time presentation stays in options.lua and is available to
+-- engine UI and mods without becoming checkpoint progress
+om.game.save.options.dateFormat = "device"
+om.game.save.options.timeFormat = "device"
+check(om.rows[26].value(om.game) == "DEVICE",
+  "DATE FORMAT defaults to device locale")
+om.rows[26].step(om.game, 1)
+check(om.game.save.options.dateFormat == "dmy"
+      and om.rows[26].value(om.game) == "DD-MM-YYYY",
+  "DATE FORMAT exposes deterministic DMY override")
+check(om.rows[27].value(om.game) == "DEVICE",
+  "TIME FORMAT defaults to device locale")
+om.rows[27].step(om.game, 1)
+check(om.game.save.options.timeFormat == "24h"
+      and om.rows[27].value(om.game) == "24 HOUR",
+  "TIME FORMAT exposes deterministic 24-hour override")
 check(bm.onKeyPressed == nil and bm.onGamepadPressed == nil,
   "no raw-input claim until a capture is armed")
 press(bm, "a")
@@ -449,9 +468,12 @@ local Input = require("src.core.Input")
 local gpGame = { stack = newStack() }
 local sawPad
 gpGame.stack:push({ onGamepadPressed = function(_, b) sawPad = b end })
+-- gamepadpressed reads Input:isDown("select") for the display-chord and
+-- shoulder-hotkey gates before it routes to the capturing state, so the
+-- button state table must exist first
+Input:init()
 Game.gamepadpressed(gpGame, nil, "y")
 check(sawPad == "y", "pad buttons reach a capturing top state")
-Input:init()
 gpGame.stack:pop()
 Game.gamepadpressed(gpGame, nil, "a")
 Input:step()
@@ -524,6 +546,21 @@ check(#pm.subItems == 2, "a non-table submenu result keeps the vanilla list")
 hooks:removeOwner("bad")
 pm.submenu = nil
 
+-- ------- #768: the party cursor persists until a battle
+-- (PartyMenuInit reads wPartyAndBillsPCSavedMenuItem, HandlePartyMenuInput
+-- writes it back; InitBattleVariables / end_of_battle.asm zero it)
+pgame.save.party[2] = { species = "PIKACHU", hp = 10, stats = { hp = 10 },
+                        level = 5, moves = { { id = "TACKLE" } } }
+press(pm, "down")
+check(pgame.partyMenuSavedIndex == 2, "the party cursor is saved on move")
+local pm2 = PartyMenu.new(pgame)
+check(pm2.index == 2, "reopening the party menu keeps the cursor (#768)")
+pgame.save.party[2] = nil
+check(PartyMenu.new(pgame).index == 1,
+  "a shrunken party clamps the saved cursor back into range")
+pgame.partyMenuSavedIndex = nil -- a battle clears it (InitBattleVariables)
+check(PartyMenu.new(pgame).index == 1, "a battle resets the party cursor")
+
 -- ------- battle PKMN: SWITCH / STATS / CANCEL (#180)
 local switched
 local bgame = partyGame()
@@ -569,9 +606,9 @@ do
   pm.game = sgame
   sgame.stack:push(pm)
   press(pm, "a") -- open the submenu
-  check(pm.subItems[#pm.subItems].action == "strength",
-    "the strength row is listed with badge + move")
-  pm.subIndex = #pm.subItems
+  check(pm.subItems[1].action == "strength",
+    "the strength row is listed with badge + move, above STATS/SWITCH (#768)")
+  pm.subIndex = 1
   press(pm, "a") -- run STRENGTH
   local states = sgame.stack.states
   check(#states == 2 and states[1] == pm and states[2].pages ~= nil,
@@ -693,8 +730,14 @@ do
 end
 
 -- issue #133: title menu / continue overlays must not inherit LOGO2/LOGO1
--- (blue/red UI ink).  A trailing trueColor zone covers the overlay box.
+-- (blue/red UI ink).  A trailing GRAYS zone covers the overlay box: through
+-- the shade-remap shader it is the identity for the box's DMG shades, so
+-- pass-through modes keep #133's white paper / black ink, while the mono
+-- and inverted display modes still recolor it with the rest of the screen
+-- (a trueColor rect skipped the shader and left a raw white hole over a
+-- CLASSIC pea-green title, #870).
 do
+  local PaletteFX = require("src.render.PaletteFX")
   local logo2 = {
     { 255, 255, 255 }, { 230, 197, 0 }, { 148, 156, 148 }, { 41, 99, 181 },
   }
@@ -723,8 +766,8 @@ do
   menu.titleUiBox = { 0, 0, 12, 3 }
   game.stack:push(menu)
   local withMenu = TitleState.sgbPalettes(title, game)
-  check(withMenu and #withMenu == 4 and withMenu[4].colors == false,
-        "title menu adds a trueColor overlay zone")
+  check(withMenu and #withMenu == 4 and withMenu[4].colors == PaletteFX.GRAYS,
+        "title menu adds a DMG-grays overlay zone (#870)")
   check(withMenu[4].x == 0 and withMenu[4].y == 0
         and withMenu[4].w == 13 * 8 and withMenu[4].h == 4 * 8,
         "menu overlay covers the CONTINUE/NEW GAME box")
@@ -732,8 +775,8 @@ do
   game.stack:pop()
   game.stack:push({ titleUiBox = { 4, 7, 19, 16 } })
   local withCont = TitleState.sgbPalettes(title, game)
-  check(withCont and #withCont == 4 and withCont[4].colors == false,
-        "continue-info overlay adds a trueColor zone")
+  check(withCont and #withCont == 4 and withCont[4].colors == PaletteFX.GRAYS,
+        "continue-info overlay adds a DMG-grays zone (#870)")
   check(withCont[4].x == 4 * 8 and withCont[4].y == 7 * 8
         and withCont[4].w == 16 * 8 and withCont[4].h == 10 * 8,
         "continue overlay matches DisplayContinueGameInfo's box")

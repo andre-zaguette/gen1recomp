@@ -3,7 +3,7 @@
 -- one-way); some spots block the downward jump entirely (should work)."
 --
 -- Root cause, verified directly against roms/pokecrystal (gitignored, not
--- committed -- see RomExtractorGen2.lua's extractTileset for the derivation):
+-- committed -- see RomExtractorCrystal.lua's extractTileset for the derivation):
 -- Crystal encodes ledges via COLL_HOP_* collision-permission bytes
 -- ($A0-$A7, constants/collision_constants.asm), which this project's
 -- extractor previously never recognized at all -- every COLL_HOP_* byte

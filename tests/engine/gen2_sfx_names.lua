@@ -1,6 +1,6 @@
 -- Pins the SFX plan's manifest symbol coverage end-to-end (docs/
 -- superpowers/plans/2026-08-08-gen2-crystal-sfx.md, Task 2): every real
--- Sfx_*_ChN symbol RomExtractorGen2.lua's extractSfx references by
+-- Sfx_*_ChN symbol RomExtractorCrystal.lua's extractSfx references by
 -- literal name must exist in the committed manifest -- the same
 -- regression class Milestone 2's Task 4/5 hit twice (a Lua extractor
 -- shipped without its matching manifest symbols).

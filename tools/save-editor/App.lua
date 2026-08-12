@@ -25,6 +25,7 @@ local State = require("State")
 local Kit = require("Kit")
 local Theme = require("Theme")
 local Ops = require("Ops")
+local PadInput = require("PadInput")
 local PAL = Theme.PAL
 
 local Party = require("Party")
@@ -35,6 +36,7 @@ local MapBrowser = require("MapBrowser")
 local Dex = require("Dex")
 -- chrome, not a tab panel, so deliberately kept out of PANELS below (#541)
 local SpeciesPicker = require("SpeciesPicker")
+local ItemPicker = require("ItemPicker")
 
 local App = {}
 local S
@@ -42,6 +44,10 @@ local S
 -- vanilla records over an already-merged Data
 local mods
 local mouseClicked = false
+-- Click position from the press event.  Kit samples the pointer in draw, so a
+-- touch / mouse / pad-A click must use the event coords -- not love.mouse
+-- (often stale on NX) and not the virtual cursor when a finger taps elsewhere.
+local clickX, clickY
 -- Wheel notches queued by App.wheelmoved since the last draw, handed to Kit
 -- there like mouseClicked is: LOVE delivers events before love.draw, so a
 -- notch is always spent by the frame that follows it (#595).
@@ -234,6 +240,34 @@ function App.unload()
   -- deaf to every click (#541).
   Kit.blur()
   Kit.blockClicks = false
+  PadInput.reset()
+end
+
+local function cycleTab(delta)
+  if not S then return end
+  local idx = 1
+  for i, t in ipairs(TABS) do
+    if t.id == S.tab then idx = i; break end
+  end
+  idx = ((idx - 1 + delta) % #TABS) + 1
+  S.tab = TABS[idx].id
+  Ops.say(S, "Tab: " .. TABS[idx].label)
+end
+
+-- Pad / Joy-Con actions from PadInput.gamepadpressed (A/B via GamepadMap so
+-- NX physical A confirms and B closes).
+local function handlePadAction(action)
+  if not action or not S then return end
+  if action == "a" then
+    local mx, my = PadInput.pointer()
+    App.mousepressed(mx, my, 1)
+  elseif action == "b" then
+    App.close()
+  elseif action == "tab_prev" then
+    cycleTab(-1)
+  elseif action == "tab_next" then
+    cycleTab(1)
+  end
 end
 
 function App.save()
@@ -278,6 +312,7 @@ end
 -- host's onClose runs App.unload, which drops S -- doing that inline left the
 -- rest of the frame drawing against a nil state.
 function App.close()
+  if not S then return false end
   if S.dirty and not S._quitArmed then
     S._quitArmed = true
     S.status = "Unsaved changes,  Save first or click Close again to discard"
@@ -302,14 +337,84 @@ function App.update(dt)
   -- directly in App.draw() via Kit.beginFrame. Tile animation (water,
   -- flowers) still needs ticking so the Map tab isn't static.
   TileRenderer.tick()
+  PadInput.update(dt)
+  local notches = PadInput.takeWheel()
+  if notches ~= 0 then
+    App.wheelmoved(0, notches)
+  end
+
+  -- Dev harness, the launcher's POKEPORT_LAUNCHER_SHOT for this window:
+  -- POKEPORT_EDITOR_SHOT=/path.png with POKEPORT_WIN=WxH resizes, lets the
+  -- view settle, captures one frame and quits, so a scripted run can see the
+  -- real editor at any window shape.  POKEPORT_EDITOR_TAB picks the tab and
+  -- POKEPORT_EDITOR_ITEMPICK=1 opens the add-item modal.
+  local shot = os.getenv("POKEPORT_EDITOR_SHOT")
+  if shot and not App._shotDone then
+    if not App._shotSized then
+      App._shotSized = true
+      local w, h = (os.getenv("POKEPORT_WIN") or ""):match("^(%d+)x(%d+)$")
+      if w and love.window and love.window.setMode then
+        pcall(love.window.setMode, tonumber(w), tonumber(h), { resizable = true })
+      end
+      local tab = os.getenv("POKEPORT_EDITOR_TAB")
+      if tab and tab ~= "" and S then S.tab = tab end
+      if os.getenv("POKEPORT_EDITOR_ITEMPICK") == "1" and S then
+        Ops.openItemPicker(S, Kit, "bag")
+      end
+    end
+    App._shotTimer = (App._shotTimer or 0) + dt
+    if App._shotTimer > 1.0 then
+      App._shotDone = true
+      love.graphics.captureScreenshot(function(imagedata)
+        local fd = imagedata:encode("png")
+        local f = io.open(shot, "wb")
+        if f then f:write(fd:getString()) f:close() end
+        love.event.quit()
+      end)
+    end
+  end
 end
 
 function App.mousepressed(x, y, button)
-  if button == 1 then mouseClicked = true end
+  if button == 1 then
+    mouseClicked = true
+    clickX, clickY = x, y
+    -- A finger / mouse tap yields the virtual cursor so the click lands where
+    -- the event said, not under the Joy-Con pointer (NX touch soft-miss).
+    PadInput.yieldToPointer()
+  end
 end
 
 function App.textinput(text)
   Kit.textinput(text)
+end
+
+function App.gamepadpressed(joystick, button)
+  handlePadAction(PadInput.gamepadpressed(joystick, button))
+end
+
+function App.gamepadreleased(joystick, button)
+  PadInput.gamepadreleased(joystick, button)
+end
+
+function App.gamepadaxis(joystick, axis, value)
+  PadInput.gamepadaxis(joystick, axis, value)
+end
+
+function App.joystickpressed(joystick, button)
+  handlePadAction(PadInput.joystickpressed(joystick, button))
+end
+
+function App.joystickreleased(joystick, button)
+  PadInput.joystickreleased(joystick, button)
+end
+
+function App.joystickaxis(joystick, axis, value)
+  PadInput.joystickaxis(joystick, axis, value)
+end
+
+function App.joystickhat(joystick, hat, direction)
+  PadInput.joystickhat(joystick, hat, direction)
 end
 
 -- ------------------------------------------------------------------ chrome
@@ -663,14 +768,21 @@ function App.draw()
   local s = Kit.scale
 
   local mx, my = love.mouse.getPosition()
+  local padX, padY, padOn = PadInput.pointer()
+  if mouseClicked and clickX ~= nil then
+    mx, my = clickX, clickY
+  elseif padOn then
+    mx, my = padX, padY
+  end
   Kit.beginFrame(mx, my, mouseClicked, wheelY)
   mouseClicked = false
+  clickX, clickY = nil, nil
   wheelY = 0
   -- Modal shield.  Kit has no z-order, so the picker cannot simply be drawn
   -- last: the chrome and the panel underneath would take the same tap.  The
   -- shield goes up before anything dispatches and comes down only for the
   -- picker's own layer at the bottom of this function (#541).
-  Kit.blockClicks = (S.speciesPicker ~= nil)
+  Kit.blockClicks = (S.speciesPicker ~= nil) or (S.itemPicker ~= nil)
 
   Theme.field(width, height)
 
@@ -699,7 +811,9 @@ function App.draw()
   drawStatusBar(0, height - statusH, width, statusH)
   Kit.blockClicks = false
   SpeciesPicker.draw(S, Kit, width, height)
+  ItemPicker.draw(S, Kit, width, height)
   Kit.endFrame()
+  PadInput.draw()
 
   -- Only now, with the whole frame painted, is it safe to drop the editor.
   if S._closeRequested then finishClose() end
@@ -710,12 +824,39 @@ function App.keypressed(key)
   -- The picker takes Enter and Escape before the focused field does: Kit maps
   -- both to the same "\r" edit (a blur), which cannot tell "commit the top
   -- match" apart from "give up" (#541).
+  if S.itemPicker then
+    if key == "return" or key == "kpenter" then
+      ItemPicker.commitFirst(S, Kit)
+      return
+    elseif key == "escape" then
+      Ops.closeItemPicker(S, Kit)
+      return
+    end
+  end
   if S.speciesPicker then
     if key == "return" or key == "kpenter" then
       SpeciesPicker.commitFirst(S, Kit)
       return
     elseif key == "escape" then
       Ops.closeSpeciesPicker(S, Kit)
+      return
+    end
+  end
+  -- The inspector's nickname field is a commit-on-Enter field, unlike the
+  -- search fields, which are live view state.  Enter commits the draft through
+  -- Ops and blurs; Escape discards it and blurs.  Both must run before
+  -- Kit.keypressed, which maps return/escape to the same "\r" edit and cannot
+  -- tell "commit" from "cancel".
+  if Kit.focus == "mon-nickname" then
+    if key == "return" or key == "kpenter" then
+      if S.editingMon and Ops.setNickname(S, S.editingMon, S.nicknameDraft) then
+        S.nicknameDraft = S.editingMon.nickname or ""
+      end
+      Kit.blur()
+      return
+    elseif key == "escape" then
+      Kit.blur()
+      if S.editingMon then S.nicknameDraft = S.editingMon.nickname or "" end
       return
     end
   end

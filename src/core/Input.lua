@@ -1,6 +1,8 @@
 -- Input abstraction: maps keyboard to Game Boy buttons.
 -- `down` = held this frame; `pressed` = edge, consumed per fixed step.
 
+local GamepadMap = require("src.core.GamepadMap")
+
 local Input = {}
 
 local DEFAULT_BINDINGS = {
@@ -22,37 +24,33 @@ local DEFAULT_BINDINGS = {
 -- keys that map to "start" but also to "a" would conflict; keep Enter = a,
 -- Escape = start for desktop friendliness.
 
--- LÖVE's standard gamepad mapping (SDL game controller DB), consistent
--- across Xbox/PlayStation/generic controllers on desktop and mobile. Some
--- third-party pads report their own SDL mapping for a given physical
--- button (e.g. Select/Back/View on off-brand XInput pads), which is what
--- src/ui/BindingsMenu.lua's rebinding is for -- see applyBindings below.
-local DEFAULT_GAMEPAD_BINDINGS = {
-  dpup = "up", dpdown = "down", dpleft = "left", dpright = "right",
-  a = "a", b = "b",
-  start = "start", back = "select",
-}
-
 -- left-stick deadzones: press past STICK_ON, release once back under
 -- STICK_OFF. The gap (hysteresis) stops the direction from flickering
 -- while the stick sits near the threshold.
 local STICK_ON = 0.5
 local STICK_OFF = 0.3
 
--- Generic SDL joysticks expose the left stick as the first two numbered
--- axes and the D-pad as a hat.  This is common on Linux handhelds whose
--- controller has no game-controller database entry.  The indices below are
--- the desktop XInput order and are only meaningful for such pads: raw
--- numbering is per-driver, and SDL's iOS/MFi driver packs only the buttons
--- a pad actually reports, which slides the D-pad down onto 7..10 (#620).
--- These are the raw DEFAULTS only: applyBindings layers the player's
--- "joyN" pad bindings over them (#632), and only a stick SDL does NOT
--- recognize as a gamepad is ever served out of this table -- see
--- joystickpressed below.
-local RAW_BUTTON_BINDINGS = {
-  [1] = "a", [2] = "b",
-  [7] = "select", [8] = "start", [9] = "select", [10] = "start",
-}
+-- Raw joystick defaults + NX overrides live in src/core/GamepadMap.lua
+-- (see RAW_BUTTON_BINDINGS / NX_RAW_BUTTON_BINDINGS and #620 / #632).
+--
+-- SELECT ON A PLAYSTATION PAD, checked rather than assumed.  There is no
+-- button called "select" in SDL's game-controller vocabulary: the small
+-- left-hand menu button is `back` on every family, and GamepadMap's
+-- DEFAULT_GAMEPAD_BINDINGS maps it to GB SELECT.  The DualSense's CREATE
+-- button (and the DualShock 4's SHARE) is that button -- the controller
+-- database LOVE 11.5 ships spells the DualSense row
+-- "PS5 Controller,a:b1,b:b2,back:b8,...,misc1:b13,start:b9" -- so a
+-- recognized pad delivers it here as gamepadpressed(_, "back") and needs no
+-- entry of its own.  What it also has, and what LOVE 11.x has no name for at
+-- all, is the TOUCHPAD click (SDL_CONTROLLER_BUTTON_TOUCHPAD) and the mute
+-- key (`misc1`): neither reaches love.gamepadpressed, so neither can be bound,
+-- and a player reaching for the touchpad expecting SELECT will find nothing.
+-- Not a mapping this file can add -- the event never arrives.
+--
+-- An unrecognized PlayStation pad falls to the raw path instead, where SHARE /
+-- CREATE is generic-HID button 9 and RAW_BUTTON_BINDINGS[9] is already
+-- "select".  Both roads reach SELECT; the one road that did not was Gold's,
+-- where src/core/Game2.lua used to answer `back` with love.event.quit().
 
 local HAT_DIRECTIONS = {
   u = { "up" }, d = { "down" }, l = { "left" }, r = { "right" },
@@ -75,8 +73,15 @@ end
 function Input:applyBindings(overlay)
   local keys, pads, joys = {}, {}, {}
   for key, action in pairs(DEFAULT_BINDINGS) do keys[key] = action end
-  for button, action in pairs(DEFAULT_GAMEPAD_BINDINGS) do pads[button] = action end
-  for index, action in pairs(RAW_BUTTON_BINDINGS) do joys[index] = action end
+  for button, action in pairs(GamepadMap.gamepadBindings()) do
+    pads[button] = action
+  end
+  -- Seed raw defaults from GamepadMap (desktop XInput order or NX OLED
+  -- indices) so joyN rebinds (#632) and dual-path guards (#620) share one
+  -- table with the Switch face-label remap.
+  for index, action in pairs(GamepadMap.rawBindings()) do
+    joys[index] = action
+  end
   for actionId, binding in pairs(overlay or {}) do
     if type(binding) == "table" then
       if binding.key then keys[binding.key] = actionId end
@@ -200,6 +205,21 @@ function Input:overlayReleased(btn)
   release(self, btn, "touch:" .. btn)
 end
 
+-- Programmatic mod input (#807).  mod.input taps and holds land here under
+-- loader-issued "mod:<id>:<n>" source names, riding the same per-source
+-- bookkeeping as every physical path above, so releasing one can never
+-- clear a hold a key, stick, hat, the overlay, or another mod still owns.
+-- A tap is a sourcePress immediately followed by its sourceRelease: the
+-- queued edge survives into the next step, and the emptied source map
+-- keeps the hold from being revived (see Input:step's sources == {} rule).
+function Input:sourcePress(btn, source)
+  press(self, btn, source)
+end
+
+function Input:sourceRelease(btn, source)
+  release(self, btn, source)
+end
+
 function Input:gamepadpressed(joystick, button)
   local btn = self.padBindings[button]
   if btn then
@@ -225,18 +245,16 @@ end
 -- alone; the raw path exists for sticks with no game-controller-database
 -- entry.  A nil joystick is a raw stick: that is how
 -- tests/input_hold_test.lua and the drivers drive this path.
-local function isRawStick(joystick)
-  return not (joystick and joystick.isGamepad and joystick:isGamepad())
-end
+-- Gate: GamepadMap.ignoreRawForJoystick (pcall-safe isGamepad check).
 
 function Input:joystickpressed(joystick, button)
-  if not isRawStick(joystick) then return end
+  if GamepadMap.ignoreRawForJoystick(joystick) then return end
   local btn = self.joyBindings[button]
   if btn then press(self, btn, "joy:" .. button) end
 end
 
 function Input:joystickreleased(joystick, button)
-  if not isRawStick(joystick) then return end
+  if GamepadMap.ignoreRawForJoystick(joystick) then return end
   local btn = self.joyBindings[button]
   if btn then release(self, btn, "joy:" .. button) end
 end
@@ -277,7 +295,7 @@ function Input:gamepadaxis(joystick, axis, value)
 end
 
 function Input:joystickaxis(joystick, axis, value)
-  if not isRawStick(joystick) then return end
+  if GamepadMap.ignoreRawForJoystick(joystick) then return end
   if axis == 1 then
     self:gamepadaxis(joystick, "leftx", value)
   elseif axis == 2 then
@@ -290,7 +308,7 @@ end
 -- gamepad map, so letting the hat answer too would re-assert the factory
 -- directions on top of a direction rebind.
 function Input:joystickhat(joystick, hat, direction)
-  if not isRawStick(joystick) then return end
+  if GamepadMap.ignoreRawForJoystick(joystick) then return end
   local source = "hat:" .. hat
   for _, btn in ipairs(self.hatDirs[hat] or {}) do
     release(self, btn, source)
@@ -300,6 +318,71 @@ function Input:joystickhat(joystick, hat, direction)
     press(self, btn, source)
   end
   self.hatDirs[hat] = dirs
+end
+
+-- Lifecycle resets (focus/visibility flips, joystick add/remove, resume)
+-- wipe held state because a release can be swallowed while the OS owns the
+-- event stream.  A direction the player is STILL holding never re-fires
+-- keypressed/gamepadpressed after the wipe either, so a spurious reset --
+-- macOS re-enumerating a Bluetooth pad fires joystickadded with no hotplug,
+-- and the blanket reset took unrelated keyboard holds down with it --
+-- parked the player in place until every direction was released and
+-- pressed again (#799).  Rebuild holds from the devices' ground truth
+-- instead: only what is physically down right now comes back, so the
+-- swallowed-release hazards the resets guard against stay cleared.
+-- Deliberately separate from reset(): the soft-reset chord path in
+-- Game:step needs the clean slate (re-arming A there would read it as a
+-- title-menu choice).
+function Input:reconcile()
+  local kb = love and love.keyboard
+  if kb and kb.isDown then
+    for key, btn in pairs(self.keyBindings) do
+      local ok, down = pcall(kb.isDown, key)
+      if ok and down then press(self, btn, "key:" .. key) end
+    end
+  end
+  local js = love and love.joystick
+  if not (js and js.getJoysticks) then return end
+  local ok, joysticks = pcall(js.getJoysticks)
+  if not ok or type(joysticks) ~= "table" then return end
+  for _, j in ipairs(joysticks) do
+    if GamepadMap.ignoreRawForJoystick(j) then
+      -- SDL-recognized pad: buttons + left stick, the gamepad surfaces
+      if j.isGamepadDown then
+        for button, btn in pairs(self.padBindings) do
+          local ok2, down = pcall(j.isGamepadDown, j, button)
+          if ok2 and down then press(self, btn, "pad:" .. button) end
+        end
+      end
+      if j.getGamepadAxis then
+        for _, axis in ipairs({ "leftx", "lefty" }) do
+          local ok2, v = pcall(j.getGamepadAxis, j, axis)
+          if ok2 and type(v) == "number" then self:gamepadaxis(j, axis, v) end
+        end
+      end
+    else
+      -- raw stick (#620/#632): the surfaces the joystick* events feed
+      if j.isDown then
+        for index, btn in pairs(self.joyBindings) do
+          local ok2, down = pcall(j.isDown, j, index)
+          if ok2 and down then press(self, btn, "joy:" .. index) end
+        end
+      end
+      if j.getAxis then
+        for _, axis in ipairs({ 1, 2 }) do
+          local ok2, v = pcall(j.getAxis, j, axis)
+          if ok2 and type(v) == "number" then self:joystickaxis(j, axis, v) end
+        end
+      end
+      if j.getHatCount and j.getHat then
+        local ok2, count = pcall(j.getHatCount, j)
+        for hat = 1, (ok2 and count) or 0 do
+          local ok3, dir = pcall(j.getHat, j, hat)
+          if ok3 and dir then self:joystickhat(j, hat, dir) end
+        end
+      end
+    end
+  end
 end
 
 function Input:isDown(btn)

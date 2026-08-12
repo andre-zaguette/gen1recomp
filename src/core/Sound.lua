@@ -92,19 +92,30 @@ end
 -- Chip SFX and cries are already stereo at the source (ChipSynth
 -- renderEffectData); this covers file defs, i.e. Yellow's 8-bit mono PCM
 -- Pikachu clips (RomExtractor extractPikachuCries) and mod-supplied wav/ogg
--- SFX.  Every step is guarded: a headless love stub without love.sound, or a
--- decoder that will not hand back SoundData, keeps the original Source.
+-- SFX.
+--
+-- Decode the FILE (not Source:getChannelCount): love-nx/audren has reported
+-- channel counts that skip this widen silently, and preserving 8-bit depth
+-- into a stereo buffer also sounds wrong on that backend.  Always emit
+-- 16-bit stereo like ChipSynth.  Failure keeps the original Source and logs.
 local function widenMono(source, file)
-  if not (source and love.sound and love.sound.newSoundData) then
+  if type(file) ~= "string" then return source end
+  if not (love.sound and love.sound.newSoundData and love.audio
+      and love.audio.newSource) then
     return source
   end
-  local ok, channels = pcall(function() return source:getChannelCount() end)
-  if not ok or channels ~= 1 then return source end
+  -- Quiet skip when the path is unreadable (headless stub SFX keys, missing
+  -- files).  On NX, overlay-wrapped getInfo makes the yellow|blue copy visible
+  -- at the bare assets/generated path so the widen still runs.
+  local fs = love.filesystem
+  if not (fs and fs.getInfo and fs.getInfo(file)) then
+    return source
+  end
   local built, widened = pcall(function()
     local mono = love.sound.newSoundData(file)
+    if mono:getChannelCount() ~= 1 then return source end
     local frames = mono:getSampleCount()
-    local stereo = love.sound.newSoundData(frames, mono:getSampleRate(),
-                                           mono:getBitDepth(), 2)
+    local stereo = love.sound.newSoundData(frames, mono:getSampleRate(), 16, 2)
     for index = 0, frames - 1 do
       local value = mono:getSample(index)
       stereo:setSample(index, 1, value)
@@ -112,7 +123,10 @@ local function widenMono(source, file)
     end
     return love.audio.newSource(stereo, "static")
   end)
-  if built and widened then return widened end
+  if built and widened and widened ~= source then return widened end
+  if not built then
+    Logger.warn("sound: widenMono failed for %s: %s", file, tostring(widened))
+  end
   return source
 end
 
@@ -159,10 +173,64 @@ local function playPath(data, key, def, pitch, tempo)
   return src
 end
 
+-- A Gen 2 sfx header declares how many of the four sfx channels it wants
+-- (`channel_count N` in audio/sfx.asm), and sfx channel N takes hardware
+-- channel N over from the music channel with the same number for as long as
+-- it sounds.  So a FOUR-channel sfx silences the song outright -- that is what
+-- the cart does with every jingle: Sfx_RegisterPhoneNumber, Sfx_GetTm,
+-- Sfx_GetBadge, Sfx_GetEgg, Sfx_Item, Sfx_CaughtMon, the eight dex fanfares.
+-- The port's fanfare table was six hardcoded names, so the phone-number jingle
+-- (and a dozen others) played OVER the music instead of replacing it.
+--
+-- Three-channel sfx are NOT ducked even though they too silence three quarters
+-- of the song: most of them are battle move sounds (Psychic, Hyper Beam, Surf)
+-- that fire several times a second, and pausing/resuming the song under each
+-- one would stutter far worse than letting them overlay.  The handful of
+-- three-channel JINGLES are named below instead.
+local GEN2_JINGLES = {
+  Sfx_Fanfare = true, Sfx_Fanfare2 = true,
+  Sfx_3rdPlace = true, Sfx_TrainArrived = true,
+}
+local FULL_BAND = 4
+local channelCounts = {} -- per sfx name; the header read is not free
+
+local function claimsEveryChannel(data, name, def)
+  if type(def) ~= "table" or not def.address then return false end
+  -- Gen 2 only.  Gen 1's fanfare set is already listed by name and its sfx
+  -- headers count channels differently; widening the rule there would change
+  -- Red/Blue behaviour for no reported reason.
+  if def.generation ~= 2 then return false end
+  local known = channelCounts[name]
+  if known == nil then
+    local ok, channels = pcall(
+      require("src.core.ChipSynth").effectChannels, data, def)
+    -- effectChannels answers nil for "not knowable HERE" -- a file def, or the
+    -- program banks not readable yet (src/core/ChipSynth.lua effectChannels).
+    -- That is a "not yet", not a channel count: memoizing it as zero would
+    -- stamp a four-channel jingle as non-ducking for the rest of the session,
+    -- so it plays over the map music until the next launch.  Only a header
+    -- that actually read is cached; a failed read is retried on the next play.
+    if not (ok and channels) then return false end
+    known = #channels
+    channelCounts[name] = known
+  end
+  return known >= FULL_BAND
+end
+
 local function ducks(data, name, def)
   if type(def) == "table" and def.fanfare then return true end
   local fanfares = data.audio and data.audio.fanfares or FANFARES
-  return fanfares[name] and true or false
+  if fanfares[name] then return true end
+  if GEN2_JINGLES[name] then return true end
+  return claimsEveryChannel(data, name, def)
+end
+
+-- Does playing this sfx stop the song?  Exposed so a test can assert the rule
+-- without an audio device.
+function Sound.ducksMusic(data, name)
+  local sfx = data and data.audio and data.audio.sfx
+  name = Sound.resolve(data, name)
+  return ducks(data or {}, name, sfx and sfx[name])
 end
 
 local function played(kind, name, species)
@@ -170,12 +238,125 @@ local function played(kind, name, species)
   Runtime.emit("sound.played", { kind = kind, name = name, species = species })
 end
 
--- returns the started source (nil headless, or when the def failed to load)
--- so callers that block on a fanfare like the original's
--- PlaySoundWaitForCurrent -> WaitForSoundToFinish can poll it
-function Sound.play(data, name)
-  local sfx = data.audio and data.audio.sfx
-  local def = sfx and sfx[name]
+-- The shared UI names its sounds the way pokered does; Gen 2's sfx table is
+-- keyed by pokegold's own labels, so a Gold session asking for "Press_AB"
+-- finds nothing and the menu goes silent -- which is exactly what happened to
+-- the A-press beep on every Gold dialogue.  Only the shared modules a Gold
+-- session actually enters need a row here, and today that is src/render/
+-- TextBox.lua and src/ui/ChoiceBox.lua, both playing "Press_AB": the cart
+-- sounds SFX_READ_TEXT_2 at both of those moments (home/joypad.asm
+-- PromptButton for the textbox wait, home/menu.asm PlayClickSFX for a menu
+-- pick).  Every other shared player of a pokered sfx name sits in a module
+-- Gold replaces under src/world/gen2 or src/ui/gen2, and those name their
+-- sounds in pokegold's labels directly.  So a row belongs here only once a
+-- shared module is reachable from Gold, and its target is whatever the cart
+-- plays at that same moment -- not the nearest-sounding Gen 2 label.
+Sound.GEN2_ALIASES = {
+  Press_AB = "Sfx_ReadText2",
+}
+
+-- The hop Sound.resolve took for a raw name, so the argument-only entry points
+-- (stop, isPlaying) can reach a source Sound.play cached under the resolved
+-- key without a data table of their own.
+local aliased = {}
+
+function Sound.resolve(data, name)
+  local sfx = data and data.audio and data.audio.sfx
+  if not sfx then return name end
+  if sfx[name] then return name end
+  local alias = Sound.GEN2_ALIASES[name]
+  if alias and sfx[alias] then
+    aliased[name] = alias
+    return alias
+  end
+  return name
+end
+
+-- the source a raw name plays through, whichever key it ended up cached under
+local function cached(name)
+  local src = cache[name]
+  if src == nil then
+    local key = aliased[name]
+    if key then src = cache[key] end
+  end
+  return src
+end
+
+-- Gen 2's overworld/menu entry point is a PRIORITY GATE, not a bare play
+-- (home/audio.asm PlaySFX).  It asks CheckSFX whether any of the four sfx
+-- channels is still sounding, and when one is it compares the id that owns
+-- them: `ld a, [wCurSFX] / cp e / jr c, .done` DROPS the new sound outright
+-- while the playing id is numerically lower (constants/sfx_constants.asm
+-- orders the table highest priority first).  Only an id at or below wCurSFX
+-- falls through, and _PlaySFX turns off and re-zeroes ch5-ch8 before it loads
+-- the new header (audio/engine.asm _PlaySFX), cutting the old sound dead.
+-- Either way sfx NEVER layer here.  SproutTower3FRivalScene is the plain
+-- case: `playsound SFX_TACKLE` ($41) then `playsound SFX_ELEVATOR` ($6e) one
+-- command later, with the two-note tackle still sounding, so the cart never
+-- plays the elevator rumble at all -- the pillar sways to the thud alone.
+--
+-- Battle ANIMATION sounds are a different entry point and must not come
+-- through here: anim_sound reaches PlayStereoSFX (engine/battle_anims/
+-- anim_commands.asm), which has no gate at all and, with stereo on, does not
+-- even clear the channels another sfx holds.  That is Sound.playStereo below.
+local sfxIds  -- { label -> SFX_* id }, derived from data.audio.sfxOrder
+local curSfx  -- { src, id } of the last gated sfx that started, i.e. wCurSFX
+
+local function sfxIdFor(data, name)
+  local order = data and data.audio and data.audio.sfxOrder
+  if not order then return nil end
+  if not sfxIds then
+    sfxIds = {}
+    -- sfxOrder is audio/sfx_pointers.asm in table order, so id = index - 1
+    -- (RomExtractorGen2 extractAudio writes it from constants.sfxOrder).
+    for index, label in ipairs(order) do sfxIds[label] = index - 1 end
+  end
+  return sfxIds[name]
+end
+
+-- Would PlaySFX start this sound now?  Answers false for `jr c, .done`, which
+-- the caller honours by dropping the request whole: a discarded sfx neither
+-- sounds nor ducks the music.  The second return is the id to remember as
+-- wCurSFX once the sound actually starts.
+local function sfxPriorityGate(data, name, def)
+  -- Gen 1 keeps today's behaviour: pokered's PlaySound arbitrates by channel
+  -- rather than by a single wCurSFX, and Sound.playMove already ports that.
+  if type(def) ~= "table" or def.generation ~= 2 then return true end
+  local id = sfxIdFor(data, name)
+  if not id then return true end
+  if curSfx then
+    local ok, playing = pcall(curSfx.src.isPlaying, curSfx.src)
+    if not (ok and playing) then
+      curSfx = nil -- CheckSFX returns no carry; wCurSFX stops mattering
+    elseif curSfx.id < id then
+      return false -- the sound already going outranks this one
+    else
+      pcall(curSfx.src.stop, curSfx.src) -- _PlaySFX zeroes ch5-ch8 first
+      curSfx = nil
+    end
+  end
+  return true, id
+end
+
+-- CheckSFX (home/audio.asm): is a gated sfx still sounding on ch5-ch8?  This
+-- is the state WaitSFX blocks on, and it is the gate's OWN wCurSFX rather
+-- than whatever the caller last held a source for, so a sound started
+-- somewhere else entirely (the A-press beep a textbox plays) still answers
+-- busy here.  Phone_StartRinging (engine/phone/phone.asm:564) is the caller
+-- that needs it: SFX_CALL is $6a, low enough that any louder sound still on
+-- the channels makes sfxPriorityGate DROP the ring outright, where the cart
+-- merely waits for it.
+function Sound.sfxBusy()
+  if not curSfx then return false end
+  local ok, playing = pcall(curSfx.src.isPlaying, curSfx.src)
+  if not (ok and playing) then
+    curSfx = nil -- CheckSFX returns no carry; wCurSFX stops mattering
+    return false
+  end
+  return true
+end
+
+local function startSfx(data, name, def)
   local src = playPath(data, name, def)
   if not src then return end
   if ducks(data, name, def) then
@@ -183,6 +364,31 @@ function Sound.play(data, name)
   end
   played("sfx", name)
   return src
+end
+
+-- returns the started source (nil headless, when the def failed to load, or
+-- when the priority gate dropped the sound) so callers that block on a
+-- fanfare like the original's PlaySoundWaitForCurrent -> WaitForSoundToFinish
+-- can poll it
+function Sound.play(data, name)
+  local sfx = data.audio and data.audio.sfx
+  name = Sound.resolve(data, name)
+  local def = sfx and sfx[name]
+  local allowed, id = sfxPriorityGate(data, name, def)
+  if not allowed then return end
+  local src = startSfx(data, name, def)
+  if src and id then curSfx = { src = src, id = id } end
+  return src
+end
+
+-- PlayStereoSFX (audio/engine.asm), the battle animation path: same sound,
+-- same fanfare duck, but no CheckSFX/wCurSFX gate, and it never writes
+-- wCurSFX either -- so an animation sound can neither be dropped by, nor
+-- become, the priority the overworld path compares against.
+function Sound.playStereo(data, name)
+  local sfx = data.audio and data.audio.sfx
+  name = Sound.resolve(data, name)
+  return startSfx(data, name, sfx and sfx[name])
 end
 
 -- Play a move's sound with its MoveSoundTable pitch/tempo modifiers
@@ -194,29 +400,91 @@ end
 -- sfx table; older audio.lua builds without the variants fall back to
 -- the unmodified sound.
 -- anim: a moves.lua anim table { sound, pitch, tempo }.
+--
+-- Whether a row sound is heard at all is Audio2_PlaySound's channel gate
+-- (audio/engine_2.asm .playSfx/.sfxChannelLoop): for every channel the new
+-- sfx wants, a channel still busy with a LOWER sound id aborts the whole
+-- request (`cp [hl] / jr z,.playChannel / jr c,.playChannel / ret`), while
+-- an equal or lower id takes those channels over.  A sound id is
+-- (header address - SFX_Headers_1) / 3 (constants/music_constants.asm
+-- music_const), so a def's header address orders ids inside one engine
+-- bank.  Blizzard's animation is two rows, BLIZZARD then HYDRO_PUMP
+-- (data/moves/animations.asm BlizzardAnim), and SFX_BATTLE_29 (CHAN5+8) is
+-- still sounding when the second row starts, so the original never plays
+-- SFX_BATTLE_2A (CHAN5+6+8) at all -- unguarded, its tail is heard running
+-- past the end of the animation (#844).
+local lastMoveSfx -- { src, rank, engine, channels } of the last row sound
+
+local function channelsOverlap(a, b)
+  if not (a and b) then return false end
+  for _, x in ipairs(a) do
+    for _, y in ipairs(b) do
+      if x == y then return true end
+    end
+  end
+  return false
+end
+
+-- would PlaySound start this def now?  Taking a channel over also stops the
+-- sound that held it, the way .playChannel resets the channel.
+local function sfxChannelGate(data, def)
+  local cur = lastMoveSfx
+  if not cur then return true end
+  local ok, playing = pcall(cur.src.isPlaying, cur.src)
+  if not (ok and playing) then
+    lastMoveSfx = nil
+    return true
+  end
+  -- an unrankable def (file asset, or another engine's bank) has no
+  -- comparable sound id: leave it to the mixer, as before
+  if type(def) ~= "table" or not def.address or def.engine ~= cur.engine then
+    return true
+  end
+  local channels = require("src.core.ChipSynth").effectChannels(data, def)
+  if not channelsOverlap(channels, cur.channels) then return true end
+  if def.address > cur.rank then return false end
+  pcall(cur.src.stop, cur.src)
+  lastMoveSfx = nil
+  return true
+end
+
+local function noteMoveSfx(data, def, src)
+  if not src or type(def) ~= "table" or not def.address then
+    lastMoveSfx = nil
+    return
+  end
+  lastMoveSfx = {
+    src = src, rank = def.address, engine = def.engine,
+    channels = require("src.core.ChipSynth").effectChannels(data, def),
+  }
+end
+
 function Sound.playMove(data, anim)
   if not anim or not anim.sound then return end
   local sfx = data.audio and data.audio.sfx
   if not sfx then return end
   local name = anim.sound
   local pitch, tempo = anim.pitch or 0, anim.tempo or 0x80
+  local def = sfx[name]
+  if not sfxChannelGate(data, def) then return end
+  local src
   -- a chip program synthesizes the modified variant on demand; a file def
   -- can only reach for a pre-rendered one
-  if isChipDef(sfx[name]) then
-    if playPath(data, ("%s@%02x%02x"):format(name, pitch, tempo),
-        sfx[name], pitch, tempo) then
-      played("move", name)
-    end
-    return
-  end
-  if pitch ~= 0 or tempo ~= 0x80 then
+  if isChipDef(def) then
+    src = playPath(data, ("%s@%02x%02x"):format(name, pitch, tempo),
+                   def, pitch, tempo)
+  else
     local key = ("%s@%02x%02x"):format(name, pitch, tempo)
-    if sfx[key] then
-      if playPath(data, key, sfx[key]) then played("move", name) end
-      return
+    if (pitch ~= 0 or tempo ~= 0x80) and sfx[key] then
+      src = playPath(data, key, sfx[key])
+    else
+      src = playPath(data, name, def)
     end
   end
-  if playPath(data, name, sfx[name]) then played("move", name) end
+  if src then
+    played("move", name)
+    noteMoveSfx(data, def, src)
+  end
 end
 
 -- A derived cry ({ base = "RHYDON", pitch, length }) borrows another
@@ -274,9 +542,9 @@ function Sound.playPikaCry(data, n)
       cache[key] = false
       return nil
     end
-    -- the importer writes these clips as 8-bit mono (RomExtractor
-    -- extractPikachuCries), so they need the same widening as the chip
-    -- effects to stay off a multi-output device's surround channels (#626)
+    -- importer historically wrote these as 8-bit mono (RomExtractor
+    -- extractPikachuCries); widenMono re-decodes to 16-bit stereo so they
+    -- stay off surround outputs (#626).  Fresh extracts are already stereo.
     s = widenMono(s, path)
     s:setVolume(volumeFor(key))
     cache[key] = s
@@ -290,12 +558,18 @@ end
 
 -- returns the source (nil headless) so callers that block on the cry
 -- like the original's PlayCry -> WaitForSoundToFinish can poll it
-function Sound.playCry(data, species)
+function Sound.playCry(data, species, pikaClip)
   if not love.audio then return nil end
   -- Yellow voices every Pikachu cry with the PCM clips (the chip cry is
-  -- never used for the species there); clip 1 is the everyday "Pika!"
+  -- never used for the species there).  Which clip is a property of the
+  -- call site in the original -- every caller of PlayPikachuSoundClip sets
+  -- its own `ldpikacry e, PikachuCryN` -- so pikaClip carries that choice
+  -- in; it is ignored for every other species.  Clip 1 is the LONG
+  -- title-screen "Pikachuuu" (engine/movie/title.asm:146), kept as the
+  -- default only for the sites that have not been given their own clip
+  -- yet; battle entrances pass 11/37 (#837).
   if species == "PIKACHU" then
-    local src = Sound.playPikaCry(data, 1)
+    local src = Sound.playPikaCry(data, pikaClip or 1)
     if src then return src end
   end
   local cries = data.audio and data.audio.cries
@@ -344,7 +618,7 @@ end
 -- .musicLoop polls wChannelSoundIDs+CHAN5 until SFX_SAFARI_ZONE_PA
 -- ends.)  Headless / never-played names read as silent.
 function Sound.isPlaying(name)
-  local src = cache[name]
+  local src = cached(name)
   if not src then return false end
   local ok, playing = pcall(src.isPlaying, src)
   return ok and playing or false
@@ -353,7 +627,7 @@ end
 -- cut a one-shot short (the SFX_STOP_ALL_MUSIC beats around the
 -- elevator shake stop the last collision thud mid-ring)
 function Sound.stop(name)
-  local src = cache[name]
+  local src = cached(name)
   if src then pcall(src.stop, src) end
 end
 
@@ -437,6 +711,15 @@ end
 -- hot reload / jukebox A-B: drop one key's sources (its pitch-tempo
 -- variants included) or all of them, so the next play re-resolves the def
 function Sound.invalidate(name)
+  lastMoveSfx = nil -- its source is about to be dropped or stopped
+  -- Same for wCurSFX, and a reloaded table can repoint the id order.
+  curSfx = nil
+  sfxIds = nil
+  -- A replaced def may claim a different set of channels.
+  if name then channelCounts[name] = nil else channelCounts = {} end
+  -- A mod that registers the raw name outright ends the alias hop, so the
+  -- memo has to be re-derived from the reloaded sfx table too.
+  if name then aliased[name] = nil else aliased = {} end
   local function evict(store, key)
     local src = store[key]
     if src then pcall(src.stop, src) end

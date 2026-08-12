@@ -30,6 +30,15 @@ local SaveData = {}
 -- deliberately shared across versions (it holds global preferences and the
 -- mod enable-state, not per-playthrough data).
 local OPTIONS_FILENAME = "options.lua"
+-- #828: options.lua is rewritten whole on every write (see saveOptions), and
+-- unlike the progress files it had no staged copy, so a write interrupted
+-- between the truncate and the flush -- the process replaced by
+-- HostShell.restart on the way back to the launcher, an Android
+-- external-storage volume that never flushed -- left a truncated or empty
+-- file that loadOptions could only answer with defaults: every setting
+-- "reset" at once.  Same .bak/.tmp witness names the save files use.
+local OPTIONS_BACKUP_FILENAME = OPTIONS_FILENAME .. ".bak"
+local OPTIONS_TMP_FILENAME = OPTIONS_FILENAME .. ".tmp"
 
 -- Main / backup / staged-witness names for a version (defaults to the active
 -- one).  The backup is a rolling copy and .tmp is the staged-write witness;
@@ -207,6 +216,13 @@ local function persistFs(fs)
   return SaveData.portableFs() or fs or (love and love.filesystem)
 end
 
+-- Engine-owned persistence routing for subsystems that must follow the same
+-- standard/portable root as saves without exposing raw filesystem access to a
+-- mod. An explicitly injected headless filesystem still wins for tests.
+function SaveData.persistenceFs(fs)
+  return persistFs(fs)
+end
+
 -- Port + original Options menu defaults.  Missing keys on load are filled
 -- from this table so old options.lua files stay compatible.
 function SaveData.defaultOptions()
@@ -245,8 +261,12 @@ function SaveData.defaultOptions()
     -- (the PIKACHU VOL row appears only on Yellow; see Sound.lua)
     pikaVol = 7,
     musicFilter = 0,
-    -- logic fast-forward multiplier; audio is unaffected (GameSpeed.lua)
-    speed = 1,
+    -- Per-category logic fast-forward multiplier (RFC 0007); audio is
+    -- unaffected (GameSpeed.lua). Superseded from a single "speed" field --
+    -- mergeOptions migrates an old save's value into all three below.
+    speedOverworld = 1,
+    speedBattle = 1,
+    speedMenu = 1,
     -- port display options (OptionsMenu / hotkeys 2/3/4/5)
     colors = "gbc",
     tilt = 0,
@@ -275,6 +295,15 @@ function SaveData.defaultOptions()
     -- Native mod enablement is an installation option, not save-slot data.
     -- Missing entries mean enabled so newly installed mods work by default.
     mods = {},
+    -- Mods the player forced past the target gate (Loader:_gateGeneration).
+    -- modsGen2[id][version] = true, one answer per game; a bare `true` is the
+    -- pre-per-game shape and means the Gen 2 games only (see modForced).
+    modsGen2 = {},
+    -- Per-game enablement: modsByVersion[version][id] answers for that game
+    -- only and falls through to the shared mods[id] above when absent, so an
+    -- options.lua written before this key keeps its exact meaning.  Read and
+    -- written through SaveData.modEnabled / SaveData.setModEnabled.
+    modsByVersion = {},
     -- Named setups the player can switch between (#593; src/mods/ModProfile.lua
     -- owns the shape, src/mods/ManagerState.lua the UI): each row is
     -- { name, enabled = {id=bool}, options = {id={k=v}}, slots = {version=slotId} }.
@@ -305,6 +334,19 @@ function SaveData.defaultOptions()
     -- layout (#633).  Pre-#633 files stored one top-level positions table;
     -- TouchControls.normalizeConfig folds it into both orientations on load.
     touchControls = { enabled = true },
+    -- Haptic feedback level for on-screen pad presses (#806):
+    -- off | light | medium | heavy, mapped to a love.system.vibrate
+    -- duration in src/core/TouchControls.lua.  LIGHT by default, like the
+    -- overlay itself defaulting on, so an options.lua predating this key
+    -- gets the tick without going looking for the row.  Inert wherever the
+    -- overlay never appears (desktop) or LOVE has no vibrator.
+    haptics = "light",
+    -- Shared UI/mod timestamp presentation. DEVICE follows the process time
+    -- locale where the platform exposes one; otherwise DateTime falls back to
+    -- DD-MM-YYYY and 24-hour time. Kept in options.lua so checkpoints never
+    -- rewind presentation preferences.
+    dateFormat = "device", -- device | dmy | mdy | ymd
+    timeFormat = "device", -- device | 24h | 12h
   }
 end
 
@@ -316,6 +358,19 @@ function SaveData.mergeOptions(loaded)
     for k, v in pairs(loaded) do
       opts[k] = v
     end
+    -- RFC 0007 migration: a save from before per-category GAME SPEED still
+    -- has a single "speed" and none of the three new fields, so seed all
+    -- three from it -- an existing player's fast-forward preference
+    -- carries over instead of two of the three categories silently
+    -- resetting to 1X. "speed" is dropped on the way out (not kept as a
+    -- stale alias), so a re-save never re-triggers this migration.
+    if loaded.speed ~= nil and loaded.speedOverworld == nil
+        and loaded.speedBattle == nil and loaded.speedMenu == nil then
+      opts.speedOverworld = loaded.speed
+      opts.speedBattle = loaded.speed
+      opts.speedMenu = loaded.speed
+    end
+    opts.speed = nil
   end
   return opts
 end
@@ -335,6 +390,22 @@ local function readTable(fs, name)
   return SaveSerializer.decode(body)
 end
 
+-- Deep-copy a value folded in from the on-disk decode so the returned
+-- options table never aliases the file's nested tables (SaveData must not
+-- depend on src/mods/Merge.lua for this).  Options data is plain tables of
+-- strings/numbers/booleans/tables, so a cycle guard is belt-and-braces.
+local function deepCopy(v, seen)
+  if type(v) ~= "table" then return v end
+  seen = seen or {}
+  if seen[v] then return seen[v] end
+  local copy = {}
+  seen[v] = copy
+  for k, val in pairs(v) do
+    copy[deepCopy(k, seen)] = deepCopy(val, seen)
+  end
+  return copy
+end
+
 -- the stub filesystem some headless harnesses inject has no remove; a
 -- lingering tmp/bak there is harmless
 local function remove(fs, name)
@@ -348,13 +419,48 @@ end
 -- options round-trip headless (no love global).
 function SaveData.saveOptions(opts, fs)
   fs = persistFs(fs)
+  -- #932: options.lua is a WHOLE-FILE rewrite, so a caller that hands over a
+  -- PARTIAL table (just the keys it changed) would silently drop every key it
+  -- does not mention -- launcher-only keys like lastVersion, and keys the
+  -- launcher set (battleBg, tilt...) all fall back to defaults.  Read the
+  -- on-disk file FIRST and fold caller-absent values underneath, so a delta
+  -- write changes only what it names.
+  --
+  -- A table holding EVERY defaultOptions key is a full snapshot
+  -- (loadOptions() results, game.save.options, the RESET REBINDS /
+  -- activeProfile-drop paths) and stays authoritative: its absent keys are
+  -- deliberate deletions, so nothing folds for it.  Partial tables get every
+  -- on-disk key they do not provide folded in (deep-copied so the caller's
+  -- table is never aliased).  This is the reconciling rule: bindings and
+  -- activeProfile -- not defaultOptions members -- can be deleted by their
+  -- sites precisely because those sites always write full tables.
+  local onDisk = readTable(fs, OPTIONS_FILENAME)
+  local isFull = type(opts) == "table"
+  if isFull then
+    for k in pairs(SaveData.defaultOptions()) do
+      if opts[k] == nil then isFull = false break end
+    end
+  end
+  if not isFull then
+    local merged = {}
+    if type(opts) == "table" then
+      for k, v in pairs(opts) do merged[k] = v end
+    end
+    if type(onDisk) == "table" then
+      for k, v in pairs(onDisk) do
+        if k ~= "modOptions" and merged[k] == nil then
+          merged[k] = deepCopy(v)
+        end
+      end
+    end
+    opts = merged
+  end
   opts = SaveData.mergeOptions(opts)
   -- modOptions is per-mod nested state: fold the on-disk sub-tree
   -- underneath (newest value winning per key) so one caller's partial
   -- write cannot clobber another mod's persisted keys.  Every other
   -- option stays on the shallow path.
-  local onDisk = readTable(fs, OPTIONS_FILENAME)
-  if onDisk and type(onDisk.modOptions) == "table" then
+  if type(onDisk) == "table" and type(onDisk.modOptions) == "table" then
     local merged = {}
     for modId, bucket in pairs(onDisk.modOptions) do
       merged[modId] = bucket
@@ -368,11 +474,54 @@ function SaveData.saveOptions(opts, fs)
     end
     opts.modOptions = merged
   end
-  local ok, err = fs.write(OPTIONS_FILENAME, SaveSerializer.encode(opts))
+  local encoded = SaveSerializer.encode(opts)
+  -- Stage the new bytes and roll the last good file aside BEFORE the main
+  -- write truncates it, the same tmp/bak dance SaveData.save uses for
+  -- progress: whatever ends the process mid-write, one of the three copies
+  -- is complete and loadOptions promotes it instead of falling back to
+  -- defaults (#828).
+  local ok, err = fs.write(OPTIONS_TMP_FILENAME, encoded)
   if not ok then
     Logger.error("options save failed: %s", tostring(err))
+    return nil
   end
-  return ok and opts or nil
+  local prev = fs.getInfo(OPTIONS_FILENAME) and fs.read(OPTIONS_FILENAME)
+  if type(prev) == "string" and prev ~= "" and prev ~= encoded then
+    fs.write(OPTIONS_BACKUP_FILENAME, prev)
+  end
+  ok, err = fs.write(OPTIONS_FILENAME, encoded)
+  if not ok then
+    Logger.error("options save failed: %s", tostring(err))
+    return nil
+  end
+  -- #828: settings "reset" on Android and Steam Deck with nothing in the log.
+  -- Every options write is a WHOLE-FILE rewrite, so a write that reports
+  -- success without the bytes landing (an external-storage volume that went
+  -- away mid-session, a read-only or full save dir) is indistinguishable from
+  -- "the launcher never saved".  Read the file back and fail loudly instead:
+  -- callers already treat nil as a failed write, and the log line is what the
+  -- next report from those platforms needs to carry.
+  local wrote = fs.getInfo(OPTIONS_FILENAME) and fs.read(OPTIONS_FILENAME)
+  if wrote ~= encoded then
+    Logger.error("options save did not land (%d bytes written, %s on disk)",
+      #encoded, type(wrote) == "string" and tostring(#wrote) or "nothing")
+    return nil
+  end
+  -- #828: roll the backup FORWARD to the bytes just verified.  The
+  -- pre-write roll above only preserves the previous file for a death
+  -- during this rewrite; at rest the backup must hold the newest verified
+  -- state, because the hard teardown out of a game session (HostShell's
+  -- restartApp kill on Android, execv on a SteamOS AppImage) can eat the
+  -- main file outright and loadOptions then promotes this copy.  The
+  -- encoder is key-sorted, so the follow-up rewrites a play session makes
+  -- (play()'s lastVersion stamp, the in-game save flush) are byte-identical
+  -- and skip the conditional roll -- without this line the backup still
+  -- held the file from BEFORE the launcher's change, and recovery reverted
+  -- the just-changed setting (BATTLE LAYOUT back to OG).
+  fs.write(OPTIONS_BACKUP_FILENAME, encoded)
+  -- the staged witness has served its purpose; the main file is verified
+  remove(fs, OPTIONS_TMP_FILENAME)
+  return opts
 end
 
 function SaveData.loadOptions(fs)
@@ -382,9 +531,150 @@ function SaveData.loadOptions(fs)
     if fs.getInfo(OPTIONS_FILENAME) then
       Logger.error("options load failed: %s", tostring(err))
     end
+    -- #828: answering defaults here is what "closing the game reset all my
+    -- settings" looked like -- one interrupted whole-file rewrite and every
+    -- preference, the mod enable-state and the slot registry were gone.
+    -- Promote the staged copy, then the rolled-aside backup, exactly as
+    -- SaveData.load does for progress, and heal the main file from whichever
+    -- one parsed.
+    local recovered = readTable(fs, OPTIONS_TMP_FILENAME)
+    local from = "tmp"
+    if not recovered then
+      recovered = readTable(fs, OPTIONS_BACKUP_FILENAME)
+      from = "bak"
+    end
+    if recovered then
+      Logger.warn("options.lua %s; recovered from %s copy",
+        fs.getInfo(OPTIONS_FILENAME) and "corrupt" or "missing", from)
+      if fs.write then
+        fs.write(OPTIONS_FILENAME, SaveSerializer.encode(recovered))
+      end
+      return SaveData.mergeOptions(recovered)
+    end
     return SaveData.defaultOptions()
   end
   return SaveData.mergeOptions(data)
+end
+
+-- ------- per-game mod enablement
+--
+-- One installed mod, one id, one enable flag per game that wants to differ.
+-- options.mods is the shared answer every version used to get; the overlay
+-- only holds the games the player actually chose for, so a mod set can differ
+-- between Red and Gold without either one owning the other's flags.
+
+-- Whether a per-game answer is honoured at boot.  The loader reads the enable
+-- flags once, before any entry chunk (src/mods/Loader.lua _loadState), so this
+-- flips on with that read and not before: until then every writer keeps to the
+-- shared flag and no surface promises what the boot does not do.
+SaveData.PER_VERSION_MODS = false
+
+-- The version a write should be scoped to: the game asked for once per-game
+-- flags are live, nil (the shared flag) while they are only a preview.
+function SaveData.modScope(version)
+  if SaveData.PER_VERSION_MODS then return version end
+  return nil
+end
+
+-- true/false as chosen for `version`, else the shared flag, else nil -- the
+-- caller owns the default (the loader enables, the launcher keeps
+-- experimental mods off until asked).
+function SaveData.modEnabled(options, id, version)
+  local byVersion = options and options.modsByVersion
+  local bucket = version and type(byVersion) == "table" and byVersion[version]
+  if type(bucket) == "table" and type(bucket[id]) == "boolean" then
+    return bucket[id]
+  end
+  local shared = options and options.mods
+  if type(shared) == "table" and type(shared[id]) == "boolean" then
+    return shared[id]
+  end
+  return nil
+end
+
+-- Write the choice for one game, or the shared flag when version is nil.  A
+-- per-game entry that agrees with the shared flag is dropped rather than
+-- stored, so the overlay stays the list of deliberate differences.
+function SaveData.setModEnabled(options, id, enabled, version)
+  if type(options) ~= "table" or type(id) ~= "string" or id == "" then
+    return options
+  end
+  enabled = enabled and true or false
+  if not version then
+    options.mods = options.mods or {}
+    options.mods[id] = enabled
+    return options
+  end
+  options.modsByVersion = options.modsByVersion or {}
+  local bucket = options.modsByVersion[version] or {}
+  options.modsByVersion[version] = bucket
+  -- no shared flag reads as enabled, the same default the loader applies to a
+  -- missing entry, so a fresh install never fills the overlay with agreement
+  local shared = options.mods and options.mods[id]
+  if type(shared) ~= "boolean" then shared = true end
+  if shared == enabled then
+    bucket[id] = nil
+  else
+    bucket[id] = enabled
+  end
+  return options
+end
+
+-- ------- the player's target override
+--
+-- The manifest's `games` is the AUTHOR's claim and the loader enforces it
+-- (Loader:_gateGeneration); this is the player's per-game override of that
+-- claim.  Scoped by version, because "run it on Gold anyway" is not an answer
+-- about Red: a version-blind flag forced a mod past a gate on a game its
+-- owner was never asked about.
+
+-- A pre-per-game `true` could only ever take effect on a Gen 2 boot (the gate
+-- returned early on Gen 1), so that is exactly what it is read as here.
+local function forcedGenerations(entry)
+  return entry == true and 2 or nil
+end
+
+function SaveData.modForced(options, id, version, generation)
+  local entry = type(options) == "table" and type(options.modsGen2) == "table"
+    and options.modsGen2[id]
+  if entry == nil or entry == false then return false end
+  local gen = generation or (version and GameVersion.generation(version))
+  local legacy = forcedGenerations(entry)
+  if legacy then return legacy == gen end
+  if type(entry) ~= "table" then return false end
+  if version then return entry[version] == true end
+  -- no version, only a generation: a harness seam, so ask whether ANY game of
+  -- that generation was forced rather than inventing a game
+  for id2, on in pairs(entry) do
+    if on == true and GameVersion.generation(id2) == gen then return true end
+  end
+  return false
+end
+
+-- Write the override for one game.  Without a version there is no game to
+-- answer for, so this writes nothing rather than guessing (the caller keeps
+-- the choice in memory for this boot and says so).
+function SaveData.setModForced(options, id, forced, version)
+  if type(options) ~= "table" or type(id) ~= "string" or id == "" then
+    return false
+  end
+  if not (version and GameVersion.VERSIONS[version]) then return false end
+  options.modsGen2 = options.modsGen2 or {}
+  local entry = options.modsGen2[id]
+  if type(entry) ~= "table" then
+    -- migrate the legacy flag in place, keeping the games it already covered
+    local expanded = {}
+    if forcedGenerations(entry) then
+      for _, other in ipairs(GameVersion.ORDER) do
+        if GameVersion.generation(other) == 2 then expanded[other] = true end
+      end
+    end
+    entry = expanded
+    options.modsGen2[id] = entry
+  end
+  entry[version] = forced and true or nil
+  if next(entry) == nil then options.modsGen2[id] = nil end
+  return true
 end
 
 -- ------- save slots
@@ -400,6 +690,10 @@ end
 -- working unchanged.
 local activeSlotCache = {}   -- version -> slotId in use, or false when none
 local slotsChecked = {}      -- version -> true once resolved this process
+-- At most one New Game can be the live candidate for a first public tool
+-- request. A single strong reference models that runtime fact without adding
+-- marker data to the save or retaining abandoned playthrough tables.
+local freshPlaythrough
 
 local function slotDir(version) return "saves/" .. version end
 
@@ -472,6 +766,15 @@ local function tryMigrateLegacy(version, fs)
   local opts = SaveData.loadOptions(fs)
   opts.saveSlots = opts.saveSlots or {}
   opts.saveSlots[version] = { list = { id }, active = id }
+  -- A tool may have allocated the legacy scope before the player made their
+  -- first ordinary SAVE. Promoting that flat save into slot1 must preserve the
+  -- same opaque identity; otherwise title-selected mod storage becomes
+  -- unreachable after the migration even though every durable record exists.
+  local ids = opts.playthroughIds and opts.playthroughIds[version]
+  if type(ids) == "table" and type(ids.legacy) == "string" and ids.legacy ~= "" then
+    if type(ids[id]) ~= "string" or ids[id] == "" then ids[id] = ids.legacy end
+    ids.legacy = nil
+  end
   SaveData.saveOptions(opts, fs)
   return id
 end
@@ -497,9 +800,9 @@ end
 
 -- (body for the forward-declared saveNames.)  Resolves the ACTIVE slot for
 -- the version, falling back to the flat legacy names when no slot is in use.
-function saveNames(version)
+function saveNames(version, injectedFs)
   version = version or GameVersion.get()
-  local fs = persistFs(nil)
+  local fs = persistFs(injectedFs)
   ensureVersionSlots(version, fs)
   local slot = activeSlotCache[version]
   if slot then return slotNames(version, slot) end
@@ -519,7 +822,20 @@ function SaveData.slotSummary(save)
   for _ in pairs((save.pokedex and save.pokedex.owned) or {}) do
     dexCount = dexCount + 1
   end
-  local t = math.floor(save.playTime or 0)
+  -- playTime is a plain seconds count in a Gen 1 save but a
+  -- { hours, minutes, seconds, frames } table in a Gen 2 (Gold) save, matching
+  -- the cart's wGameTime* bytes.  The launcher calls slotSummary on EVERY
+  -- version's slot, so this has to read both shapes or the whole launcher
+  -- crashes the moment a Gold save exists (math.floor on the table).
+  local pt = save.playTime
+  local t
+  if type(pt) == "table" then
+    t = (tonumber(pt.hours) or 0) * 3600
+      + (tonumber(pt.minutes) or 0) * 60
+      + (tonumber(pt.seconds) or 0)
+  else
+    t = math.floor(tonumber(pt) or 0)
+  end
   local timeText = ("%d:%02d"):format(math.floor(t / 3600),
                                       math.floor(t / 60) % 60)
   return name, {
@@ -736,6 +1052,146 @@ end
 function SaveData.resetSlotState()
   for k in pairs(activeSlotCache) do activeSlotCache[k] = nil end
   for k in pairs(slotsChecked) do slotsChecked[k] = nil end
+  freshPlaythrough = nil
+end
+
+-- ------- opaque playthrough identity
+
+-- An id must never perturb the engine's gameplay RNG: savestate tools need
+-- repeatable random outcomes, and allocating persistence scope is not gameplay.
+-- Combine wall/process time, a process-local sequence and a fresh table address
+-- into four hex words. This is an opaque collision-resistant identifier, not a
+-- secret or a player-visible value.
+local playthroughSeq = 0
+
+local function word(n)
+  return math.floor(tonumber(n) or 0) % 4294967296
+end
+
+function SaveData.newPlaythroughId()
+  playthroughSeq = playthroughSeq + 1
+  local address = tostring({}):match("0x(%x+)") or "0"
+  local addressLo = tonumber(address:sub(-8), 16) or 0
+  local clock = math.floor((os.clock() or 0) * 1000000)
+  return ("%08x%08x%08x%08x"):format(
+    word(os.time()), word(clock), word(addressLo), word(playthroughSeq))
+end
+
+local function playthroughScope(version, injectedFs)
+  version = version or GameVersion.get()
+  local fs = persistFs(injectedFs)
+  ensureVersionSlots(version, fs)
+  return activeSlotCache[version] or "legacy"
+end
+
+local function rememberPlaythroughId(save, opts, injectedFs)
+  local meta = type(save) == "table" and save.meta
+  local id = type(meta) == "table" and meta.playthroughId
+  if type(id) ~= "string" or id == "" then return opts, false end
+  local version = save.version or GameVersion.get()
+  local scope = playthroughScope(version, injectedFs)
+  local persisted = SaveData.loadOptions(injectedFs)
+  if opts then
+    -- Slot selection and opaque playthrough routing are engine-owned launcher
+    -- state. A live game may carry an options snapshot from before a legacy
+    -- save was promoted to slot1; writing that stale snapshot must not erase
+    -- the freshly persisted routing and strand tool storage on next boot.
+    opts.saveSlots = deepCopy(persisted.saveSlots)
+    opts.playthroughIds = deepCopy(persisted.playthroughIds)
+  else
+    opts = persisted
+  end
+  opts.playthroughIds = opts.playthroughIds or {}
+  opts.playthroughIds[version] = opts.playthroughIds[version] or {}
+  local changed = opts.playthroughIds[version][scope] ~= id
+  opts.playthroughIds[version][scope] = id
+  return opts, changed
+end
+
+-- Return an existing save identity or give a pre-identity save a stable one.
+-- Legacy backfill lives in options.lua until the next normal SAVE stamps the id
+-- into progress, so installing a tool mod never rewrites the player's checkpoint.
+function SaveData.ensurePlaythroughId(save, injectedFs)
+  if type(save) ~= "table" then return nil end
+  save.meta = type(save.meta) == "table" and save.meta or {}
+  local id = save.meta.playthroughId
+  if type(id) == "string" and id ~= "" then return id end
+
+  local version = save.version or GameVersion.get()
+  local scope = playthroughScope(version, injectedFs)
+  local opts = SaveData.loadOptions(injectedFs)
+  local isFresh = save == freshPlaythrough
+  if isFresh then freshPlaythrough = nil end
+  local byVersion = opts.playthroughIds and opts.playthroughIds[version]
+  id = not isFresh and byVersion and byVersion[scope] or nil
+  if type(id) ~= "string" or id == "" then
+    id = SaveData.newPlaythroughId()
+    opts.playthroughIds = opts.playthroughIds or {}
+    opts.playthroughIds[version] = opts.playthroughIds[version] or {}
+    opts.playthroughIds[version][scope] = id
+    SaveData.saveOptions(opts, injectedFs)
+  end
+  save.meta.playthroughId = id
+  return id
+end
+
+-- Resolve the already-selected playthrough without changing the supplied save
+-- or allocating a replacement id. Title tools use this before a normal SAVE:
+-- Game:load intentionally owns a fresh skeleton there, while the selected
+-- launcher slot's durable tool data remains bound by the engine-owned mapping.
+-- This does not make arbitrary identities addressable; callers still need a
+-- higher-level engine capability that decides when selected resolution is safe.
+function SaveData.selectedPlaythroughId(save, injectedFs)
+  if type(save) ~= "table" then
+    return nil, "not_in_playthrough", "No selected playthrough is available."
+  end
+  local version = save.version or GameVersion.get()
+  if not knownVersion(version) then
+    return nil, "unknown_game", "The selected game version is unavailable."
+  end
+  local id = save.meta and save.meta.playthroughId
+  if type(id) == "string" and id ~= "" then return id end
+
+  -- Resolve the selected scope first. That may perform the one-time legacy
+  -- save-to-slot migration, which also moves the opaque identity mapping; only
+  -- then read options so this lookup never observes the pre-migration table.
+  local scope = playthroughScope(version, injectedFs)
+  local opts = SaveData.loadOptions(injectedFs)
+  local byVersion = opts.playthroughIds and opts.playthroughIds[version]
+  id = byVersion and byVersion[scope] or nil
+  if type(id) ~= "string" or id == "" then
+    return nil, "no_selected_playthrough",
+      "The selected playthrough has no durable tool state."
+  end
+  return id
+end
+
+-- Read only the chronology of the ordinary selected save for title tools.
+-- This intentionally returns no canonical progress, slot id, path, or raw
+-- save handle. A legacy pre-id normal save is valid when the selected scope's
+-- engine-owned mapping identifies it; a stamped id must match exactly.
+function SaveData.selectedNormalSaveInfo(save, injectedFs)
+  local playthroughId, code, message = SaveData.selectedPlaythroughId(save, injectedFs)
+  if not playthroughId then return nil, code, message end
+  local version = save and (save.version or GameVersion.get())
+  local fs = persistFs(injectedFs)
+  local main, backup, staged = saveNames(version, injectedFs)
+  local normal = readTable(fs, main)
+    or readTable(fs, staged)
+    or readTable(fs, backup)
+  if type(normal) ~= "table" or normal.version ~= version then
+    return { exists = false, savedAt = nil }
+  end
+  local normalId = normal.meta and normal.meta.playthroughId
+  if type(normalId) == "string" and normalId ~= "" and normalId ~= playthroughId then
+    return { exists = false, savedAt = nil }
+  end
+  local savedAt = normal.meta and normal.meta.savedAt
+  if type(savedAt) ~= "number" or savedAt < 0 or savedAt ~= savedAt
+      or savedAt == math.huge or savedAt == -math.huge then
+    savedAt = nil
+  end
+  return { exists = true, savedAt = savedAt }
 end
 
 -- ------- meta
@@ -759,6 +1215,7 @@ function SaveData.buildMeta(mods, previous)
     format = Version.saveFormat,
     engine = Version.engine,
     savedAt = os.time(),
+    playthroughId = type(previous) == "table" and previous.playthroughId or nil,
     mods = list,
   }
 end
@@ -969,7 +1426,15 @@ function SaveData.save(data, mods)
   -- one, so Blue/Yellow playthroughs land in save_blue.lua / save_yellow.lua
   local FILENAME, BACKUP_FILENAME, TMP_FILENAME = saveNames(data.version)
   if data.options then
-    SaveData.saveOptions(data.options)
+    local opts = data.options
+    if data.meta and data.meta.playthroughId then
+      opts = rememberPlaythroughId(data, data.options)
+    end
+    data.options = opts
+    SaveData.saveOptions(opts)
+  elseif data.meta and data.meta.playthroughId then
+    local opts, changed = rememberPlaythroughId(data)
+    if changed then SaveData.saveOptions(opts) end
   end
   if mods ~= nil or data.meta == nil then
     data.meta = SaveData.buildMeta(mods, data.meta)
@@ -1391,8 +1856,12 @@ function SaveData.newGame(boot)
     options = SaveData.loadOptions(),
   }
   -- a total conversion reshapes the skeleton (spawn, party, money)
-  -- before anything reads it; unhooked this returns save unchanged
-  return Runtime.call("save.new_game", function(s) return s end, save)
+  -- before anything reads it; unhooked this returns save unchanged. Keep the
+  -- "fresh playthrough" marker outside the serialized table so a later tool
+  -- request can distinguish two unsaved New Games sharing one vanilla slot.
+  save = Runtime.call("save.new_game", function(s) return s end, save)
+  freshPlaythrough = save
+  return save
 end
 
 return SaveData

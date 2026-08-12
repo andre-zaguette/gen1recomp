@@ -32,6 +32,7 @@
 
 local Manifest = require("src.mods.Manifest")
 local ManagerState = require("src.mods.ManagerState")
+local ModTargets = require("src.mods.ModTargets")
 local Semver = require("src.mods.Semver")
 local Version = require("src.core.Version")
 local SaveData = require("src.core.SaveData")
@@ -45,8 +46,20 @@ local LauncherMods = {}
 -- the id -> validated-manifest map resolveToggle reads (its dependencySpecs,
 -- conflictSpecs, version and game_version are exactly the fields the loader's
 -- Manifest.validate produced); enabledSet is the current desired enable-set.
-local function statusFor(mods, id, enabledSet, enabled)
+local function statusFor(mods, id, enabledSet, enabled, version, forcedFor)
   local m = mods[id]
+  local forced = forcedFor(id)
+  -- The game this mod is for outranks everything below it: a mod that is not
+  -- going to run here has no useful conflict or dependency verdict.  Same
+  -- source as the in-game manager (src/mods/ModTargets.lua), so the two
+  -- surfaces cannot disagree about the same mod.
+  if version and not ModTargets.supports(m, version) then
+    if forced then
+      return "warn", "Forced onto " .. ModTargets.gameLabel(version)
+        .. " by you (untested)"
+    end
+    return "other_game", ModTargets.detail(m, version)
+  end
   -- conflict only bites an enabled mod: resolveToggle's conflict list is
   -- bidirectional (this mod's conflicts spec vs an enabled other, and an
   -- enabled other's spec vs this mod), which is exactly the launcher chip.
@@ -59,8 +72,10 @@ local function statusFor(mods, id, enabledSet, enabled)
         "Conflicts with " .. ((other and other.name) or otherId)
     end
   end
-  -- warn: the engine is outside the mod's game_version range
-  if m.game_version
+  -- warn: the engine is outside the mod's game_version range.  The dev
+  -- placeholder is skipped here exactly as Loader.devEngine skips it, so the
+  -- launcher and the loader cannot disagree about the same mod.
+  if m.game_version and Version.engine:match("^0%.0%.0%-") == nil
       and not Semver.satisfies(Version.engine, m.game_version) then
     return "warn", "Needs engine " .. m.game_version
       .. " (have " .. Version.engine .. ")"
@@ -74,6 +89,13 @@ local function statusFor(mods, id, enabledSet, enabled)
       return "warn", "Needs " .. spec.id .. " (not installed)"
     elseif not enabledSet[spec.id] then
       return "warn", "Needs " .. spec.id .. " (disabled)"
+    -- installed and on, but not for THIS game: the loader skips the
+    -- dependency and the skip is contagious (Loader:_enforceDependencies),
+    -- so a mod that runs everywhere still does not run here
+    elseif version
+        and not ModTargets.runsHere(dep, version, nil, forcedFor(spec.id)) then
+      return "warn", "Needs " .. spec.id .. " (not for "
+        .. ModTargets.gameLabel(version) .. ")"
     elseif spec.range
         and not Semver.satisfies(dep.version, spec.range) then
       return "warn", "Needs " .. spec.id .. " " .. spec.range
@@ -82,34 +104,44 @@ local function statusFor(mods, id, enabledSet, enabled)
   return "ok", "Ready"
 end
 
--- deriveList(manifests, options) -> the panel row list, pure.
+-- deriveList(manifests, options [, version]) -> the panel row list, pure.
 -- manifests is an array of validated manifests (Manifest.validate output);
--- options is the options table (only options.mods is read).  Rows come back
--- sorted by id so the panel order is stable.
-function LauncherMods.deriveList(manifests, options)
-  local mods = options and options.mods or {}
+-- options is the options table (options.mods, options.modsByVersion and
+-- options.modsGen2 are read).  `version` is the game the panel is showing:
+-- nil keeps the pre-per-game view, where the shared flag is the whole answer.
+-- Rows come back sorted by id so the panel order is stable.
+function LauncherMods.deriveList(manifests, options, version)
   local ordered = {}
   for _, m in ipairs(manifests) do ordered[#ordered + 1] = m end
   table.sort(ordered, function(a, b) return a.id < b.id end)
 
+  -- the override is one answer per game (SaveData.modForced), the same scope
+  -- the loader resolves it under
+  local forcedFor = function(id)
+    return version and SaveData.modForced(options, id, version) or false
+  end
   local byId, enabledSet = {}, {}
   for _, m in ipairs(ordered) do
     byId[m.id] = m
-    -- missing entry means enabled, matching the loader -- except experimental
-    -- mods, which stay off until the player opts in
-    if mods[m.id] == false then
-      -- stay off
-    elseif mods[m.id] == true then
-      enabledSet[m.id] = true
-    elseif not m.experimental then
-      enabledSet[m.id] = true
-    end
+    -- this game's choice, then the shared flag, then the default: enabled,
+    -- matching the loader -- except experimental mods, which stay off until
+    -- the player opts in.  Scoped through modScope, so this reads exactly what
+    -- setEnabled writes and the loader loads: while per-game flags are a
+    -- preview the shared flag is the whole answer on every surface.
+    local decided = SaveData.modEnabled(options, m.id, SaveData.modScope(version))
+    if decided == nil then decided = not m.experimental end
+    if decided then enabledSet[m.id] = true end
   end
 
   local out = {}
   for _, m in ipairs(ordered) do
     local enabled = enabledSet[m.id] == true
-    local status, detail = statusFor(byId, m.id, enabledSet, enabled)
+    local forced = forcedFor(m.id)
+    local status, detail =
+      statusFor(byId, m.id, enabledSet, enabled, version, forcedFor)
+    -- nil, not false, when the panel is showing every game at once
+    local here = nil
+    if version then here = ModTargets.runsHere(m, version, nil, forced) end
     local raw = m.raw or {}
     local badge = tostring(raw.category or m.profile or "MOD"):upper()
     if m.experimental then badge = "EXPERIMENTAL" end
@@ -124,6 +156,10 @@ function LauncherMods.deriveList(manifests, options)
       statusDetail = detail,
       github = m.github,
       experimental = m.experimental == true,
+      -- what game this mod is for, and whether it will run on the one the
+      -- panel is showing (src/mods/ModTargets.lua)
+      targets = ModTargets.chip(m),
+      targetsHere = here,
     }
   end
   return out
@@ -239,13 +275,13 @@ local function discover()
   return out
 end
 
--- list() -> the mods-panel rows for the current install.  Reads the same
--- options.mods enable-state the loader persists, so a toggle here is what the
--- game sees on its next boot.
-function LauncherMods.list()
+-- list([version]) -> the mods-panel rows for the current install.  Reads the
+-- same enable-state the loader persists, so a toggle here is what the game
+-- sees on its next boot; `version` narrows that to one game's answers.
+function LauncherMods.list(version)
   local ok, result = pcall(function()
     local options = SaveData.loadOptions()
-    return LauncherMods.deriveList(discover(), options)
+    return LauncherMods.deriveList(discover(), options, version)
   end)
   if not ok then
     -- a single bad options/mod file must not blank the launcher
@@ -254,27 +290,101 @@ function LauncherMods.list()
   return result or {}
 end
 
--- setEnabled(id, enabled): persist options.mods[id] in the exact shape
--- Loader:_saveState writes (a plain boolean), so the running game and the
--- in-game ManagerState pick it up unchanged.
-function LauncherMods.setEnabled(id, enabled)
+-- ------- pre-boot translation strings
+--
+-- The launcher draws before Game:load, so the loader has not run and Strings
+-- has no catalog.  #767/#791 routed the launcher's text through Strings, but
+-- nothing filled the catalog this early, so a translation mod still could not
+-- reach the launcher however complete it was -- and no restart helped, because
+-- the ordering is the same on every launch.
+--
+-- This fills it, and deliberately does the smallest thing that can: one
+-- declarative file per enabled mod, lang/strings.lua, and never the entry
+-- chunk.  That keeps the promise the rest of this module is built on -- no mod
+-- behaviour runs before the game boots -- because a catalog is data.
+--
+-- It is still a mod-authored chunk, so it runs with an empty environment: a
+-- plain `return { ... }` evaluates fine, while anything reaching for love, io
+-- or os raises and is skipped rather than being trusted this early.
+--
+-- Game:load calls Strings.load(Data) again after the real merge, which
+-- replaces whatever this installed, so the two never disagree for long.
+local STRINGS_CATALOG = "lang/strings.lua"
+
+local function readStringsCatalog(path)
+  local fs = love and love.filesystem
+  if not (fs and fs.read) then return nil end
+  local rel = path .. "/" .. STRINGS_CATALOG
+  local raw = fs.read(rel)
+  if type(raw) ~= "string" or raw == "" then return nil end
+  local chunk = loadstring(raw, "@" .. rel)
+  if not chunk then return nil end
+  -- Lua 5.1/LuaJIT: no _ENV, so setfenv is the sandbox.
+  if setfenv then setfenv(chunk, {}) end
+  local ok, result = pcall(chunk)
+  if not ok or type(result) ~= "table" then return nil end
+  return result
+end
+
+-- deriveStrings(rows, byId, read) -> the merged catalog, pure.
+-- rows is deriveList's output, byId the id -> manifest map, and read(path) a
+-- reader returning that mod's catalog table (or nil).  Split out so the engine
+-- tier can table-drive the enable/precedence rules with no filesystem.
+function LauncherMods.deriveStrings(rows, byId, read)
+  local out, any = {}, false
+  for _, row in ipairs(rows or {}) do
+    local manifest = row.enabled and byId and byId[row.id] or nil
+    local catalog = manifest and manifest.path and read(manifest.path)
+    for source, value in pairs(catalog or {}) do
+      -- an empty value means "not translated yet", never "translate to
+      -- blank" -- the same rule the mod's own loader applies
+      if type(source) == "string" and type(value) == "string"
+          and value ~= "" then
+        out[source] = value
+        any = true
+      end
+    end
+  end
+  return any and out or nil
+end
+
+-- translationStrings() -> a source -> translation map for the launcher, or nil
+-- when no enabled mod ships one.  Enable-state and ordering are deriveList's,
+-- so a mod that wins a key here wins it at boot too.
+function LauncherMods.translationStrings()
+  local ok, merged = pcall(function()
+    local manifests = discover()
+    if #manifests == 0 then return nil end
+    local rows = LauncherMods.deriveList(manifests, SaveData.loadOptions())
+    local byId = {}
+    for _, m in ipairs(manifests) do byId[m.id] = m end
+    return LauncherMods.deriveStrings(rows, byId, readStringsCatalog)
+  end)
+  if not ok then return nil end
+  return merged
+end
+
+-- setEnabled(id, enabled [, version]): persist options.mods[id] in the exact
+-- shape Loader:_saveState writes (a plain boolean), so the running game and
+-- the in-game ManagerState pick it up unchanged.  With `version` the choice
+-- lands in that game's overlay instead and no other game moves.
+function LauncherMods.setEnabled(id, enabled, version)
   local options = SaveData.loadOptions()
-  options.mods = options.mods or {}
-  options.mods[id] = enabled and true or false
+  SaveData.setModEnabled(options, id, enabled, SaveData.modScope(version))
   SaveData.saveOptions(options)
   return true
 end
 
--- setAllEnabled(ids, enabled): the launcher's Enable all / Disable all buttons
--- (#647).  Writes exactly the options.mods shape setEnabled does, but loads and
+-- setAllEnabled(ids, enabled [, version]): the launcher's Enable all / Disable
+-- all buttons (#647).  Writes what setEnabled writes, but loads and
 -- saves once for the whole list: saveOptions rewrites the whole options file per
 -- call, so looping setEnabled over a big mods folder is one disk write per mod
 -- and leaves a half-applied state behind if one of them fails.
-function LauncherMods.setAllEnabled(ids, enabled)
+function LauncherMods.setAllEnabled(ids, enabled, version)
   local options = SaveData.loadOptions()
-  options.mods = options.mods or {}
+  local scope = SaveData.modScope(version)
   for _, id in ipairs(ids or {}) do
-    options.mods[id] = enabled and true or false
+    SaveData.setModEnabled(options, id, enabled, scope)
   end
   SaveData.saveOptions(options)
   return true
@@ -282,10 +392,18 @@ end
 
 -- ------- install (love.filesystem)
 
--- Read a .zip source into bytes.  A string is an external absolute path (like
--- a chosen ROM) read with io.*, falling back to a save-dir-relative
--- love.filesystem read; a love DroppedFile is opened the way RomImporter
--- ingests dropped ROMs.
+-- Read a .zip source into bytes.  Save-dir-relative paths (inbox /
+-- picked_mod.zip) prefer love.filesystem so NX/Android never hit a cwd-relative
+-- io.open that can see a different file than PhysFS.  Absolute host paths
+-- (desktop picker) still use io.*.  DroppedFile matches RomImporter ROM drops.
+local function isHostAbsolutePath(path)
+  return type(path) == "string" and (
+      path:match("^/")
+      or path:match("^%a:[/\\]")
+      or path:match("^[Ss][Dd][Mm][Cc]:")
+    )
+end
+
 local function readArchive(source)
   local t = type(source)
   if (t == "userdata" or t == "table") and type(source.open) == "function" then
@@ -297,6 +415,10 @@ local function readArchive(source)
     return data
   end
   if t == "string" then
+    if not isHostAbsolutePath(source) and love and love.filesystem then
+      local data = love.filesystem.read(source)
+      if data then return data end
+    end
     local f = io.open(source, "rb")
     if f then
       local data = f:read("*a")
@@ -311,6 +433,12 @@ local function readArchive(source)
     return nil, "could not open " .. source
   end
   return nil, "unsupported archive source"
+end
+
+-- Local PK\3\4 / empty-file check before mount (corrupt MTP / AppleDouble).
+local function zipLooksValid(data)
+  if type(data) ~= "string" or #data < 4 then return false end
+  return data:sub(1, 2) == "PK"
 end
 
 -- Shallow listing of a mounted archive shaped for locateRoot: files by name,
@@ -380,6 +508,33 @@ local function removeTree(path)
   -- save-directory twin too or that copy would keep the mod alive; outside
   -- portable mode this repeats the delete CacheFs just did and no-ops.
   fs.remove(path)
+end
+
+-- Every mods/ folder currently holding this id, plus the bare mods/<id> tree
+-- even when its manifest is missing or unreadable.  Second return: whether any
+-- of them carries a manifest the panel can actually list.  An install names
+-- its dest after the manifest id, but a hand-unzipped copy keeps whatever
+-- folder name the archive carried, and discover()'s first-id-wins rule means
+-- whichever folder physfs happens to enumerate first is the one the panel and
+-- the loader really use.  Replacing only mods/<id> let an update report
+-- success while the old copy kept winning that race (#801); and a
+-- manifest-less mods/<id> left by an interrupted copy blocked every re-import
+-- as "already installed" while showing nowhere the player could see (#834).
+local function sameIdTrees(fs, id)
+  local out, installed = {}, false
+  if not fs.getInfo("mods") then return out, installed end
+  for _, name in ipairs(fs.getDirectoryItems("mods")) do
+    local path = "mods/" .. name
+    local raw = fs.read(path .. "/manifest.json")
+    local manifest = raw and decodeManifest(raw, path)
+    if manifest and manifest.id == id then
+      out[#out + 1] = path
+      installed = true
+    elseif name == id and fs.getInfo(path) then
+      out[#out + 1] = path
+    end
+  end
+  return out, installed
 end
 
 -- ------- strays: mods dropped beside the game that it cannot see
@@ -510,21 +665,44 @@ function LauncherMods._installZipInner(source, opts)
   local fs = love.filesystem
   local data, readErr = readArchive(source)
   if not data then return nil, readErr end
-
-  -- stage into a save-dir temp so mount can reach it
-  local tmp = ("mod_import_%d_%d.zip"):format(os.time(), math.random(0, 999999))
-  local ok, writeErr = fs.write(tmp, data)
-  if not ok then
-    return nil, "could not stage the .zip: " .. tostring(writeErr)
+  if not zipLooksValid(data) then
+    local label = type(source) == "string" and (source:match("[^/\\]+$") or source)
+      or "archive"
+    return nil, "not a zip file: " .. tostring(label)
+      .. " (need a real .zip; skip Mac ._ files from MTP)"
   end
+
+  -- Prefer in-memory mount (PHYSFS_mountMemory via FileData). Avoids Horizon's
+  -- "file already open" failure when write-then-mount reopens a save-dir zip.
   local mount = "mod_import_mount"
-  if not fs.mount(tmp, mount) then
-    fs.remove(tmp)
-    return nil, "that .zip could not be opened"
+  local tmp = nil
+  local mountKey = nil
+  local mounted = false
+  if fs.newFileData then
+    local archiveName = ("mod_import_%d_%d.zip"):format(
+      os.time(), math.random(0, 999999))
+    local okFd, fd = pcall(fs.newFileData, data, archiveName)
+    if okFd and fd and fs.mount(fd, mount) then
+      mounted = true
+      mountKey = fd
+    end
+  end
+  if not mounted then
+    -- Fallback: stage into a save-dir temp so path-mount can reach it.
+    tmp = ("mod_import_%d_%d.zip"):format(os.time(), math.random(0, 999999))
+    local ok, writeErr = fs.write(tmp, data)
+    if not ok then
+      return nil, "could not stage the .zip: " .. tostring(writeErr)
+    end
+    if not fs.mount(tmp, mount) then
+      fs.remove(tmp)
+      return nil, "that .zip could not be opened"
+    end
+    mountKey = tmp
   end
   local function cleanup()
-    pcall(fs.unmount, tmp)
-    fs.remove(tmp)
+    pcall(fs.unmount, mountKey)
+    if tmp then fs.remove(tmp) end
   end
 
   local prefix, rootErr = LauncherMods.locateRoot(topLevelPaths(mount))
@@ -551,16 +729,21 @@ function LauncherMods._installZipInner(source, opts)
   end
 
   local dest = "mods/" .. manifest.id
-  if fs.getInfo(dest) then
-    if not opts.replace then
-      cleanup()
-      return nil, "a mod named '" .. manifest.id .. "' is already installed"
-    end
-    -- drop the old tree before copy; enable-flag is preserved (uninstall
-    -- would clear it, which would surprise an update)
+  local existing, installedSomewhere = sameIdTrees(fs, manifest.id)
+  if installedSomewhere and not opts.replace then
+    cleanup()
+    return nil, "a mod named '" .. manifest.id .. "' is already installed"
+  end
+  if #existing > 0 then
+    -- drop every old tree before copy -- mods/<id> and any same-id folder
+    -- under another name, or the survivor keeps winning discover()'s
+    -- first-id-wins race after the "successful" update (#801).  A tree with
+    -- no readable manifest is debris from an interrupted copy: it never
+    -- refuses the install, it only gets cleared (#834).  Enable-flag is
+    -- preserved (uninstall would clear it, which would surprise an update).
     local savedPrefix = CacheFs.prefix
     CacheFs.prefix = ""
-    removeTree(dest)
+    for _, path in ipairs(existing) do removeTree(path) end
     CacheFs.prefix = savedPrefix
   end
 
@@ -611,6 +794,30 @@ function LauncherMods.installFromRelease(modId, release)
   return result, err
 end
 
+-- The install half of installFromRelease, split out so the launcher can run
+-- the DOWNLOAD half asynchronously (src/net/Fetch.lua) and still land in the
+-- same place.  `localPath` is a love.filesystem-relative path to an already
+-- downloaded zip; it is consumed (removed) either way.
+-- Returns true, version | nil, errString.
+function LauncherMods.installDownloadedZip(modId, localPath, version)
+  local ok, result, err = pcall(function()
+    if type(modId) ~= "string" or modId == "" then
+      return nil, "missing mod id"
+    end
+    if type(localPath) ~= "string" or localPath == "" then
+      return nil, "missing downloaded archive"
+    end
+    local installed, res = LauncherMods.installZip(localPath, {
+      replace = true, expectId = modId,
+    })
+    pcall(love.filesystem.remove, localPath)
+    if not installed then return nil, res end
+    return true, version or res
+  end)
+  if not ok then return nil, "install failed: " .. tostring(result) end
+  return result, err
+end
+
 -- Install a mod listed in a community index (src/mods/ModIndex.lua).
 -- The index only ever tells us WHERE the zip is; resolving that URL is
 -- ModIndex's job and installing it is installFromRelease's, so this is the
@@ -650,14 +857,17 @@ function LauncherMods.uninstall(id)
     return nil, "mod uninstall needs LOVE"
   end
   local fs = love.filesystem
-  local dest = "mods/" .. id
-  if not fs.getInfo(dest) then
+  local trees = sameIdTrees(fs, id)
+  if #trees == 0 then
     return nil, "mod '" .. id .. "' is not installed"
   end
-  -- same root pin as installZip: the mods tree is not version-prefixed (#330)
+  -- same root pin as installZip: the mods tree is not version-prefixed (#330).
+  -- Every same-id tree goes, folder name notwithstanding, so Delete works on a
+  -- hand-unzipped copy too and cannot leave a shadow copy for discover()'s
+  -- first-id-wins rule to resurrect on the next boot (#801)
   local savedPrefix = CacheFs.prefix
   CacheFs.prefix = ""
-  removeTree(dest)
+  for _, path in ipairs(trees) do removeTree(path) end
   CacheFs.prefix = savedPrefix
   -- Drop the enable flag so a reinstall of the same id starts from the
   -- loader's default (enabled) rather than a stale false.

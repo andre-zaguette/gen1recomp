@@ -53,7 +53,7 @@ local function makeGame(party)
   function stack:top() return self.states[#self.states] end
   return { data = Data, save = save, stack = stack,
            input = { wasPressed = function() return true end,
-                     isDown = function() return false end } }
+                     isDown = function() return true end } }
 end
 
 local function pump(battle, limit)

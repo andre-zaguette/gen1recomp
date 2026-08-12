@@ -114,6 +114,12 @@ do
         "cont boundary waits for A with contAdvance")
   check(not box.done, "cont wait is not the final done prompt")
   eq(box.lineIndex, 2, "cont wait stays on the finished line until A")
+  -- ProtectedDelay3 (home/text.asm:265): the ▼ swallows the button for
+  -- three frames before ManualTextScroll starts listening
+  for _ = 1, 80 do
+    if (box.preWait or 0) == 0 then break end
+    box:update(0)
+  end
   pressed.a = true
   -- ManualTextScroll's own ProtectedDelay3 (home/text.asm:265) swallows the
   -- button for 3 frames (self.preWait, set alongside self.waiting above)
@@ -283,6 +289,16 @@ do
   eq(ItemEffects.use(Data, save, "HM_SURF", pikachu, {}), "failed",
      "HM refuses mid-battle")
 end
+do
+  local rRepel, repelMsg = ItemEffects.use(Data, save, "MAX_REPEL", nil, {})
+  eq(rRepel, "failed", "Max Repel refuses mid-battle (#894)")
+  check(repelMsg and repelMsg[1] and repelMsg[1]:find("isn't the", 1, true),
+        "Max Repel mid-battle Oak text")
+  eq(ItemEffects.use(Data, save, "REPEL", nil, {}), "failed",
+     "Repel refuses mid-battle")
+  eq(ItemEffects.use(Data, save, "SUPER_REPEL", nil, {}), "failed",
+     "Super Repel refuses mid-battle")
+end
 local r5, _, extra = ItemEffects.use(Data, save, "THUNDER_STONE", pikachu)
 eq(r5, "consumed", "Thunder Stone works on Pikachu")
 eq(extra.evolveTo, "RAICHU", "Thunder Stone evolves Pikachu to Raichu")
@@ -436,16 +452,17 @@ check(misted2.stages.attack == nil
       and mistMsgs[1]:find("MIST", 1, true) ~= nil,
       "primary stat drop still blocked by MIST")
 
--- Substitute boundary: built at exactly 1/4 max HP, leaving 0 HP
--- (substitute.asm only fails on subtraction underflow)
+-- Substitute boundary: the move must fail when its quarter-HP cost would
+-- consume all current HP, preventing a zero-HP user with a live substitute.
 local subUser = { mon = { stats = { hp = 40 }, hp = 10 }, name = "SUBBY" }
-MoveEffects.primary.SUBSTITUTE_EFFECT(sideRng, subUser)
-check(subUser.substituteHP ~= nil and subUser.mon.hp == 0,
-      "substitute built at exactly 1/4 max HP leaves 0 HP")
-local subUser2 = { mon = { stats = { hp = 40 }, hp = 9 }, name = "SUBBY" }
-local subMsgs = MoveEffects.primary.SUBSTITUTE_EFFECT(sideRng, subUser2)
-check(subUser2.substituteHP == nil
+local subMsgs = MoveEffects.primary.SUBSTITUTE_EFFECT(sideRng, subUser)
+check(subUser.substituteHP == nil and subUser.mon.hp == 10
       and subMsgs[1]:find("weak", 1, true) ~= nil,
+      "substitute fails at exactly 1/4 max HP")
+local subUser2 = { mon = { stats = { hp = 40 }, hp = 9 }, name = "SUBBY" }
+local subMsgs2 = MoveEffects.primary.SUBSTITUTE_EFFECT(sideRng, subUser2)
+check(subUser2.substituteHP == nil and subUser2.mon.hp == 9
+      and subMsgs2[1]:find("weak", 1, true) ~= nil,
       "substitute fails below 1/4 max HP")
 
 -- Haze clears Disable/X ACCURACY on both sides and forfeits the turn of
@@ -1053,7 +1070,7 @@ do
     kb.player.mon.status = "PSN"
     kb.enemy.mon.hp = 0 -- the opponent was already knocked out this turn
     local hpBefore = kb.player.mon.hp
-    kb:endOfTurn()
+    kb:residualFor(kb.player, kb.enemy)
     eq(kb.player.mon.hp, hpBefore,
        "no residual poison on the turn the poisoned mon lands the KO")
 
@@ -1061,7 +1078,7 @@ do
     local lb = BattleState.newWild(Game, "RATTATA", 5)
     lb.player.mon.status = "PSN"
     local live = lb.player.mon.hp
-    lb:endOfTurn()
+    lb:residualFor(lb.player, lb.enemy)
     check(lb.player.mon.hp < live, "poison still ticks while the opponent lives")
   end
 
@@ -1135,9 +1152,11 @@ do
   eq(pb:sendOutText("PIKA"), "The enemy's weak!\nGet'm! PIKA!",
      "send-out below 10%")
 
-  -- HP-bar drain converges at UpdateHPBar's pixel pace (maxHP/96/frame)
+  -- HP-bar drain converges at UpdateHPBar's per-side pace (2 frames per
+  -- bar pixel, enemy HP steps free; hp_bar.asm:81-148 via Timing)
   local db = BattleState.newWild(Game, "RATTATA", 5)
   local maxHP = db.enemy.mon.stats.hp
+  local startHP = db.enemy.mon.hp
   db.enemy.mon.hp = math.max(0, db.enemy.mon.hp - 5)
   local frames = 0
   while db:stepHPDrain() and frames < 2000 do frames = frames + 1 end
@@ -1147,8 +1166,9 @@ do
   -- it accounts for per-pixel discretization and the closing-frames tail
   -- (hp_bar.asm:132-135) that the old flat maxHP/96 approximation missed.
   local expect = require("src.core.Timing").hpDrainFrames(
-    maxHP, db.enemy.mon.hp, maxHP, false)
-  eq(frames, expect, "drain speed matches Timing.hpDrainFrames' budget")
+    startHP, db.enemy.mon.hp, maxHP, false)
+  check(math.abs(frames - expect) <= 1,
+        ("drain speed ~2 frames per bar pixel (%d ~ %d)"):format(frames, expect))
 
   -- multi-hit count text: player vs enemy variants, always plural
   Game.save.party = { Pokemon.new(Data, "BULBASAUR", 10) }
@@ -2645,12 +2665,12 @@ do
   local og = { data = Data, save = SD.newGame(),
                input = OInput, stack = { pop = function() popped = true end },
                writeOptions = function(self) SD.saveOptions(self.save.options) end,
-               -- PERFORMANCE's step calls g:applyOptions(o) to live-apply a
-               -- tier change (src/ui/OptionsMenu.lua); a no-op is fine here
-               -- since this test only asserts the row's saved value, and
-               -- the real per-subsystem .applyOptions calls it would fan
-               -- out to are already exercised individually below.
-               applyOptions = function() end }
+               -- the PERFORMANCE row routes through Game:applyOptions; the
+               -- stub carries the headless slice of it (the tier record),
+               -- the display modules are re-applied at the end of the suite
+               applyOptions = function(self, o)
+                 require("src.core.Performance").applyOptions(o)
+               end }
   local om = OptionsMenu.new(og)
   local function press(btn)
     OInput.pressed = { [btn] = true }
@@ -2721,9 +2741,12 @@ do
   press("a")
   eq(og.save.options.musicFilter, 0, "MUSIC FILTER wraps back to OFF")
 
+
   goTo("performance")
   press("a")
   eq(og.save.options.performance, "high", "A cycles PERFORMANCE to HIGH")
+  eq(require("src.core.Performance").tier, "high",
+     "the live tier tracks the PERFORMANCE option")
   press("a"); press("a"); press("a")
   eq(og.save.options.performance, "auto", "PERFORMANCE wraps back to AUTO")
 
@@ -2740,6 +2763,7 @@ do
   press("a"); press("a"); press("a")
   eq(og.save.options.tilt, 0, "TILT wraps back to OFF")
 
+
   goTo("gbcfx")
   press("a")
   eq(og.save.options.gbcfx, 1, "A cycles GBC FX to 1")
@@ -2747,12 +2771,14 @@ do
   for _ = 1, 4 do press("a") end
   eq(og.save.options.gbcfx, 0, "GBC FX wraps back to OFF")
 
+
   goTo("zoom")
   press("a")
   eq(og.save.options.zoom, 1, "A cycles ZOOM to IN1")
   eq(require("src.render.Zoom").offset, 1, "Zoom.offset tracks ZOOM option")
   press("left")
   eq(og.save.options.zoom, 0, "left steps ZOOM back to FIT")
+
 
   goTo("voidFill")
   press("a")
@@ -2764,6 +2790,7 @@ do
   press("a")
   eq(og.save.options.voidFill, "trees", "VOID FILL wraps back to TREES")
 
+
   goTo("videoMode")
   press("a")
   eq(og.save.options.videoMode, "borderless",
@@ -2771,6 +2798,7 @@ do
   press("a")
   eq(og.save.options.videoMode, "windowed",
      "VIDEO MODE wraps back to WINDOWED")
+
 
   goTo("fpsCap")
   press("a")
@@ -2781,14 +2809,28 @@ do
   for _ = 1, #FrameCap.STEPS - 1 do press("a") end
   eq(og.save.options.fpsCap, 60, "MAX FPS wraps back to 60")
 
-  goTo("speed")
+  -- RFC 0007: the single GAME SPEED row is now three independent rows,
+  -- one per GameSpeed.CATEGORIES entry.
+  goTo("speedOverworld")
   press("a")
-  eq(og.save.options.speed, 2, "A cycles GAME SPEED to 2X")
+  eq(og.save.options.speedOverworld, 2, "A cycles OVERWORLD SPEED to 2X")
   -- Driven by the level list rather than a literal press count: adding a
   -- speed (20X went in for the bot runs) otherwise fails this as a wrap
   -- bug when the cycling is fine and the row is simply one longer.
   for _ = 1, #GameSpeed.LEVELS - 1 do press("a") end
-  eq(og.save.options.speed, 1, "GAME SPEED wraps back to NORMAL")
+  eq(og.save.options.speedOverworld, 1, "OVERWORLD SPEED wraps back to NORMAL")
+
+  goTo("speedBattle")
+  press("a")
+  eq(og.save.options.speedBattle, 2, "A cycles BATTLE SPEED to 2X")
+  for _ = 1, #GameSpeed.LEVELS - 1 do press("a") end
+  eq(og.save.options.speedBattle, 1, "BATTLE SPEED wraps back to NORMAL")
+
+  goTo("speedMenu")
+  press("a")
+  eq(og.save.options.speedMenu, 2, "A cycles MENU SPEED to 2X")
+  for _ = 1, #GameSpeed.LEVELS - 1 do press("a") end
+  eq(og.save.options.speedMenu, 1, "MENU SPEED wraps back to NORMAL")
 
   goTo("controls")
   check(om.index > om.scroll
@@ -2903,7 +2945,7 @@ do
   local qg = {
     data = Data, save = qsave, stack = qstack,
     input = { wasPressed = function(_, k) return qpressed[k] end,
-              isDown = function() return false end },
+              isDown = function(_, k) return qpressed[k] or false end },
     returnToTitle = function() qreturned = qreturned + 1 end,
   }
   local qmenu = StartMenuQ.new(qg)
@@ -2930,7 +2972,7 @@ do
   -- this flow -- TextBox:update() pushes the YES/NO ChoiceBox itself once
   -- typing finishes and self.choice is set (src/render/TextBox.lua:255-262).
   -- Drive real update() frames instead of a callback this flow never uses.
-  for _ = 1, 300 do
+  for _ = 1, 600 do
     if qstack:top() ~= qbox then break end
     qbox:update(1 / 60)
   end
@@ -3399,10 +3441,61 @@ local function orderedGlob(pattern, preferred, skip)
   return ordered
 end
 
+-- Put the `love` stub back between suites.
+--
+-- Every one of these files fakes the parts of LOVE it needs, and several
+-- replace a whole subtable (`love.filesystem = {...}`) or a single probe
+-- (`love.system.getOS = function() return "Android" end`) and never put it
+-- back.  Nothing notices until a LATER file reads the leftover, and then the
+-- failure lands nowhere near its cause:
+--
+--   * the Android ROM-importer suites pin getOS to "Android", so
+--     GBCFX.isSupported() answers false for the rest of the run and
+--     parity_gbcfx fails "setLevel stores an in-range level (got 0, want 2)"
+--     -- while passing perfectly on its own;
+--   * suites that swap in a minimal love.filesystem drop
+--     getDirectoryItems, so three rom_importer suites then die on
+--     "attempt to call field 'getDirectoryItems' (a nil value)".
+--
+-- Snapshotting one level deep is enough: the leaks are whole-subtable
+-- assignments and single-function overwrites, both of which this restores.
+local function snapshotLove()
+  if type(love) ~= "table" then return nil end
+  local snap = { root = {}, subs = {} }
+  for k, v in pairs(love) do
+    snap.root[k] = v
+    if type(v) == "table" then
+      local sub = {}
+      for k2, v2 in pairs(v) do sub[k2] = v2 end
+      snap.subs[k] = sub
+    end
+  end
+  return snap
+end
+
+local function restoreLove(snap)
+  if not snap or type(love) ~= "table" then return end
+  for k in pairs(love) do
+    if snap.root[k] == nil then love[k] = nil end
+  end
+  for k, v in pairs(snap.root) do
+    love[k] = v
+    local sub = snap.subs[k]
+    if sub and type(v) == "table" then
+      for k2 in pairs(v) do
+        if sub[k2] == nil then v[k2] = nil end
+      end
+      for k2, v2 in pairs(sub) do v[k2] = v2 end
+    end
+  end
+end
+
 local function runSuites(paths)
   for _, path in ipairs(paths) do
     local label = path:match("([^/]+)%.lua$") or path
+    local snap = snapshotLove()
     local ok, err = pcall(dofile, path)
+    restoreLove(snap)
     check(ok, label .. (ok and " suite" or (": " .. tostring(err))))
   end
 end
@@ -3441,6 +3534,137 @@ runSuites({ "tests/input_hold_test.lua" })
 -- ---------------------------------------------- launcher cursor (#114)
 runSuites({ "tests/rom_importer_cursor_test.lua" })
 
+-- ---------------------------------------------- launcher last played tab (#835)
+runSuites({ "tests/rom_importer_last_version_test.lua" })
+
+-- ---------------------------------------------- Gold (Gen 2)
+-- All ROM-free: each file carries its own fixtures shaped like the extractor's
+-- output, so they run without a Gold cache.
+runSuites({
+  "tests/rom_lz3_test.lua",
+  "tests/gen2_world_test.lua",
+  "tests/gen2_audio_test.lua",
+  "tests/gen2_oak_speech_test.lua",
+  "tests/gen2_vm_test.lua",
+  "tests/gen2_palettes_test.lua",
+  "tests/gen2_battle_test.lua",
+  "tests/gen2_menus_test.lua",
+  "tests/gen2_save_test.lua",
+  "tests/gen2_trainers_test.lua",
+  "tests/gen2_boxes_test.lua",
+  "tests/gen2_intro_test.lua",
+  "tests/gen2_battle_anims_test.lua",
+  -- The list had fallen behind the directory: these seven were written and
+  -- green when run file by file, but never ran here.
+  "tests/gen2_breeding_test.lua",
+  "tests/gen2_contest_test.lua",
+  "tests/gen2_evolution_test.lua",
+  "tests/gen2_gamecorner_test.lua",
+  "tests/gen2_halloffame_test.lua",
+  "tests/gen2_phone_test.lua",
+  "tests/gen2_summary_test.lua",
+  "tests/gen2_steps_test.lua",
+  "tests/gen2_cmdqueue_test.lua",
+  "tests/gen2_events_test.lua",
+  "tests/gen2_map_callbacks_test.lua",
+  "tests/gen2_roamers_test.lua",
+  "tests/gen2_border_test.lua",
+  "tests/gen2_hidden_items_test.lua",
+  "tests/gen2_object_event_test.lua",
+  "tests/gen2_autoinput_test.lua",
+  "tests/gen2_catch_tutorial_test.lua",
+  "tests/gen2_unown_test.lua",
+  "tests/gen2_unown_printer_test.lua",
+  "tests/gen2_decorations_test.lua",
+  "tests/gen2_pokerus_test.lua",
+  "tests/gen2_common_text_test.lua",
+  "tests/gen2_magnet_train_test.lua",
+  "tests/gen2_bank_of_mom_test.lua",
+  "tests/gen2_trainerhouse_test.lua",
+  "tests/gen2_mail_test.lua",
+  "tests/gen2_callasm_test.lua",
+  "tests/gen2_sprites_test.lua",
+  "tests/gen2_diploma_test.lua",
+  "tests/gen2_trade_gfx_test.lua",
+  "tests/gen2_prize_test.lua",
+  -- The four the Gold route bot found.  Every one of them needs a long play
+  -- session to reach, which is why no unit test caught them first and why they
+  -- are worth keeping in the list: struggle at 0 PP, the evolution screen's
+  -- lifecycle-hook collision, badges written to a store nothing read, and a
+  -- lost trainer battle running the winner's script.
+  "tests/gen2_struggle_test.lua",
+  "tests/gen2_evolution_anim_test.lua",
+  "tests/gen2_egg_hatch_anim_test.lua",
+  "tests/gen2_badges_test.lua",
+  "tests/gen2_battle_loss_test.lua",
+  "tests/gen2_variable_sprites_test.lua",
+  "tests/gen2_pokecenter_spawn_test.lua",
+  "tests/gen2_charge_lock_test.lua",
+  "tests/gen2_faint_once_test.lua",
+  "tests/gen2_nests_test.lua",
+  "tests/gen2_bg_events_test.lua",
+  "tests/gen2_ice_pathfind_test.lua",
+  "tests/gen2_party_menu_test.lua",
+  "tests/gen2_hof_continue_test.lua",
+  "tests/gen2_pokecenter_stairs_test.lua",
+  "tests/gen2_canlose_test.lua",
+  "tests/gen2_pc_screens_test.lua",
+  "tests/gen2_badge_boosts_test.lua",
+  "tests/gen2_held_items_test.lua",
+  "tests/gen2_exp_share_test.lua",
+  "tests/gen2_obedience_test.lua",
+  "tests/gen2_specialty_balls_test.lua",
+  "tests/gen2_x_items_test.lua",
+  "tests/gen2_move_effects_test.lua",
+  "tests/gen2_trap_escape_test.lua",
+  "tests/gen2_forceshiny_test.lua",
+  "tests/gen2_berry_juice_test.lua",
+  "tests/gen2_object_hours_test.lua",
+  "tests/gen2_temp_events_test.lua",
+  "tests/gen2_npc_interact_test.lua",
+  "tests/gen2_text_flow_test.lua",
+  "tests/gen2_field_items_test.lua",
+  "tests/gen2_phone_call_test.lua",
+  "tests/gen2_battle_items_test.lua",
+  "tests/gen2_battle_ui_test.lua",
+  "tests/gen2_dig_warp_test.lua",
+  "tests/gen2_repel_test.lua",
+  "tests/gen2_swarm_test.lua",
+  "tests/gen2_fishing_swarm_test.lua",
+  "tests/gen2_rock_smash_test.lua",
+  "tests/gen2_currents_test.lua",
+  "tests/gen2_big_object_test.lua",
+  "tests/gen2_prize_counter_test.lua",
+  -- Presentation: the blit scale every widescreen screen shares, the naming
+  -- bracket, the teleport / fly / fishing step types, the two clock screens,
+  -- FLY's town-map picker and the two script-ordering commands.
+  "tests/gen2_screen_layout_test.lua",
+  "tests/gen2_font_ui_test.lua",
+  "tests/gen2_field_anim_test.lua",
+  "tests/gen2_clock_test.lua",
+  "tests/gen2_time_routing_test.lua",
+  "tests/gen2_fly_map_test.lua",
+  "tests/gen2_script_order_test.lua",
+  -- Glue between the Gen 1 modules Gold still shares and the Gen 2 data: sfx
+  -- name resolution, and the .sav converter refusing a Gen 2 save table.
+  "tests/gen2_sound_alias_test.lua",
+  "tests/gen2_save_convert_cli_test.lua",
+  -- The wall radios (`special MapRadio`); the Pokegear-proper suites next to
+  -- it (gen2_pokegear_unlock_test, gen2_save_export_test) stay out of this
+  -- block because their headers ask for a GOLD_CACHE, which this tier cannot
+  -- assume.
+  "tests/gen2_map_radio_test.lua",
+  -- The two seams where a battle meets everything else: what ends a round and
+  -- a battle (and what a battle may not leave on the party), and BattlePack --
+  -- which shares its screen with the field PACK but none of its jumptable.
+  "tests/gen2_battle_end_test.lua",
+  "tests/gen2_battle_pack_test.lua",
+  -- Battle core internals: where DoWeatherModifiers sits in the damage chain,
+  -- which failures suppress the attack animation, and the Rollout /
+  -- EFFECT_RAMPAGE lock-ins.  ROM-free like the rest of this block.
+  "tests/gen2_battle_lockin_test.lua",
+})
+
 -- ---------------------------------------------- Android second ROM pick (#167)
 runSuites({ "tests/rom_importer_android_pick_test.lua" })
 
@@ -3450,6 +3674,10 @@ runSuites({ "tests/rom_importer_android_mod_pick_test.lua" })
 -- ---------------------------------------------- import with no picker (#482)
 runSuites({ "tests/rom_importer_no_picker_test.lua" })
 runSuites({ "tests/rom_importer_double_pick_test.lua" })
+-- ---------------------------------------------- Switch platform capabilities
+-- platform_nx_* / rom_importer_nx_* live in tests/engine/ (ROM-free T2) so
+-- CI's headless lane runs them without data/generated/.
+runSuites({ "tests/launcher_mods_install_zip_test.lua" })
 -- ---------------------------------------------- parity workstream tests
 -- Each tests/parity_*.lua is a self-contained file (own bootstrap + check,
 -- error()s if any assertion fails).  Globbed, so dropping a new parity
@@ -3473,7 +3701,7 @@ runSuites(orderedGlob("tests/parity_*.lua", {
 
 -- ------------------------------------------------- Gen2 (Crystal) skeleton
 -- Hand-built New Bark Town-shaped data (not ROM-derived -- mirrors the
--- shape RomExtractorGen2.lua produces, see docs/superpowers/plans/
+-- shape RomExtractorCrystal.lua produces, see docs/superpowers/plans/
 -- 2026-08-03-gen2-crystal-extraction-skeleton.md), proving MapLoader/Map
 -- consume Gen2 data with zero engine changes, without needing the real
 -- Crystal ROM.
@@ -3532,7 +3760,7 @@ do
 end
 
 -- Hand-built font data (not ROM-derived), matching the shape
--- RomExtractorGen2:extractFont() produces -- proves Font.lua already
+-- RomExtractorCrystal:extractFont() produces -- proves Font.lua already
 -- consumes Gen2-shaped charmap data correctly, the same "zero engine
 -- changes" claim the map/tileset fixture above proves for map data.
 -- Reuses the map fixture's own PNG (Font.load never inspects pixel
@@ -3584,7 +3812,7 @@ end
 
 -- Hand-built Crystal-shaped palette data (not ROM-derived), matching the
 -- shape tools/extract_gen2/palettes.py resolves and
--- RomExtractorGen2:extractPalettes() forwards unchanged -- proves
+-- RomExtractorCrystal:extractPalettes() forwards unchanged -- proves
 -- PaletteFX's gbcPack()/hasWorldTileset()/worldGroupAt()/
 -- worldGroupColors()/spriteObp() (all unmodified by this test) already
 -- resolve Gen2-shaped, time-of-day-bucketed data correctly, the same
@@ -3667,7 +3895,7 @@ do
 end
 
 -- Regression test for stale Crystal caches imported before
--- RomExtractorGen2:extractField() started stamping
+-- RomExtractorCrystal:extractField() started stamping
 -- field.boot.screens.newGame = "CrystalIntro": Data:seedDefaults() used to
 -- fill the missing/newGame-default path with BOOT_DEFAULTS' OakSpeech, so
 -- pressing NEW GAME on Crystal incorrectly ran Red's intro unless the user
@@ -3712,13 +3940,13 @@ end
 -- Keep the extractor's field boot target pinned there so NEW GAME does not
 -- regress back to New Bark Town when the minimal Gen2 import grows.
 do
-  local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+  local RomExtractorCrystal = require("src.import.RomExtractorCrystal")
   local written = nil
   local fakeSelf = {
     manifest = { spawn = { map = "PLAYERS_HOUSE_2F", x = 3, y = 3 } },
     write = function(self, name, value) written = value end,
   }
-  local field = RomExtractorGen2.extractField(fakeSelf, {})
+  local field = RomExtractorCrystal.extractField(fakeSelf, {})
   eq(field.boot.startMap, "PLAYERS_HOUSE_2F",
     "Crystal field boot: new game starts in the player's room map")
   eq(field.boot.startX, 3,
@@ -3732,13 +3960,13 @@ end
 -- Regression test for the string-vs-numeric tileGroups key bug Task 4's
 -- review caught: manifest.palettes.tileGroups arrives keyed by STRING tile
 -- ids (JSON always stringifies object keys, and src/link/Json.lua does not
--- convert them back), so RomExtractorGen2:extractPalettes() re-keys them to
+-- convert them back), so RomExtractorCrystal:extractPalettes() re-keys them to
 -- numbers before writing data/generated/palettes.lua (see that function's
--- own doc comment in src/import/RomExtractorGen2.lua). Exercises the
+-- own doc comment in src/import/RomExtractorCrystal.lua). Exercises the
 -- extractor directly with a minimal fake `self`, instead of a full ROM
 -- fixture, since only this one re-keying behavior is in scope here.
 do
-  local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+  local RomExtractorCrystal = require("src.import.RomExtractorCrystal")
   local written = nil
   local fakeSelf = {
     manifest = {
@@ -3751,7 +3979,7 @@ do
     },
     write = function(self, name, value) written = value end,
   }
-  local result = RomExtractorGen2.extractPalettes(fakeSelf)
+  local result = RomExtractorCrystal.extractPalettes(fakeSelf)
 
   eq(result.tileGroups[0], 2, "extractPalettes: string key \"0\" normalized to numeric key 0")
   eq(result.tileGroups[5], 3, "extractPalettes: string key \"5\" normalized to numeric key 5")

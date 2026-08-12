@@ -97,7 +97,7 @@ end
 -- destinations, which compacts the array -- a later warp_event elsewhere
 -- naming "warp N of this map" by ROM order would then hit the wrong slot
 -- (or nil) via plain positional indexing, so those entries carry their own
--- romIndex (RomExtractorGen2.lua's extractMap) and get matched by that
+-- romIndex (RomExtractorCrystal.lua's extractMap) and get matched by that
 -- instead.
 local function findWarp(warps, idx)
   if not warps then return nil end

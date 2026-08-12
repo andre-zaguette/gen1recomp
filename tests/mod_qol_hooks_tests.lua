@@ -11,6 +11,8 @@ local Stats = require("src.pokemon.Stats")
 local Zoom = require("src.render.Zoom")
 local ListMenu = require("src.ui.ListMenu")
 local NamingScreen = require("src.ui.NamingScreen")
+local TextBox = require("src.render.TextBox")
+local PartyMenu = require("src.ui.PartyMenu")
 local Player = require("src.world.Player")
 local Music = require("src.core.Music")
 
@@ -132,7 +134,9 @@ do
   -- handheld and resolves to the "low" tier) can leave allowSurvey=false
   -- long before this file ever runs. Zoom.reset() only clears offset, not
   -- this flag, so establish the actual vanilla baseline explicitly rather
-  -- than trust ambient global state.
+  -- than trust ambient global state, and restore whatever the run had
+  -- afterwards so later suites don't inherit this test's override.
+  local savedSurvey = Zoom.allowSurvey
   Zoom.allowSurvey = true
   local lo, hi = Zoom.offsetRange(4)
   check(lo == -3 and hi == 4, "vanilla zoom.range is (1-S, S)")
@@ -149,6 +153,7 @@ do
   unsub()
   Zoom.reset()
   check(Zoom.scale(4) == 4, "unwrapped zoom returns to FIT")
+  Zoom.allowSurvey = savedSurvey
 end
 
 -- ------- battle.overlay (shiny sparkles / HUD chrome)
@@ -162,6 +167,91 @@ do
   Runtime.call("battle.overlay", function() end, { kind = "wild" })
   check(drew, "battle.overlay runs after the vanilla no-op")
   unsub()
+end
+
+-- ------- battle UI visibility (companion / alternate renderers)
+
+do
+  local BattleState = require("src.battle.BattleState")
+  check(BattleState.bottomUIVisible({ phase = "menu" }),
+    "battle bottom UI is visible without a mod")
+  local seen
+  local unsub = wrap("battle.bottom_ui_visible", function(_, state)
+    seen = state
+    return false
+  end)
+  check(not BattleState.bottomUIVisible({ phase = "messages" }),
+    "a mod can hide the battle text and menu layer")
+  local text = setmetatable({}, TextBox)
+  text:draw()
+  check(seen == text, "pushed text boxes use the same visibility hook")
+  unsub()
+  check(BattleState.bottomUIVisible({ phase = "moveSelect" }),
+    "battle bottom UI returns when the hook is removed")
+
+  check(BattleState.statusHUDVisible({}),
+    "battle status HUD is visible without a mod")
+  unsub = wrap("battle.status_hud_visible", function() return false end)
+  check(not BattleState.statusHUDVisible({}),
+    "a mod can hide the battle status HUD")
+  unsub()
+  check(BattleState.statusHUDVisible({}),
+    "battle status HUD returns when the hook is removed")
+end
+
+-- ------- battle.caught_marker_visible (caught wild marker)
+
+do
+  local BattleState = require("src.battle.BattleState")
+  local state = { kind = "wild", enemy = { mon = { species = "RATTATA" } },
+    game = { save = { pokedex = { owned = { RATTATA = true } } } } }
+  check(not BattleState.caughtMarkerVisible(state),
+    "caught marker is opt-in")
+  local unsub = wrap("battle.caught_marker_visible", function() return true end)
+  check(BattleState.caughtMarkerVisible(state),
+    "a mod can show a caught wild marker")
+  state.kind = "trainer"
+  check(not BattleState.caughtMarkerVisible(state),
+    "trainer battles never show a caught marker")
+  state.kind, state.game.save.pokedex.owned.RATTATA = "wild", false
+  check(not BattleState.caughtMarkerVisible(state),
+    "uncaught wild Pokemon have no marker")
+  unsub()
+end
+
+-- ------- grid navigation ownership (alternate menu renderers)
+
+do
+  local BattleState = require("src.battle.BattleState")
+  local battle = { wideLayout = function() return false end }
+  check(not BattleState.moveGridNavigation(battle),
+    "classic move navigation stays a list without a mod")
+  local unsub = wrap("battle.move_grid_navigation", function() return true end)
+  check(BattleState.moveGridNavigation(battle),
+    "a mod can opt the classic move menu into grid navigation")
+  unsub()
+  battle.wideLayout = function() return true end
+  check(BattleState.moveGridNavigation(battle),
+    "the native wide move grid remains enabled without a mod")
+
+  local game = {
+    save = { party = { {}, {}, {}, {}, {}, {} } },
+    input = { wasPressed = function(_, key) return key == "down" end },
+  }
+  local field = PartyMenu.new(game)
+  unsub = wrap("ui.party.grid_navigation", function() return true end)
+  field:update(0)
+  check(field.index == 2,
+    "field party navigation remains a native list when the hook is active")
+  game.partyMenuSavedIndex = nil
+  local menu = PartyMenu.new(game, { battle = {} })
+  menu:update(0)
+  check(menu.index == 3 and game.partyMenuSavedIndex == 3,
+    "a battle party can follow and remember a companion grid")
+  unsub()
+  menu:update(0)
+  check(menu.index == 4,
+    "removing the hook restores native list navigation immediately")
 end
 
 -- ------- music.volume (distance / indoor muffling)

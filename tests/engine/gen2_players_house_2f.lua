@@ -41,7 +41,7 @@ love = love or require("tests.love_stub")
 
 local Map = require("src.world.Map")
 
--- Real PlayersHouse2F.blk grid, width=4 height=3 (RomExtractorGen2.lua's
+-- Real PlayersHouse2F.blk grid, width=4 height=3 (RomExtractorCrystal.lua's
 -- extractMap reads this straight from ROM bytes, no manifest round trip).
 local BLOCKS = { 4, 1, 3, 2, 5, 6, 5, 5, 5, 5, 7, 5 }
 

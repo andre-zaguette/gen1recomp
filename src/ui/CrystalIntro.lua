@@ -182,7 +182,7 @@ function CrystalIntro.new(game, onDone)
   -- Sprites.path is the same resolver OakSpeech.new itself used two lines
   -- up (for NIDORINO) and the same one resolvePic's "pokemon" branch calls
   -- -- it reads pokemon[species].spriteFront, not .frontPic (confirmed by
-  -- reading RomExtractorGen2:extractIntroPics(), which writes
+  -- reading RomExtractorCrystal:extractIntroPics(), which writes
   -- pokemon.WOOPER.spriteFront). Going through this helper rather than
   -- reading the field directly keeps this file agnostic to that shape.
   local demoPath, demoTrueColor = Sprites.path(

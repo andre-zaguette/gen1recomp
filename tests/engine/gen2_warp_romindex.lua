@@ -4,7 +4,7 @@
 -- docs/superpowers/plans/2026-08-06-gen2-crystal-roadmap.md's Task 7 and
 -- .superpowers/sdd/2026-08-06-gen2-crystal-roadmap/progress.md).
 --
--- Root cause: RomExtractorGen2.lua's extractMap() skips (does not append)
+-- Root cause: RomExtractorCrystal.lua's extractMap() skips (does not append)
 -- a warp_event whose destination map isn't registered yet, so a map whose
 -- ROM def_warp_events order has an unregistered entry BEFORE a registered
 -- one ends up with a compacted `warps` array -- array position no longer

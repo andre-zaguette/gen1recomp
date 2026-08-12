@@ -14,14 +14,14 @@ local T = require("tests.harness")
 local check, eq = T.check, T.eq
 love = love or require("tests.love_stub")
 
-local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+local RomExtractorCrystal = require("src.import.RomExtractorCrystal")
 
 -- Real front.gbcpal bytes for Totodile (roms/pokecrystal/gfx/pokemon/
 -- totodile/front.gbcpal, gitignored, not committed -- see the plan).
 local totodileGbcPal = string.char(
   0xFF, 0x7F, 0x2C, 0x6A, 0x3C, 0x11, 0x00, 0x00)
 
-local colors = RomExtractorGen2._decodeGbcPalette(totodileGbcPal)
+local colors = RomExtractorCrystal._decodeGbcPalette(totodileGbcPal)
 eq(#colors, 4, "decodeGbcPalette returns 4 colors")
 eq(colors[1][1], 31, "color0 R is white (31)")
 eq(colors[1][2], 31, "color0 G is white (31)")
@@ -39,7 +39,7 @@ eq(colors[4][3], 0, "color3 B is black (0)")
 -- Real shiny.pal text for Totodile (roms/pokecrystal/gfx/pokemon/
 -- totodile/shiny.pal).
 local totodileShinyPal = "\tRGB 18, 26, 15\n\tRGB 14, 09, 28\n"
-local shiny = RomExtractorGen2._parseShinyPal(totodileShinyPal)
+local shiny = RomExtractorCrystal._parseShinyPal(totodileShinyPal)
 eq(#shiny, 2, "parseShinyPal returns exactly 2 colors")
 eq(shiny[1][1], 18, "shiny color1 R (0-31 scale)")
 eq(shiny[1][2], 26, "shiny color1 G (0-31 scale)")
@@ -50,7 +50,7 @@ eq(shiny[2][3], 28, "shiny color2 B (0-31 scale)")
 
 -- The combined remap table ImageWriter.remapColors consumes directly:
 -- 0-255 (0-31 scale converted via round(v * 255 / 31)) -> 0-1 float.
-local mapping = RomExtractorGen2._shinyRemapTable(totodileGbcPal, totodileShinyPal)
+local mapping = RomExtractorCrystal._shinyRemapTable(totodileGbcPal, totodileShinyPal)
 eq(#mapping, 2, "shinyRemapTable has exactly 2 entries (colors 0/3 never remap)")
 
 local function approx(a, b, msg)

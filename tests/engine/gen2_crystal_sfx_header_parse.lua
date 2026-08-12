@@ -1,5 +1,5 @@
 -- Regression guard for Crystal SFX header parsing in
--- RomExtractorGen2.lua: local and absolute sound_loop/sound_call targets
+-- RomExtractorCrystal.lua: local and absolute sound_loop/sound_call targets
 -- from roms/pokecrystal/audio/sfx.asm must be registered in the labels
 -- map, or extractSfx will skip real Crystal effects at import time.
 --   luajit tests/engine/gen2_crystal_sfx_header_parse.lua
@@ -10,9 +10,9 @@ local T = require("tests.harness")
 local check = T.check
 love = love or require("tests.love_stub")
 
-local RomExtractorGen2 = require("src.import.RomExtractorGen2")
+local RomExtractorCrystal = require("src.import.RomExtractorCrystal")
 
-local headers = RomExtractorGen2._parseCrystalSfxHeaders()
+local headers = RomExtractorCrystal._parseCrystalSfxHeaders()
 
 local function has(headerName, channelIndex, labelName, which)
   local header = headers[headerName]

@@ -275,7 +275,7 @@ REQUIRED_SYMBOLS = (
     "Sfx_IntroWhoosh_Ch8",      # 3c:656c -- Intro_Whoosh
 )
 
-# Runtime ROM text decoder (RomExtractorGen2:textGlyph/decodeTextCommands)
+# Runtime ROM text decoder (RomExtractorCrystal:textGlyph/decodeTextCommands)
 # overrides for a handful of charmap.asm tokens -- mirrors
 # tools/make_rom_manifest.py's charmap()/tools/extract/text.py's
 # EXPANSIONS for Gen1, trimmed to the tokens that actually exist in
@@ -991,7 +991,7 @@ START_MAP_CONTENT = {
                 # blocked on both gaps confirmed this session: no
                 # OBJECTTYPE_TRAINER sight-triggered auto-battle wiring in
                 # src/world/OverworldController.lua, and no Gen2
-                # trainer-party data extracted at all (RomExtractorGen2.lua
+                # trainer-party data extracted at all (RomExtractorCrystal.lua
                 # has no trainer/party table). Not attempting either as
                 # part of this task -- future work once the ROM first needs
                 # it, per this plan's own sequencing principle.

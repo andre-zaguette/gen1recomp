@@ -4,7 +4,7 @@
 Combines tools/rom_manifest_crystal.json with the player's real Crystal
 ROM to produce verification data under --out-dir/--assets-dir (never
 data/generated/ -- this is not the shipped path, see
-src/import/RomExtractorGen2.lua for that). Mirrors tools/build_rom_data.py's
+src/import/RomExtractorCrystal.lua for that). Mirrors tools/build_rom_data.py's
 shape, scoped to one map/tileset/sprite.
 """
 

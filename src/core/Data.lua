@@ -84,6 +84,15 @@ function Data:applyVersionedFieldData()
     -- Yellow caches carry the wrong demo species too.  The fixed import
     -- manifest below stamps RATTATA for fresh imports.
     self.field.oldManBattle = { species = "RATTATA", level = 5 }
+    -- The Oak-speech show-off mon is the player's Pikachu in Yellow
+    -- (engine/battle/core.asm BATTLE_TYPE_PIKACHU / the ProfOak demo)
+    -- but caches imported before the manifest carried demoSpecies fell
+    -- back to Red's NIDORINO (#915).  The fixed import manifest below
+    -- stamps PIKACHU for fresh imports; fill it here for stale caches.
+    local oakSpeech = self.field.oakSpeech
+    if type(oakSpeech) == "table" and not oakSpeech.demoSpecies then
+      oakSpeech.demoSpecies = "PIKACHU"
+    end
   end
 end
 
@@ -223,7 +232,20 @@ local function loadModule(dir, name)
     if not chunk then return false, err end
     return pcall(chunk)
   end
-  return pcall(require, "data.generated." .. name)
+  local ok, mod = pcall(require, "data.generated." .. name)
+  if ok then return true, mod end
+  -- Fused PhysFS / Blue|Yellow prefix: load bytes from the active version's
+  -- cache explicitly when require cannot see the mounted tree.
+  local CacheFs = require("src.import.CacheFs")
+  local GameVersion = require("src.core.GameVersion")
+  local path = "data/generated/" .. name .. ".lua"
+  local bytes = CacheFs.readActive(path)
+  if type(bytes) == "string" then
+    local chunk, err = loadstring(bytes, "@" .. GameVersion.cachePrefix() .. path)
+    if not chunk then return false, err or mod end
+    return pcall(chunk)
+  end
+  return false, mod
 end
 
 function Data:load()

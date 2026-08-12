@@ -26,6 +26,13 @@ local NO_SHORE_TILESETS = { SHIP_PORT = true }
 -- what counts as "outside" for the wLastMap memory (CheckIfInOutsideMap)
 local OUTSIDE_TILESETS = { "OVERWORLD", "PLATEAU" }
 
+-- pokered's fly destination gate: BuildFlyLocationsList
+-- (engine/items/town_map.asm) walks map ids 0..NUM_CITY_MAPS-1, the eleven
+-- towns PALLET_TOWN..SAFFRON_CITY, so routes never appear even though
+-- ROUTE_4/ROUTE_10 carry fly-warp landing spots (those exist for the
+-- dungeon-escape/heal tables, special_warps.asm FlyWarpDataPtr)
+local NUM_CITY_MAPS = 11
+
 -- warp pads and fall-through holes (data/tilesets/warp_pad_hole_tile_ids
 -- .asm WarpPadAndHoleData); a tileset record carrying warpPadTiles
 -- ({ [tileId] = "pad"|"hole" }) wins over these vanilla rows
@@ -116,7 +123,7 @@ function Map.new(def, tilesetDef)
   for _, t in ipairs(tilesetDef.walkable) do self.walkable[t] = true end
   self.cellPermissions = tilesetDef.cellPermissions or {}
   -- block id -> quadrant (0-3) -> {up=,down=,left=,right=} allowed
-  -- hop-facing set (Gen2 ledges, RomExtractorGen2.lua's COLL_HOP_*
+  -- hop-facing set (Gen2 ledges, RomExtractorCrystal.lua's COLL_HOP_*
   -- extraction) -- already keyed this way at extraction time, no rebuild
   -- needed like walkable above; see Map:hopFacingAt for why this is
   -- block+quadrant keyed rather than tile-id keyed like walkable/grass.
@@ -163,6 +170,17 @@ function Map.isOutside(def, tilesets)
     if ts == def.tileset then return true end
   end
   return false
+end
+
+-- FLY destination (LoadTownMap_Fly / BuildFlyLocationsList): the eleven
+-- towns, map indices 0..NUM_CITY_MAPS-1.  ROUTE_4 and ROUTE_10 are outdoor
+-- and have fly warps but are not towns, so the outdoor test alone offered
+-- their Pokemon Centers as fly targets (#788).  Maps without a vanilla
+-- index (mod-authored) keep the old outdoor/PLATEAU surface test, which is
+-- how a mod adds its own fly town.
+function Map.isFlyTown(def)
+  if def.index ~= nil then return def.index < NUM_CITY_MAPS end
+  return Map.isOutdoor(def) or def.tileset == "PLATEAU"
 end
 
 -- region groups maps a rule applies to without naming them; the id prefix
@@ -270,7 +288,7 @@ end
 -- ROM (TILESET_JOHTO) that the same 8x8 graphic can carry a hop
 -- permission in one placed block and plain floor in another, so tile-id
 -- alone is not a reliable enough key for this one collision class (see
--- RomExtractorGen2.lua's extractTileset). Mirrors Map:tileAt's own
+-- RomExtractorCrystal.lua's extractTileset). Mirrors Map:tileAt's own
 -- block/quadrant math (cellTile always samples row in {1,3}, col in
 -- {0,2} -- the exact four positions extractTileset's own row/col
 -- computation targets) rather than resolving through cellTile itself.
@@ -301,7 +319,7 @@ function Map:isGrassCell(cx, cy)
   -- Gen1 tilesets carry one grass tile id (a plain number); Gen2 tilesets
   -- can carry more than one (long vs. tall grass share the same
   -- encounter behavior but different tile ids), extracted as a set table
-  -- keyed by tile id -- see RomExtractorGen2.lua's extractTileset.
+  -- keyed by tile id -- see RomExtractorCrystal.lua's extractTileset.
   if type(grass) == "table" then return grass[tile] == true end
   return tile == grass
 end

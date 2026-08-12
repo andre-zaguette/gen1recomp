@@ -12,6 +12,17 @@
 -- (main.lua then drives it with the mouse); POKEPORT_TOUCH=0 forces it
 -- off everywhere.
 --
+-- BOTH GENERATIONS, one module.  Red/Blue/Yellow reach it from
+-- src/core/Game.lua and Gold from src/core/Game2.lua, through the same six
+-- seams in the same order: init + applyOptions at boot, touchpressed /
+-- touchmoved / touchreleased ahead of the mod pointer hook (the pad keeps
+-- first refusal, #807), noteGamepad on any controller input, joystickremoved
+-- when the last pad goes away, reset on focus/visibility loss, and draw as the
+-- last thing in the frame -- after the post passes, so the controls are never
+-- inside the CRT/GBC grid the picture is being shown through.  One
+-- options.touchControls block serves both games, so a layout edited in the
+-- launcher's editor is the layout Gold draws.
+--
 -- Player preferences (options.touchControls) can permanently disable the
 -- overlay and/or override per-control positions as normalized window
 -- fractions.  Positions and a size multiplier are stored per orientation
@@ -83,6 +94,55 @@ local function clampScale(v)
   if v < SCALE_MIN then return SCALE_MIN end
   if v > SCALE_MAX then return SCALE_MAX end
   return v
+end
+
+-- Haptic feedback (#806): a short vibration the instant a control takes a GB
+-- button, the way every mobile emulator front-end does it -- the pad has no
+-- edges under a thumb, so the buzz is the only confirmation a press landed.
+-- Persisted as options.haptics (src/core/SaveData.lua defaultOptions), NOT
+-- under options.touchControls: TouchControls:config() is the launcher
+-- editor's save snapshot and only emits enabled + layouts, so a nested key
+-- would be dropped on every editor save.
+-- love.system.vibrate takes a duration and nothing else, so "intensity" is a
+-- duration preset: Android runs the platform vibrator for exactly that long,
+-- while iOS ignores the duration and fires the fixed system vibration, so
+-- there the three levels all read as simply on.
+TouchControls.HAPTICS = { "off", "light", "medium", "heavy" }
+TouchControls.HAPTIC_DEFAULT = "light"
+
+local HAPTIC_SECONDS = { off = 0, light = 0.012, medium = 0.025, heavy = 0.045 }
+local HAPTIC_LABELS = {
+  off = "OFF", light = "LIGHT", medium = "MEDIUM", heavy = "HEAVY",
+}
+
+function TouchControls.normalizeHaptics(level)
+  if HAPTIC_SECONDS[level] then return level end
+  return TouchControls.HAPTIC_DEFAULT
+end
+
+function TouchControls.hapticLabel(level)
+  return HAPTIC_LABELS[TouchControls.normalizeHaptics(level)]
+end
+
+function TouchControls.cycleHaptics(level, dir)
+  local cur, idx = TouchControls.normalizeHaptics(level), 1
+  for i, m in ipairs(TouchControls.HAPTICS) do
+    if m == cur then idx = i break end
+  end
+  local n = #TouchControls.HAPTICS
+  return TouchControls.HAPTICS[(idx - 1 + (dir or 1)) % n + 1]
+end
+
+-- One pulse at the given level.  Feature-guarded rather than platform-gated:
+-- love.system.vibrate is a no-op on desktop and absent from the headless love
+-- stubs, so the press path below stays identical everywhere and the tests
+-- never reach a vibrator.
+function TouchControls.buzz(level)
+  local secs = HAPTIC_SECONDS[TouchControls.normalizeHaptics(level)]
+  if not secs or secs <= 0 then return false end
+  if not (love and love.system and love.system.vibrate) then return false end
+  pcall(love.system.vibrate, secs)
+  return true
 end
 
 -- Copy a persisted positions table, dropping unknown / non-numeric entries.
@@ -174,6 +234,10 @@ end
 function TouchControls:init()
   self.active = wantsOverlay()
   self.enabled = true
+  -- vibration level for presses (#806); applyOptions overwrites it from
+  -- options.haptics, this is the value a harness that never applies options
+  -- runs with
+  self.haptics = TouchControls.HAPTIC_DEFAULT
   -- per-orientation buckets (#633); self.positions / self.scale mirror the
   -- one currently on screen so layout(), the editor and the tests keep a
   -- single lookup
@@ -210,6 +274,9 @@ end
 function TouchControls:applyOptions(opts)
   local cfg = TouchControls.normalizeConfig(opts and opts.touchControls)
   self.enabled = cfg.enabled
+  -- haptics is a plain top-level option, not part of the layout config the
+  -- launcher editor round-trips through config() (#806)
+  self.haptics = TouchControls.normalizeHaptics(opts and opts.haptics)
   self.layouts = cfg.layouts
   self.layoutW, self.layoutH = nil, nil
   self.layoutOx, self.layoutOy = nil, nil
@@ -401,7 +468,14 @@ end
 local function pressBtn(self, btn)
   local n = (self.held[btn] or 0) + 1
   self.held[btn] = n
-  if n == 1 then Input:overlayPressed(btn) end
+  -- Buzz only on the 0 -> 1 edge, the same edge that presses the GB button:
+  -- a second finger landing on a button that is already held, and a d-pad
+  -- finger resting inside one direction, must not retrigger it.  Sliding the
+  -- d-pad to a new direction does, which is the point (#806).
+  if n == 1 then
+    Input:overlayPressed(btn)
+    TouchControls.buzz(self.haptics)
+  end
 end
 
 local function releaseBtn(self, btn)
@@ -423,11 +497,17 @@ local function setDpad(self, touch, dir)
   if dir then pressBtn(self, dir) end
 end
 
+-- Returns true when this touch was captured by a virtual control -- the
+-- pad's first refusal on the gameplay pointer seam (#807).  Capture is
+-- decided here, at press, and rides self.touches[id] for the touch's
+-- whole lifecycle; an uncaptured touch is never tracked, so wandering
+-- across a control later neither presses it nor hides the touch from mods.
 function TouchControls:touchpressed(id, x, y)
   -- preview mode is layout-edit only: never press GB buttons
   if self.preview then return end
   if not (self.active and self.enabled ~= false and self.img) then return end
   -- a controller hid the overlay; the first touch only brings it back
+  -- (uncaptured: it began on no control, so mods may still see it)
   if self.controllerHidden then
     self.controllerHidden = false
     return
@@ -437,7 +517,7 @@ function TouchControls:touchpressed(id, x, y)
     if inCircle(L[btn], x, y, SLOP[btn]) then
       self.touches[id] = { control = btn }
       pressBtn(self, btn)
-      return
+      return true
     end
   end
   -- square hit zone a bit past the cross art; one owning finger at a time
@@ -449,6 +529,7 @@ function TouchControls:touchpressed(id, x, y)
     local touch = { control = "dpad", dir = nil }
     self.touches[id] = touch
     setDpad(self, touch, dpadDir(dz, x, y))
+    return true
   end
 end
 
@@ -519,9 +600,10 @@ local function drawIcon(img, zone, pressed, alphaMul)
                      zone.cy - img:getHeight() * scale / 2, 0, scale, scale)
 end
 
--- Screen-space, called by Game:draw after Renderer:endFrame so the
--- overlay rides on top of everything (world, UI, CRT/GBC FX included).
--- Also used by the launcher layout editor under preview mode.
+-- Screen-space, called by Game:draw after Renderer:endFrame -- and by
+-- Game2:drawHud after Gold's own present pass -- so the overlay rides on top
+-- of everything (world, UI, CRT/GBC FX included).  Also used by the launcher
+-- layout editor under preview mode.
 function TouchControls:draw()
   if not self:visible() then return end
   local L = self:layout()

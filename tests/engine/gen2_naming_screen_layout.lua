@@ -5,7 +5,7 @@
 -- Root cause, verified directly against roms/pokecrystal (gitignored, not
 -- committed -- see the report for the full derivation): the charmap is
 -- fine ("R" -> code $91, contiguous with A-Z at $80-$99, constants/
--- charmap.asm) and RomExtractorGen2:extractFont's tile-sheet decode is
+-- charmap.asm) and RomExtractorCrystal:extractFont's tile-sheet decode is
 -- fine. The bug was purely a NamingScreen.lua drawing-position bug in its
 -- "crystal" layout branch: every grid cell drew at
 -- `16 + c * 16, 48 + r * 16` (c, r 1-indexed column/row). Crystal's real

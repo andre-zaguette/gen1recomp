@@ -2,7 +2,7 @@
 --
 -- Root problem this pins: nothing in the committed suite ever calls an
 -- extractXMusic() (or any other extract*) function against a real ROM, and
--- nothing checks that every symbol name RomExtractorGen2.lua references via
+-- nothing checks that every symbol name RomExtractorCrystal.lua references via
 -- self:symbol("...") actually exists in tools/rom_manifest_crystal.json's
 -- symbols table. That gap let Tasks 4 and 5 (see
 -- docs/superpowers/plans/2026-08-06-gen2-crystal-milestone2-music.md's
@@ -14,12 +14,12 @@
 -- This is a ROM-free static check: tools/rom_manifest_crystal.json is
 -- committed (only raw ROM *bytes* are gitignored, see /roms/ in
 -- .gitignore), so it can be read directly like
--- tests/engine/gen2_map_songs.lua already does, and RomExtractorGen2.lua
+-- tests/engine/gen2_map_songs.lua already does, and RomExtractorCrystal.lua
 -- is read as plain text and pattern-matched for self:symbol("literal")
 -- call sites -- no ROM, no love stub, no live extraction required.
 --
 -- Pattern-extraction scope, verified by hand against every self:symbol(
--- call site in src/import/RomExtractorGen2.lua before writing this test:
+-- call site in src/import/RomExtractorCrystal.lua before writing this test:
 --   self:symbol%("([%w_%.]+)"%) matches all 75 call sites whose argument
 --   is a plain double-quoted string literal (covers every music/title/
 --   font/cry/sprite symbol lookup in the file). It naturally SKIPS the
@@ -36,7 +36,7 @@
 --   that's an accepted gap, not a bug in this test.
 --
 -- One further, deliberate exception: extractIntroText's guarded
--- _OakText3 lookup (RomExtractorGen2.lua:1311-1313) reads:
+-- _OakText3 lookup (RomExtractorCrystal.lua:1311-1313) reads:
 --   local oakText3 = self.symbols and rawget(self.symbols, "_OakText3")
 --   if oakText3 then
 --     out._OakText3 = self:decodeTextCommands(self:symbol("_OakText3"))
@@ -59,7 +59,7 @@ local check = T.check
 local Json = require("src.link.Json")
 
 local EXCLUDED_SYMBOLS = {
-  -- Guarded by a rawget check before use (RomExtractorGen2.lua:1311-1313);
+  -- Guarded by a rawget check before use (RomExtractorCrystal.lua:1311-1313);
   -- absent from older/incomplete manifests by design. See header comment.
   _OakText3 = true,
 }
@@ -72,7 +72,7 @@ local function readFile(path)
 end
 
 local manifest = Json.decode(readFile("tools/rom_manifest_crystal.json"))
-local extractorSource = readFile("src/import/RomExtractorGen2.lua")
+local extractorSource = readFile("src/import/RomExtractorCrystal.lua")
 
 -- Extract every self:symbol("literal") call site's argument, in file
 -- order, with a 1-based line number for readable failure messages.
@@ -87,7 +87,7 @@ end
 
 check(#referenced > 0,
   "self:symbol(\"literal\") pattern matched at least one call site " ..
-  "in RomExtractorGen2.lua (sanity check that the pattern itself works)")
+  "in RomExtractorCrystal.lua (sanity check that the pattern itself works)")
 
 local manifestSymbols = manifest.symbols or {}
 local checkedCount, skippedCount = 0, 0
@@ -98,7 +98,7 @@ for _, ref in ipairs(referenced) do
   else
     checkedCount = checkedCount + 1
     check(manifestSymbols[ref.name] ~= nil,
-      ("RomExtractorGen2.lua:%d references self:symbol(\"%s\"), which " ..
+      ("RomExtractorCrystal.lua:%d references self:symbol(\"%s\"), which " ..
        "must exist in tools/rom_manifest_crystal.json's symbols table")
         :format(ref.line, ref.name))
   end
