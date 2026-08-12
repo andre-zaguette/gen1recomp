@@ -77,7 +77,8 @@ end
 -- Installed once per process and only when the loader runs in dev mode, so a
 -- player build has zero interposition.
 
-local devShim = { installed = false, permissions = {}, warned = {}, depth = 0 }
+local devShim = { installed = false, permissions = {}, warned = {}, depth = 0,
+  gen2Facade = false }
 
 -- The Gen 1 engine modules a Gold boot never instantiates.  Each one still
 -- LOADS under Gen 2 -- require finds the file and hands back a module table --
@@ -146,7 +147,7 @@ local function scanRequire(name)
   -- A Gen 1-only module on a Gold boot is not a permissions question, it is a
   -- dead patch: reported once, attributed, and onto the boot error feed the
   -- manager shows the player rather than a dev-only log line.
-  if devShim.generation ~= 1 and GEN1_ONLY_MODULES[name]
+  if devShim.gen2Facade and GEN1_ONLY_MODULES[name]
       and not Gen2Compat.serves(name) then
     local key = modId .. "|gen2|" .. name
     if not devShim.warned[key] then
@@ -199,7 +200,7 @@ function Loader:_installDevShim()
       -- The Gen 1 name a mod asked for, answered by the Gen 2 arm behind it.
       -- Engine code keeps the real module: src/render/PaletteFX.lua:776
       -- requires src.core.Game on both generations and means it.
-      if devShim.generation ~= 1 and Gen2Compat.serves(name)
+      if devShim.gen2Facade and Gen2Compat.serves(name)
           and callerIsMod(3) then
         local adapter = Gen2Compat.resolve(name, Runtime.currentMod)
         if adapter then
@@ -243,6 +244,13 @@ function Loader.new(opts)
     -- builds a loader, and a run never changes generation underneath one.
     -- opts.generation is the test seam.
     generation = (opts and opts.generation) or GameVersion.generation(),
+    -- Whether src.core.Game itself is a Gen 1 facade over a live Gen 2 game
+    -- (Gold's Game2/World replace it outright, see main.lua's bootGame).
+    -- Crystal is generation 2 too but keeps the real src.core.Game/
+    -- OverworldController -- a gen2compat mod there needs no adapter, so
+    -- src/mods/Gen2Compat.lua must not intercept its requires the way it
+    -- does Gold's. opts.gen2Facade is the test seam.
+    gen2Facade = (opts and opts.gen2Facade) or GameVersion.isGold(),
   }, Loader)
   assert(self.fs, "Loader.new requires opts.fs when love is unavailable")
   -- Schemas.shapeFor, not the catalog spec: a registry whose Gen 2 records are
@@ -1344,6 +1352,7 @@ function Loader:load(data)
   -- two: a harness that builds a Gen 1 loader after a Gen 2 one must not keep
   -- reporting against the old generation or the old error feed.
   devShim.generation = self.generation
+  devShim.gen2Facade = self.gen2Facade
   devShim.errors = self.errors
   -- The Gen 1 Game facade proxies THIS loader's live game, and reads it on
   -- every touch: a mod captures the facade at file scope, before Game2 has a

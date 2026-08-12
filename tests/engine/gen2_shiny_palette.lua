@@ -73,13 +73,32 @@ approx(mapping[2].to[1], 115 / 255, "mapping[2].to R")
 approx(mapping[2].to[2], 74 / 255, "mapping[2].to G")
 approx(mapping[2].to[3], 230 / 255, "mapping[2].to B")
 
--- ImageWriter.remapColors itself needs a real love.image.ImageData, which
--- this project's headless stub does not provide -- guarded the same way
--- other Gen2 tests handle a real-ROM-only check (see gen2_map_songs.lua),
--- skip with a clear reason rather than silently asserting nothing.
+-- ImageWriter.remapColors itself needs a real love.image.ImageData.
+-- tests.love_stub's shared love.image.newImageData is a bare placeholder
+-- (getPixel/setPixel are no-ops, for Assets.imageData's headless decode
+-- path only), so it never fails this guard but also never round-trips a
+-- pixel -- a local pixel-accurate stand-in, same idea as mod_graphics_
+-- tests.lua's ImageData, is what this check actually needs.
 if love.image and love.image.newImageData then
   local ImageWriter = require("src.import.ImageWriter")
-  local image = love.image.newImageData(2, 1)
+  local PixelImageData = {}
+  PixelImageData.__index = PixelImageData
+  local function newPixelImageData(w, h)
+    local self = setmetatable({ w = w, h = h, pixels = {} }, PixelImageData)
+    for y = 0, h - 1 do
+      for x = 0, w - 1 do self.pixels[y * w + x] = { 0, 0, 0, 1 } end
+    end
+    return self
+  end
+  function PixelImageData:getDimensions() return self.w, self.h end
+  function PixelImageData:setPixel(x, y, r, g, b, a)
+    self.pixels[y * self.w + x] = { r, g, b, a }
+  end
+  function PixelImageData:getPixel(x, y)
+    local p = self.pixels[y * self.w + x]
+    return p[1], p[2], p[3], p[4]
+  end
+  local image = newPixelImageData(2, 1)
   image:setPixel(0, 0, mapping[1].from[1], mapping[1].from[2], mapping[1].from[3], 1)
   image:setPixel(1, 0, 0, 0, 0, 1) -- black, must stay untouched
   ImageWriter.remapColors(image, mapping)

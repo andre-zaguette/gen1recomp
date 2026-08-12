@@ -32,7 +32,7 @@ do
     "a version id names exactly that game")
   eq(table.concat(ModTargets.expand("GEN1"), ","), "red,blue,yellow",
     "gen1 is every Gen 1 game, case-insensitive")
-  eq(table.concat(ModTargets.expand("gen2"), ","), "gold",
+  eq(table.concat(ModTargets.expand("gen2"), ","), "gold,crystal",
     "gen2 is every Gen 2 game")
   eq(table.concat(ModTargets.expand("all"), ","),
     table.concat(GameVersion.ORDER, ","), "all is the launcher order itself")
@@ -46,9 +46,9 @@ do
   eq(table.concat(versions, ","), "red,gold",
     "normalize dedupes and sorts into GameVersion.ORDER")
   eq(#unknown, 0, "known tokens leave nothing unreported")
-  local _, bad = ModTargets.normalize({ "crystal", "gen1" })
+  local _, bad = ModTargets.normalize({ "silver", "gen1" })
   eq(#bad, 1, "an unknown token comes back for the caller to report")
-  eq(bad[1], "crystal", "by name")
+  eq(bad[1], "silver", "by name")
 end
 
 -- ------- the legacy reading: gen2compat only ever ADDS Gen 2
@@ -56,7 +56,7 @@ end
 do
   eq(list(mf({})), "red,blue,yellow",
     "a manifest with no games key is Gen 1, which is what it was tested as")
-  eq(list(mf({ gen2compat = true })), "red,blue,yellow,gold",
+  eq(list(mf({ gen2compat = true })), "red,blue,yellow,gold,crystal",
     "gen2compat keeps Gen 1 and adds Gen 2")
   eq(mf({}).gen2compat, false, "and the derived flag agrees")
   eq(mf({ gen2compat = true }).gen2compat, true, "both ways")
@@ -67,23 +67,23 @@ end
 
 do
   local gen2 = mf({ games = { "gen2" } })
-  eq(list(gen2), "gold", "games can name Gen 2 alone")
+  eq(list(gen2), "gold,crystal", "games can name Gen 2 alone")
   eq(gen2.gen2compat, true, "which IS the gen2compat claim the gate reads")
   local both = mf({ games = { "gen1", "gen2" } })
-  eq(list(both), "red,blue,yellow,gold", "or both generations")
+  eq(list(both), "red,blue,yellow,gold,crystal", "or both generations")
   local one = mf({ games = { "blue" } })
   eq(list(one), "blue", "or one single game")
   eq(one.gen2compat, false, "a Gen 1 game is not a Gen 2 claim")
-  eq(list(mf({ games = { "red" }, gen2compat = true })), "red,gold",
+  eq(list(mf({ games = { "red" }, gen2compat = true })), "red,gold,crystal",
     "an old gen2compat beside a new games list still adds its game")
 end
 
 do
   -- vocabulary: api 1 warns and keeps loading, api 2 refuses, exactly like
   -- every other manifest vocabulary (Manifest.violation)
-  local lenient = mf({ games = { "crystal", "red" } })
+  local lenient = mf({ games = { "silver", "red" } })
   eq(list(lenient), "red", "api 1 drops the unknown game and keeps the rest")
-  check(not pcall(mf, { api = 2, games = { "crystal" } }),
+  check(not pcall(mf, { api = 2, games = { "silver" } }),
     "api 2 refuses a game it does not have")
   check(not pcall(mf, { games = "gen1" }),
     "games must be an array, not a bare string")

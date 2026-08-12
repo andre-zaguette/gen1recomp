@@ -46,6 +46,20 @@ function Bag.pocketOf(data, id, def)
   return "ITEM"
 end
 
+-- Which pocket an id belongs to for capacity/slot bookkeeping.  Deliberately
+-- narrower than Bag.pocketOf: a Gen 1 item's `machine`/`ball`/`keyItem`
+-- flags exist for use/sell logic, not pocket routing, and inferring a
+-- pocket from them here would let a mod's single-bag bagSize override
+-- (the ITEM pocket only, see Bag.capacity) leak items into the fixed-size
+-- BALL/TM_HM/KEY_ITEM pockets instead of counting against it. Real Gen 2
+-- items always carry an explicit .pocket from the extractor, so this and
+-- Bag.pocketOf agree there; unmapped ids fall to ITEM, the Gen 1 behaviour.
+local function pocketOf(id, data)
+  data = data or require("src.core.Data")
+  local def = data and data.items and data.items[id]
+  return (def and def.pocket) or "ITEM"
+end
+
 local function isBadge(id)
   return id:find("BADGE", 1, true) ~= nil
 end
@@ -81,7 +95,7 @@ function Bag.slots(save, data, pocket)
   local n = 0
   for id, qty in pairs(save.inventory) do
     if qty and not isBadge(id)
-       and (not pocket or Bag.pocketOf(data, id) == pocket) then
+       and (not pocket or pocketOf(id, data) == pocket) then
       n = n + 1
     end
   end
@@ -117,7 +131,7 @@ function Bag.order(save, data, pocket)
   if not pocket then return order end
   local filtered = {}
   for _, id in ipairs(order) do
-    if Bag.pocketOf(data, id) == pocket then
+    if pocketOf(id, data) == pocket then
       filtered[#filtered + 1] = id
     end
   end
@@ -144,7 +158,7 @@ function Bag.add(save, id, qty, data)
   local inv = save.inventory
   -- Only the item's OWN pocket has to have room -- a full ITEM pocket does not
   -- keep a KEY_ITEM or an HM out, which is the whole point of pockets.
-  local pocket = Bag.pocketOf(data, id)
+  local pocket = pocketOf(id, data)
   local cap = Bag.capacity(data, pocket)
   if not inv[id] and not isBadge(id)
       and cap < math.huge and Bag.slots(save, data, pocket) >= cap then
